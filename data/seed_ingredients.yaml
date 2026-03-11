@@ -1,0 +1,470 @@
+ingredients:
+- name: bbq sauce
+  category: condiment
+  aisle: Condiments & Sauces
+  default_unit: oz
+  store_pref: either
+- name: hot sauce
+  category: condiment
+  aisle: Condiments & Sauces
+  default_unit: oz
+  store_pref: either
+- name: maple syrup
+  category: condiment
+  aisle: Condiments & Sauces
+  default_unit: oz
+  store_pref: either
+- name: soy sauce
+  category: condiment
+  aisle: Condiments & Sauces
+  default_unit: tbsp
+  store_pref: either
+  is_pantry_staple: true
+- name: worcestershire sauce
+  category: condiment
+  aisle: Condiments & Sauces
+  default_unit: tbsp
+  store_pref: either
+  is_pantry_staple: true
+- name: butter
+  category: dairy
+  aisle: Dairy & Eggs
+  default_unit: tbsp
+  store_pref: sams
+  is_pantry_staple: true
+- name: eggs
+  category: dairy
+  aisle: Dairy & Eggs
+  default_unit: count
+  store_pref: sams
+- name: heavy cream
+  category: dairy
+  aisle: Dairy & Eggs
+  default_unit: cup
+  store_pref: kroger
+- name: milk
+  category: dairy
+  aisle: Dairy & Eggs
+  default_unit: cup
+  store_pref: either
+- name: shredded cheese
+  category: dairy
+  aisle: Dairy & Eggs
+  default_unit: oz
+  store_pref: sams
+- name: sliced cheese
+  category: dairy
+  aisle: Dairy & Eggs
+  default_unit: count
+  store_pref: kroger
+  root: cheese
+- name: sour cream
+  category: dairy
+  aisle: Dairy & Eggs
+  default_unit: oz
+  store_pref: either
+- name: corn
+  category: frozen
+  aisle: Frozen
+  default_unit: oz
+  store_pref: either
+- name: edamame
+  category: frozen
+  aisle: Frozen
+  default_unit: oz
+  store_pref: sams
+- name: frozen chicken nuggets
+  category: frozen
+  aisle: Frozen
+  default_unit: oz
+  store_pref: sams
+  root: chicken nuggets
+- name: frozen lasagna
+  category: frozen
+  aisle: Frozen
+  default_unit: count
+  store_pref: sams
+  root: lasagna
+- name: frozen meatballs
+  category: frozen
+  aisle: Frozen
+  default_unit: oz
+  store_pref: sams
+  root: meatballs
+- name: frozen pizza
+  category: frozen
+  aisle: Frozen
+  default_unit: count
+  store_pref: sams
+  root: pizza
+- name: green beans
+  category: frozen
+  aisle: Frozen
+  default_unit: oz
+  store_pref: either
+- name: green peas
+  category: frozen
+  aisle: Frozen
+  default_unit: oz
+  store_pref: either
+- name: mixed veggies
+  category: frozen
+  aisle: Frozen
+  default_unit: oz
+  store_pref: sams
+- name: boxed mac and cheese
+  category: grain
+  aisle: Pasta & Grains
+  default_unit: count
+  store_pref: either
+- name: breadcrumbs
+  category: grain
+  aisle: Pasta & Grains
+  default_unit: cup
+  store_pref: either
+- name: corn tortillas
+  category: grain
+  aisle: Bread & Bakery
+  default_unit: count
+  store_pref: either
+- name: cornbread
+  category: grain
+  aisle: Bread & Bakery
+  default_unit: count
+  store_pref: either
+- name: fettuccine
+  category: grain
+  aisle: Pasta & Grains
+  default_unit: oz
+  store_pref: either
+- name: flour
+  category: grain
+  aisle: Spices & Baking
+  default_unit: cup
+  store_pref: either
+  is_pantry_staple: true
+- name: flour tortillas
+  category: grain
+  aisle: Bread & Bakery
+  default_unit: count
+  store_pref: sams
+- name: hamburger buns
+  category: grain
+  aisle: Bread & Bakery
+  default_unit: count
+  store_pref: kroger
+- name: hot dog buns
+  category: grain
+  aisle: Bread & Bakery
+  default_unit: count
+  store_pref: kroger
+- name: rice
+  category: grain
+  aisle: Pasta & Grains
+  default_unit: cup
+  store_pref: sams
+- name: sliced bread
+  category: grain
+  aisle: Bread & Bakery
+  default_unit: count
+  store_pref: kroger
+- name: spaghetti
+  category: grain
+  aisle: Pasta & Grains
+  default_unit: oz
+  store_pref: either
+- name: baking powder
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: tsp
+  store_pref: either
+  is_pantry_staple: true
+- name: black beans
+  category: pantry
+  aisle: Canned Goods
+  default_unit: oz
+  store_pref: either
+- name: black pepper
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: tsp
+  store_pref: either
+  is_pantry_staple: true
+- name: canned diced tomatoes
+  category: pantry
+  aisle: Canned Goods
+  default_unit: oz
+  store_pref: either
+  root: diced tomatoes
+- name: cayenne pepper
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: tsp
+  store_pref: either
+  is_pantry_staple: true
+- name: chicken broth
+  category: pantry
+  aisle: Canned Goods
+  default_unit: cup
+  store_pref: either
+- name: chickpeas
+  category: pantry
+  aisle: Canned Goods
+  default_unit: oz
+  store_pref: either
+- name: chili powder
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: tsp
+  store_pref: either
+  is_pantry_staple: true
+- name: cumin
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: tsp
+  store_pref: either
+  is_pantry_staple: true
+- name: garlic powder
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: tsp
+  store_pref: either
+  is_pantry_staple: true
+- name: italian seasoning
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: tsp
+  store_pref: either
+  is_pantry_staple: true
+- name: kidney beans
+  category: pantry
+  aisle: Canned Goods
+  default_unit: oz
+  store_pref: either
+- name: marinara sauce
+  category: pantry
+  aisle: Condiments & Sauces
+  default_unit: oz
+  store_pref: either
+- name: olive oil
+  category: pantry
+  aisle: Condiments & Sauces
+  default_unit: tbsp
+  store_pref: sams
+  is_pantry_staple: true
+- name: onion powder
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: tsp
+  store_pref: either
+  is_pantry_staple: true
+- name: oregano
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: tsp
+  store_pref: either
+  is_pantry_staple: true
+- name: paprika
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: tsp
+  store_pref: either
+  is_pantry_staple: true
+- name: refried beans
+  category: pantry
+  aisle: Canned Goods
+  default_unit: oz
+  store_pref: either
+- name: salsa
+  category: pantry
+  aisle: Condiments & Sauces
+  default_unit: oz
+  store_pref: either
+- name: salt
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: tsp
+  store_pref: either
+  is_pantry_staple: true
+- name: sugar
+  category: pantry
+  aisle: Spices & Baking
+  default_unit: cup
+  store_pref: either
+  is_pantry_staple: true
+- name: tomato paste
+  category: pantry
+  aisle: Canned Goods
+  default_unit: oz
+  store_pref: either
+  is_pantry_staple: true
+- name: tomato sauce
+  category: pantry
+  aisle: Canned Goods
+  default_unit: oz
+  store_pref: either
+- name: tomato soup
+  category: pantry
+  aisle: Canned Goods
+  default_unit: oz
+  store_pref: kroger
+- name: vegetable oil
+  category: pantry
+  aisle: Condiments & Sauces
+  default_unit: tbsp
+  store_pref: sams
+  is_pantry_staple: true
+- name: avocado
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: kroger
+- name: bell pepper
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: kroger
+- name: broccoli
+  category: produce
+  aisle: Produce
+  default_unit: lb
+  store_pref: kroger
+- name: carrot
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: kroger
+- name: celery
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: kroger
+- name: cilantro
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: kroger
+- name: corn on the cob
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: kroger
+  root: corn
+- name: cucumber
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: kroger
+- name: garlic
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: either
+  is_pantry_staple: true
+- name: jalapeno
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: kroger
+- name: lemon
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: kroger
+- name: lettuce
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: kroger
+  is_pantry_staple: true
+- name: lime
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: kroger
+- name: mushrooms
+  category: produce
+  aisle: Produce
+  default_unit: oz
+  store_pref: kroger
+- name: potato
+  category: produce
+  aisle: Produce
+  default_unit: lb
+  store_pref: either
+- name: yellow onion
+  category: produce
+  aisle: Produce
+  default_unit: count
+  store_pref: either
+  is_pantry_staple: true
+- name: bacon
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: sams
+- name: beef sausage
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: sams
+- name: breakfast meat
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: kroger
+- name: breakfast sausage
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: kroger
+- name: chicken breast
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: sams
+- name: chicken thighs
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: sams
+- name: chicken wings
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: sams
+- name: ground beef
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: sams
+- name: ground turkey
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: sams
+- name: hot dogs
+  category: protein
+  aisle: Meat
+  default_unit: count
+  store_pref: kroger
+- name: pork chops
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: sams
+- name: pork shoulder
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: sams
+- name: rotisserie chicken
+  category: protein
+  aisle: Meat
+  default_unit: count
+  store_pref: sams
+- name: steak
+  category: protein
+  aisle: Meat
+  default_unit: lb
+  store_pref: sams

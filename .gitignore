@@ -1,0 +1,12 @@
+*.db
+*.db.corrupted
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.eggs/
+scratch/
+node_modules/
+frontend/dist/
+.claude/

@@ -1,0 +1,17 @@
+<div class="status-bar">
+  <span class="pill {% if status.has_meals %}done{% endif %}">
+    {% if status.has_meals %}&#10003;{% endif %} Meals
+  </span>
+  <span class="pill {% if status.meals_on_grocery == status.total_meals and status.total_meals > 0 %}done{% elif status.meals_on_grocery > 0 %}current{% endif %}">
+    &#x1F6D2; {{ status.meals_on_grocery }}/{{ status.total_meals }}
+  </span>
+  <span class="pill {% if status.grocery_built %}done{% elif status.meals_on_grocery > 0 %}current{% endif %}">
+    {% if status.grocery_built %}&#10003;{% endif %} Grocery
+  </span>
+  <span class="pill {% if status.order_placed %}done{% elif status.grocery_built %}current{% endif %}">
+    {% if status.order_placed %}&#10003;{% endif %} Ordered
+  </span>
+  <span class="pill {% if status.reconcile_count > 0 %}done{% elif status.order_placed %}current{% endif %}">
+    {% if status.reconcile_count > 0 %}&#10003;{% endif %} Receipt
+  </span>
+</div>

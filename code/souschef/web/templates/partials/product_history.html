@@ -1,0 +1,42 @@
+{% set item_id = item_name | replace(' ', '-') | lower %}
+<div class="product-history" id="products-{{ item_id }}">
+  <div class="product-history-header">
+    <span>{{ item_name }}</span>
+    <button class="btn sm" onclick="this.closest('.product-history').remove()">&#x2715;</button>
+  </div>
+  {% if products %}
+  {% for p in products %}
+  <div class="product-row">
+    <div class="product-info">
+      <div class="product-desc">{{ p.product_description }}</div>
+      <div class="product-meta">
+        {{ p.size }} &middot; Last: {{ p.last_picked[:10] }}
+        {% if p.source == 'receipt' %}&middot; <span style="color:var(--green)">&#x2713; purchased</span>{% endif %}
+        {% if p.up_count or p.down_count %}
+        &middot; <span style="color:var(--green)">{{ p.up_count }}&#x1F44D;</span>
+        <span style="color:var(--red)">{{ p.down_count }}&#x1F44E;</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="product-rating">
+      {% if p.source == 'receipt' %}
+      <button class="rate-btn {% if p.your_rating == 1 %}active-up{% endif %}"
+              hx-post="/grocery/rate/{{ item_name }}"
+              hx-vals='{"upc": "{{ p.upc }}", "rating": "{% if p.your_rating == 1 %}0{% else %}1{% endif %}"}'
+              hx-target="#products-{{ item_id }}"
+              hx-swap="outerHTML">&#x1F44D;</button>
+      <button class="rate-btn {% if p.your_rating == -1 %}active-down{% endif %}"
+              hx-post="/grocery/rate/{{ item_name }}"
+              hx-vals='{"upc": "{{ p.upc }}", "rating": "{% if p.your_rating == -1 %}0{% else %}-1{% endif %}"}'
+              hx-target="#products-{{ item_id }}"
+              hx-swap="outerHTML">&#x1F44E;</button>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="product-row" style="color: var(--dim); padding: 12px 14px;">
+    No product history yet.
+  </div>
+  {% endif %}
+</div>

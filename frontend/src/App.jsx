@@ -1,0 +1,95 @@
+import { useState, useEffect, useCallback } from 'react'
+import Nav from './components/Nav'
+import PlanPage from './components/PlanPage'
+import GroceryPage from './components/GroceryPage'
+import OrderPage from './components/OrderPage'
+import ReceiptPage from './components/ReceiptPage'
+import StatusBar from './components/StatusBar'
+
+function useIsWide(breakpoint = 1024) {
+  const [wide, setWide] = useState(window.innerWidth >= breakpoint)
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${breakpoint}px)`)
+    const handler = (e) => setWide(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [breakpoint])
+  return wide
+}
+
+function formatDateRange(start, end) {
+  if (!start || !end) return null
+  const s = new Date(start + 'T00:00:00')
+  const e = new Date(end + 'T00:00:00')
+  const sMonth = s.toLocaleDateString('en-US', { month: 'short' })
+  const eMonth = e.toLocaleDateString('en-US', { month: 'short' })
+  if (sMonth === eMonth) {
+    return { text: `${sMonth} ${s.getDate()}`, endText: `${e.getDate()}` }
+  }
+  return { text: `${sMonth} ${s.getDate()}`, endText: `${eMonth} ${e.getDate()}` }
+}
+
+function App() {
+  const [page, setPage] = useState('plan')
+  const isWide = useIsWide()
+  const [mealData, setMealData] = useState(null)
+
+  const handlePlanLoad = useCallback((data) => setMealData(data), [])
+
+  const dateRange = mealData ? formatDateRange(mealData.start_date, mealData.end_date) : null
+
+  return (
+    <div className="app">
+      <Nav page={page} setPage={setPage} />
+      <main>
+        {isWide && (page === 'plan' || page === 'grocery') ? (
+          <>
+            {dateRange && (
+              <>
+                <div className="page-header">
+                  <div className="date-range-big">
+                    {dateRange.text} <em>&ndash;</em> {dateRange.endText}
+                  </div>
+                  <div className="date-subtitle">Your next 10 days</div>
+                </div>
+                <StatusBar status={mealData.status} />
+                <div className="section-label">Meals</div>
+              </>
+            )}
+            <div className="two-col">
+              <div className="col-plan"><PlanPage showHeader={false} onLoad={handlePlanLoad} /></div>
+              <div className="col-grocery"><GroceryPage sidebar /></div>
+            </div>
+          </>
+        ) : (
+          <>
+            {page === 'plan' && <PlanPage />}
+            {page === 'grocery' && <GroceryPage />}
+          </>
+        )}
+        {page === 'order' && <OrderPage />}
+        {page === 'receipt' && <ReceiptPage />}
+      </main>
+      <nav className="bottom-nav">
+        <div className={`nav-tab${page === 'plan' ? ' active' : ''}`} onClick={() => setPage('plan')}>
+          <div className="nav-tab-icon">{'\u{1F5D3}'}</div>
+          <div className="nav-tab-label">Plan</div>
+        </div>
+        <div className={`nav-tab${page === 'grocery' ? ' active' : ''}`} onClick={() => setPage('grocery')}>
+          <div className="nav-tab-icon">{'\u{1F6D2}'}</div>
+          <div className="nav-tab-label">Grocery</div>
+        </div>
+        <div className={`nav-tab${page === 'order' ? ' active' : ''}`} onClick={() => setPage('order')}>
+          <div className="nav-tab-icon">{'\u{1F4E6}'}</div>
+          <div className="nav-tab-label">Order</div>
+        </div>
+        <div className={`nav-tab${page === 'receipt' ? ' active' : ''}`} onClick={() => setPage('receipt')}>
+          <div className="nav-tab-icon">{'\u{1F9FE}'}</div>
+          <div className="nav-tab-label">Receipt</div>
+        </div>
+      </nav>
+    </div>
+  )
+}
+
+export default App

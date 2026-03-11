@@ -1,0 +1,45 @@
+<div class="candidates-panel" id="candidates-{{ date }}">
+  <div class="candidates-header">
+    <span>{{ day_name }}</span>
+    <button class="btn sm" onclick="this.closest('.candidates-panel').remove()">&#x2715;</button>
+  </div>
+
+  {% if candidates %}
+  <div class="candidates-section">
+    <div class="candidates-label">Suggested</div>
+    {% for recipe in candidates %}
+    <button class="candidate-option"
+            hx-post="/plan/set/{{ date }}"
+            hx-vals='{"recipe_id": "{{ recipe.id }}"}'
+            hx-target="#plan-section"
+            hx-swap="outerHTML">
+      <span class="candidate-name">{{ recipe.name }}</span>
+      <span class="candidate-meta">{{ recipe.cuisine }} &middot; {{ recipe.effort }}</span>
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="candidates-section">
+    <div class="candidates-label">All recipes</div>
+    {% for recipe in all_recipes %}
+    <button class="candidate-option"
+            hx-post="/plan/set/{{ date }}"
+            hx-vals='{"recipe_id": "{{ recipe.id }}"}'
+            hx-target="#plan-section"
+            hx-swap="outerHTML">
+      <span class="candidate-name">{{ recipe.name }}</span>
+      <span class="candidate-meta">{{ recipe.cuisine }} &middot; {{ recipe.effort }}</span>
+    </button>
+    {% endfor %}
+  </div>
+</div>
+<script>
+// Clean up candidates panel after htmx swaps the plan section
+document.body.addEventListener('htmx:afterSwap', function cleanup(e) {
+  if (e.detail.target && (e.detail.target.id === 'plan-section' || e.detail.target.id === 'plan-table')) {
+    document.querySelectorAll('.candidates-panel').forEach(function(p) { p.remove(); });
+    document.body.removeEventListener('htmx:afterSwap', cleanup);
+  }
+});
+</script>

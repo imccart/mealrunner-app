@@ -1,0 +1,1157 @@
+recipes:
+  # =====================
+  # POULTRY
+  # =====================
+  - name: Chicken Alfredo
+    cuisine: italian
+    effort: medium
+    cleanup: medium
+    prep_minutes: 15
+    cook_minutes: 25
+    kid_friendly: true
+    notes: Homemade alfredo sauce from scratch
+    ingredients:
+      - name: chicken breast
+        quantity: 2
+        unit: lb
+        component: protein
+      - name: fettuccine
+        quantity: 16
+        unit: oz
+        component: base
+      - name: heavy cream
+        quantity: 2
+        unit: cup
+        component: sauce
+      - name: parmesan cheese
+        quantity: 4
+        unit: oz
+        component: sauce
+      - name: butter
+        quantity: 4
+        unit: tbsp
+      - name: garlic
+        quantity: 4
+        unit: count
+        prep_note: cloves, minced
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: black pepper
+        quantity: 0.5
+        unit: tsp
+      - name: olive oil
+        quantity: 1
+        unit: tbsp
+
+  - name: Chicken Fried Rice
+    cuisine: american
+    effort: medium
+    cleanup: easy
+    outdoor: true
+    prep_minutes: 15
+    cook_minutes: 15
+    kid_friendly: true
+    notes: Great on the outdoor griddle
+    ingredients:
+      - name: chicken breast
+        quantity: 1.5
+        unit: lb
+        component: protein
+      - name: rice
+        quantity: 3
+        unit: cup
+        component: base
+      - name: eggs
+        quantity: 3
+        unit: count
+      - name: frozen corn
+        quantity: 8
+        unit: oz
+      - name: soy sauce
+        quantity: 3
+        unit: tbsp
+      - name: vegetable oil
+        quantity: 2
+        unit: tbsp
+      - name: garlic
+        quantity: 2
+        unit: count
+        prep_note: minced
+      - name: salt
+        quantity: 0.5
+        unit: tsp
+
+  - name: Chicken and Dumplings
+    cuisine: comfort
+    effort: medium
+    cleanup: medium
+    prep_minutes: 20
+    cook_minutes: 40
+    kid_friendly: true
+    notes: From scratch dumplings
+    ingredients:
+      - name: chicken thighs
+        quantity: 2
+        unit: lb
+        component: protein
+      - name: flour
+        quantity: 2
+        unit: cup
+        component: base
+      - name: chicken broth
+        quantity: 6
+        unit: cup
+        component: base
+      - name: butter
+        quantity: 3
+        unit: tbsp
+      - name: milk
+        quantity: 1
+        unit: cup
+      - name: celery
+        quantity: 3
+        unit: count
+        prep_note: diced
+      - name: carrot
+        quantity: 3
+        unit: count
+        prep_note: diced
+      - name: yellow onion
+        quantity: 1
+        unit: count
+        prep_note: diced
+      - name: garlic
+        quantity: 2
+        unit: count
+        prep_note: minced
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: black pepper
+        quantity: 0.5
+        unit: tsp
+
+  - name: Chicken Wings
+    cuisine: american
+    effort: medium
+    cleanup: medium
+    prep_minutes: 10
+    cook_minutes: 45
+    kid_friendly: true
+    ingredients:
+      - name: chicken wings
+        quantity: 3
+        unit: lb
+        component: protein
+      - name: butter
+        quantity: 4
+        unit: tbsp
+      - name: hot sauce
+        quantity: 4
+        unit: oz
+      - name: garlic powder
+        quantity: 1
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: black pepper
+        quantity: 0.5
+        unit: tsp
+      - name: celery
+        quantity: 4
+        unit: count
+        component: side
+
+  - name: Breaded Chicken
+    cuisine: american
+    effort: medium
+    cleanup: medium
+    prep_minutes: 20
+    cook_minutes: 20
+    kid_friendly: true
+    notes: Serve with mac and cheese or mashed potatoes
+    ingredients:
+      - name: chicken breast
+        quantity: 2
+        unit: lb
+        component: protein
+      - name: breadcrumbs
+        quantity: 1.5
+        unit: cup
+      - name: eggs
+        quantity: 2
+        unit: count
+      - name: flour
+        quantity: 0.5
+        unit: cup
+      - name: vegetable oil
+        quantity: 3
+        unit: tbsp
+      - name: garlic powder
+        quantity: 1
+        unit: tsp
+      - name: paprika
+        quantity: 0.5
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: black pepper
+        quantity: 0.5
+        unit: tsp
+      - name: elbow macaroni
+        quantity: 16
+        unit: oz
+        component: side
+      - name: shredded cheddar
+        quantity: 8
+        unit: oz
+        component: side
+      - name: milk
+        quantity: 1
+        unit: cup
+        component: side
+      - name: butter
+        quantity: 2
+        unit: tbsp
+        component: side
+
+  - name: Chicken Nuggets and Edamame
+    cuisine: american
+    effort: easy
+    cleanup: easy
+    premade: true
+    prep_minutes: 5
+    cook_minutes: 20
+    kid_friendly: true
+    ingredients:
+      - name: frozen chicken nuggets
+        quantity: 32
+        unit: oz
+      - name: frozen edamame
+        quantity: 16
+        unit: oz
+
+  # =====================
+  # BEEF / PORK
+  # =====================
+  - name: Steaks
+    cuisine: american
+    effort: medium
+    cleanup: easy
+    outdoor: true
+    prep_minutes: 10
+    cook_minutes: 15
+    kid_friendly: true
+    ingredients:
+      - name: steak
+        quantity: 2.5
+        unit: lb
+        component: protein
+      - name: potato
+        quantity: 2
+        unit: lb
+        component: side
+      - name: butter
+        quantity: 3
+        unit: tbsp
+      - name: sour cream
+        quantity: 4
+        unit: oz
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: black pepper
+        quantity: 1
+        unit: tsp
+      - name: garlic powder
+        quantity: 1
+        unit: tsp
+      - name: olive oil
+        quantity: 1
+        unit: tbsp
+
+  - name: Pork Chops
+    cuisine: american
+    effort: medium
+    cleanup: easy
+    outdoor: true
+    prep_minutes: 10
+    cook_minutes: 20
+    kid_friendly: true
+    ingredients:
+      - name: pork chops
+        quantity: 2
+        unit: lb
+        component: protein
+      - name: potato
+        quantity: 2
+        unit: lb
+        component: side
+      - name: butter
+        quantity: 3
+        unit: tbsp
+      - name: sour cream
+        quantity: 4
+        unit: oz
+      - name: garlic powder
+        quantity: 1
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: black pepper
+        quantity: 0.5
+        unit: tsp
+      - name: olive oil
+        quantity: 1
+        unit: tbsp
+
+  - name: Spaghetti and Meatballs
+    cuisine: italian
+    effort: easy
+    cleanup: medium
+    prep_minutes: 10
+    cook_minutes: 25
+    kid_friendly: true
+    notes: Frozen meatballs from Sam's
+    ingredients:
+      - name: frozen meatballs
+        quantity: 32
+        unit: oz
+        component: protein
+      - name: spaghetti
+        quantity: 16
+        unit: oz
+        component: base
+      - name: marinara sauce
+        quantity: 24
+        unit: oz
+        component: sauce
+      - name: parmesan cheese
+        quantity: 2
+        unit: oz
+      - name: garlic
+        quantity: 2
+        unit: count
+        prep_note: cloves, minced
+      - name: olive oil
+        quantity: 1
+        unit: tbsp
+
+  - name: Hamburgers
+    cuisine: american
+    effort: easy
+    cleanup: easy
+    outdoor: true
+    prep_minutes: 10
+    cook_minutes: 15
+    kid_friendly: true
+    ingredients:
+      - name: ground beef
+        quantity: 2
+        unit: lb
+        component: formed
+      - name: hamburger buns
+        quantity: 8
+        unit: count
+        component: base
+      - name: shredded cheddar
+        quantity: 4
+        unit: oz
+      - name: romaine lettuce
+        quantity: 1
+        unit: count
+      - name: tomato
+        quantity: 2
+        unit: count
+      - name: yellow onion
+        quantity: 1
+        unit: count
+        prep_note: sliced
+      - name: frozen french fries
+        quantity: 28
+        unit: oz
+        component: side
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: black pepper
+        quantity: 0.5
+        unit: tsp
+
+  - name: Turkey Burgers
+    cuisine: american
+    effort: easy
+    cleanup: easy
+    outdoor: true
+    prep_minutes: 10
+    cook_minutes: 15
+    kid_friendly: true
+    ingredients:
+      - name: ground turkey
+        quantity: 2
+        unit: lb
+        component: formed
+      - name: hamburger buns
+        quantity: 8
+        unit: count
+        component: base
+      - name: shredded cheddar
+        quantity: 4
+        unit: oz
+      - name: romaine lettuce
+        quantity: 1
+        unit: count
+      - name: tomato
+        quantity: 2
+        unit: count
+      - name: frozen french fries
+        quantity: 28
+        unit: oz
+        component: side
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: black pepper
+        quantity: 0.5
+        unit: tsp
+
+  - name: Hot Dogs
+    cuisine: american
+    effort: easy
+    cleanup: easy
+    outdoor: true
+    premade: true
+    prep_minutes: 5
+    cook_minutes: 10
+    kid_friendly: true
+    ingredients:
+      - name: hot dogs
+        quantity: 8
+        unit: count
+        component: protein
+      - name: hot dog buns
+        quantity: 8
+        unit: count
+        component: base
+
+  - name: Stuffed Peppers
+    cuisine: american
+    effort: medium
+    cleanup: medium
+    prep_minutes: 20
+    cook_minutes: 35
+    kid_friendly: true
+    ingredients:
+      - name: bell pepper
+        quantity: 6
+        unit: count
+        component: base
+      - name: ground beef
+        quantity: 1.5
+        unit: lb
+        component: protein
+      - name: rice
+        quantity: 1.5
+        unit: cup
+      - name: canned diced tomatoes
+        quantity: 15
+        unit: oz
+      - name: shredded mexican cheese
+        quantity: 6
+        unit: oz
+      - name: yellow onion
+        quantity: 1
+        unit: count
+        prep_note: diced
+      - name: garlic
+        quantity: 2
+        unit: count
+        prep_note: minced
+      - name: cumin
+        quantity: 1
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+
+  - name: Chili
+    cuisine: comfort
+    effort: medium
+    cleanup: easy
+    prep_minutes: 15
+    cook_minutes: 45
+    kid_friendly: true
+    notes: From scratch seasoning
+    ingredients:
+      - name: ground beef
+        quantity: 2
+        unit: lb
+        component: protein
+      - name: kidney beans
+        quantity: 30
+        unit: oz
+      - name: canned diced tomatoes
+        quantity: 28
+        unit: oz
+      - name: tomato sauce
+        quantity: 15
+        unit: oz
+      - name: yellow onion
+        quantity: 1
+        unit: count
+        prep_note: diced
+      - name: garlic
+        quantity: 3
+        unit: count
+        prep_note: minced
+      - name: chili powder
+        quantity: 3
+        unit: tsp
+      - name: cumin
+        quantity: 2
+        unit: tsp
+      - name: cayenne pepper
+        quantity: 0.5
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: shredded cheddar
+        quantity: 4
+        unit: oz
+      - name: sour cream
+        quantity: 4
+        unit: oz
+
+  # =====================
+  # MEXICAN-INSPIRED
+  # =====================
+  - name: Beef Tacos
+    cuisine: mexican
+    effort: easy
+    cleanup: easy
+    prep_minutes: 15
+    cook_minutes: 15
+    kid_friendly: true
+    notes: Homemade taco seasoning
+    ingredients:
+      - name: ground beef
+        quantity: 1.5
+        unit: lb
+        component: protein
+      - name: corn tortillas
+        quantity: 12
+        unit: count
+        component: base
+      - name: shredded mexican cheese
+        quantity: 4
+        unit: oz
+      - name: salsa
+        quantity: 8
+        unit: oz
+      - name: sour cream
+        quantity: 4
+        unit: oz
+      - name: romaine lettuce
+        quantity: 1
+        unit: count
+      - name: tomato
+        quantity: 2
+        unit: count
+      - name: cumin
+        quantity: 1
+        unit: tsp
+      - name: chili powder
+        quantity: 1
+        unit: tsp
+      - name: garlic powder
+        quantity: 0.5
+        unit: tsp
+      - name: onion powder
+        quantity: 0.5
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+
+  - name: Chicken Tacos
+    cuisine: mexican
+    effort: easy
+    cleanup: easy
+    prep_minutes: 15
+    cook_minutes: 15
+    kid_friendly: true
+    notes: Homemade taco seasoning
+    ingredients:
+      - name: chicken breast
+        quantity: 1.5
+        unit: lb
+        component: protein
+      - name: corn tortillas
+        quantity: 12
+        unit: count
+        component: base
+      - name: shredded mexican cheese
+        quantity: 4
+        unit: oz
+      - name: salsa
+        quantity: 8
+        unit: oz
+      - name: avocado
+        quantity: 2
+        unit: count
+      - name: lime
+        quantity: 2
+        unit: count
+      - name: cilantro
+        quantity: 1
+        unit: count
+      - name: cumin
+        quantity: 1
+        unit: tsp
+      - name: chili powder
+        quantity: 1
+        unit: tsp
+      - name: garlic powder
+        quantity: 0.5
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+
+  - name: Veggie Tacos
+    cuisine: mexican
+    effort: easy
+    cleanup: easy
+    prep_minutes: 15
+    cook_minutes: 15
+    kid_friendly: true
+    ingredients:
+      - name: black beans
+        quantity: 30
+        unit: oz
+        component: protein
+      - name: corn tortillas
+        quantity: 12
+        unit: count
+        component: base
+      - name: rice
+        quantity: 1.5
+        unit: cup
+      - name: shredded mexican cheese
+        quantity: 4
+        unit: oz
+      - name: salsa
+        quantity: 8
+        unit: oz
+      - name: avocado
+        quantity: 2
+        unit: count
+      - name: lime
+        quantity: 2
+        unit: count
+      - name: cilantro
+        quantity: 1
+        unit: count
+      - name: cumin
+        quantity: 1
+        unit: tsp
+      - name: chili powder
+        quantity: 1
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+
+  - name: Enchiladas
+    cuisine: mexican
+    effort: medium
+    cleanup: medium
+    prep_minutes: 25
+    cook_minutes: 25
+    kid_friendly: true
+    notes: Homemade enchilada sauce from scratch
+    ingredients:
+      - name: chicken breast
+        quantity: 1.5
+        unit: lb
+        component: protein
+      - name: flour tortillas
+        quantity: 8
+        unit: count
+        component: base
+      - name: tomato sauce
+        quantity: 15
+        unit: oz
+        component: sauce
+      - name: shredded mexican cheese
+        quantity: 8
+        unit: oz
+      - name: yellow onion
+        quantity: 1
+        unit: count
+        prep_note: diced
+      - name: garlic
+        quantity: 2
+        unit: count
+        prep_note: minced
+      - name: sour cream
+        quantity: 4
+        unit: oz
+      - name: chili powder
+        quantity: 2
+        unit: tsp
+      - name: cumin
+        quantity: 1
+        unit: tsp
+      - name: oregano
+        quantity: 0.5
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: olive oil
+        quantity: 1
+        unit: tbsp
+
+  - name: Empanadas
+    cuisine: mexican
+    effort: hard
+    cleanup: medium
+    prep_minutes: 45
+    cook_minutes: 25
+    kid_friendly: true
+    notes: Homemade dough from scratch
+    ingredients:
+      - name: ground beef
+        quantity: 1.5
+        unit: lb
+        component: protein
+      - name: flour
+        quantity: 3
+        unit: cup
+        component: base
+      - name: butter
+        quantity: 4
+        unit: tbsp
+        component: base
+      - name: eggs
+        quantity: 2
+        unit: count
+        component: base
+      - name: yellow onion
+        quantity: 1
+        unit: count
+        prep_note: diced
+      - name: garlic
+        quantity: 2
+        unit: count
+        prep_note: minced
+      - name: canned diced tomatoes
+        quantity: 15
+        unit: oz
+      - name: cumin
+        quantity: 1
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: vegetable oil
+        quantity: 2
+        unit: tbsp
+
+  - name: Taco Bowls
+    cuisine: mexican
+    effort: easy
+    cleanup: easy
+    prep_minutes: 15
+    cook_minutes: 20
+    kid_friendly: true
+    notes: Homemade taco seasoning
+    ingredients:
+      - name: ground beef
+        quantity: 1.5
+        unit: lb
+        component: protein
+      - name: rice
+        quantity: 2
+        unit: cup
+        component: base
+      - name: black beans
+        quantity: 15
+        unit: oz
+      - name: shredded mexican cheese
+        quantity: 4
+        unit: oz
+      - name: salsa
+        quantity: 8
+        unit: oz
+      - name: sour cream
+        quantity: 4
+        unit: oz
+      - name: romaine lettuce
+        quantity: 1
+        unit: count
+      - name: avocado
+        quantity: 2
+        unit: count
+      - name: lime
+        quantity: 1
+        unit: count
+      - name: cumin
+        quantity: 1
+        unit: tsp
+      - name: chili powder
+        quantity: 1
+        unit: tsp
+      - name: garlic powder
+        quantity: 0.5
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+
+  - name: Beans, Rice, and Sausage
+    cuisine: comfort
+    effort: easy
+    cleanup: easy
+    prep_minutes: 10
+    cook_minutes: 25
+    kid_friendly: true
+    ingredients:
+      - name: beef sausage
+        quantity: 1
+        unit: lb
+        component: protein
+      - name: rice
+        quantity: 2
+        unit: cup
+        component: base
+      - name: black beans
+        quantity: 30
+        unit: oz
+      - name: canned diced tomatoes
+        quantity: 15
+        unit: oz
+      - name: yellow onion
+        quantity: 1
+        unit: count
+        prep_note: diced
+      - name: garlic
+        quantity: 2
+        unit: count
+        prep_note: minced
+      - name: cumin
+        quantity: 1
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+
+  # =====================
+  # EASY / COMFORT
+  # =====================
+  - name: Mac and Cheese Plate
+    cuisine: comfort
+    effort: easy
+    cleanup: easy
+    prep_minutes: 10
+    cook_minutes: 20
+    kid_friendly: true
+    notes: From scratch cheese sauce
+    ingredients:
+      - name: elbow macaroni
+        quantity: 16
+        unit: oz
+        component: base
+      - name: shredded cheddar
+        quantity: 12
+        unit: oz
+        component: sauce
+      - name: milk
+        quantity: 1.5
+        unit: cup
+      - name: butter
+        quantity: 3
+        unit: tbsp
+      - name: flour
+        quantity: 2
+        unit: tbsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+
+  - name: Big Salad
+    cuisine: american
+    effort: easy
+    cleanup: easy
+    prep_minutes: 15
+    cook_minutes: 0
+    kid_friendly: true
+    notes: Use Sam's salad kits or build your own
+    ingredients:
+      - name: mixed salad greens
+        quantity: 12
+        unit: oz
+        component: base
+      - name: chicken breast
+        quantity: 1
+        unit: lb
+        component: protein
+      - name: tomato
+        quantity: 2
+        unit: count
+      - name: cucumber
+        quantity: 1
+        unit: count
+      - name: avocado
+        quantity: 1
+        unit: count
+      - name: shredded cheddar
+        quantity: 2
+        unit: oz
+      - name: olive oil
+        quantity: 2
+        unit: tbsp
+      - name: lemon
+        quantity: 1
+        unit: count
+
+  - name: Breakfast for Dinner
+    cuisine: comfort
+    effort: easy
+    cleanup: medium
+    prep_minutes: 10
+    cook_minutes: 20
+    kid_friendly: true
+    ingredients:
+      - name: flour
+        quantity: 2
+        unit: cup
+        component: base
+      - name: baking powder
+        quantity: 2
+        unit: tsp
+        component: base
+      - name: sugar
+        quantity: 2
+        unit: tbsp
+        component: base
+      - name: eggs
+        quantity: 8
+        unit: count
+        component: protein
+      - name: breakfast sausage
+        quantity: 1
+        unit: lb
+        component: protein
+      - name: bacon
+        quantity: 0.5
+        unit: lb
+        component: protein
+      - name: butter
+        quantity: 3
+        unit: tbsp
+      - name: maple syrup
+        quantity: 8
+        unit: oz
+      - name: milk
+        quantity: 1
+        unit: cup
+
+  - name: Grilled Cheese with Soup
+    cuisine: comfort
+    effort: easy
+    cleanup: easy
+    prep_minutes: 5
+    cook_minutes: 15
+    kid_friendly: true
+    ingredients:
+      - name: sliced bread
+        quantity: 16
+        unit: count
+        component: base
+      - name: sliced cheese
+        quantity: 16
+        unit: count
+        component: base
+      - name: butter
+        quantity: 4
+        unit: tbsp
+      - name: tomato soup
+        quantity: 44
+        unit: oz
+        component: side
+
+  - name: Loaded Baked Potatoes
+    cuisine: comfort
+    effort: easy
+    cleanup: easy
+    prep_minutes: 10
+    cook_minutes: 60
+    kid_friendly: true
+    ingredients:
+      - name: potato
+        quantity: 3
+        unit: lb
+        component: base
+      - name: bacon
+        quantity: 0.5
+        unit: lb
+        component: protein
+      - name: shredded cheddar
+        quantity: 6
+        unit: oz
+      - name: sour cream
+        quantity: 8
+        unit: oz
+      - name: butter
+        quantity: 4
+        unit: tbsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: black pepper
+        quantity: 0.5
+        unit: tsp
+
+  - name: Pulled Pork
+    cuisine: american
+    effort: hard
+    cleanup: easy
+    outdoor: true
+    prep_minutes: 15
+    cook_minutes: 240
+    kid_friendly: true
+    notes: Low and slow — plan ahead
+    ingredients:
+      - name: pork shoulder
+        quantity: 4
+        unit: lb
+        component: protein
+      - name: bbq sauce
+        quantity: 12
+        unit: oz
+      - name: hamburger buns
+        quantity: 8
+        unit: count
+        component: base
+      - name: yellow onion
+        quantity: 1
+        unit: count
+        prep_note: sliced
+      - name: garlic powder
+        quantity: 1
+        unit: tsp
+      - name: paprika
+        quantity: 1
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+      - name: black pepper
+        quantity: 0.5
+        unit: tsp
+
+  - name: Pulled Pork Tacos
+    cuisine: mexican
+    effort: hard
+    cleanup: easy
+    prep_minutes: 15
+    cook_minutes: 240
+    kid_friendly: true
+    notes: Low and slow — plan ahead. Leftovers from pulled pork work great.
+    ingredients:
+      - name: pork shoulder
+        quantity: 4
+        unit: lb
+        component: protein
+      - name: corn tortillas
+        quantity: 12
+        unit: count
+        component: base
+      - name: shredded mexican cheese
+        quantity: 4
+        unit: oz
+      - name: salsa
+        quantity: 8
+        unit: oz
+      - name: cilantro
+        quantity: 1
+        unit: count
+      - name: lime
+        quantity: 2
+        unit: count
+      - name: avocado
+        quantity: 2
+        unit: count
+      - name: cumin
+        quantity: 1
+        unit: tsp
+      - name: chili powder
+        quantity: 1
+        unit: tsp
+      - name: garlic powder
+        quantity: 1
+        unit: tsp
+      - name: salt
+        quantity: 1
+        unit: tsp
+
+  # =====================
+  # PREMADE / FROZEN
+  # =====================
+  - name: Lasagna
+    cuisine: italian
+    effort: easy
+    cleanup: easy
+    premade: true
+    prep_minutes: 5
+    cook_minutes: 60
+    kid_friendly: true
+    notes: Frozen lasagna from Sam's
+    ingredients:
+      - name: frozen lasagna
+        quantity: 1
+        unit: count
+
+  - name: Rotisserie Chicken Dinner
+    cuisine: american
+    effort: easy
+    cleanup: easy
+    premade: true
+    prep_minutes: 5
+    cook_minutes: 0
+    kid_friendly: true
+    notes: Grab a Sam's rotisserie chicken, serve with sides
+    ingredients:
+      - name: rotisserie chicken
+        quantity: 1
+        unit: count
+        component: protein
+      - name: frozen french fries
+        quantity: 28
+        unit: oz
+        component: side
+      - name: frozen corn
+        quantity: 12
+        unit: oz
+        component: side
+
+  - name: Frozen Pizza Night
+    cuisine: american
+    effort: easy
+    cleanup: easy
+    premade: true
+    prep_minutes: 0
+    cook_minutes: 20
+    kid_friendly: true
+    notes: Red Baron from Sam's
+    ingredients:
+      - name: frozen pizza
+        quantity: 2
+        unit: count
