@@ -68,13 +68,14 @@ def _date_label(start: str, end: str) -> str:
 @app.get("/health")
 async def health():
     """Health check for Railway / load balancers."""
+    from souschef.database import DATABASE_URL
     try:
         conn = get_conn()
         conn.execute(text("SELECT 1"))
         conn.close()
-        return {"status": "ok"}
+        return {"status": "ok", "db": DATABASE_URL[:20] + "..."}
     except Exception as e:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(e), "db": DATABASE_URL[:20] + "..."}
 
 
 # ── Routes ────────────────────────────────────────────────
