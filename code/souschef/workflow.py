@@ -225,7 +225,7 @@ def reconstruct_grocery_list(
     if sel is None:
         return None
 
-    gl = build_grocery_list(conn, meals, start_date, end_date)
+    gl = build_grocery_list(conn, meals, start_date, end_date, user_id=user_id)
     # Filter to only items the user kept
     saved_meal_set = {n.lower() for n in sel.meal_items}
     gl.items = [item for item in gl.items if item.ingredient_name.lower() in saved_meal_set]

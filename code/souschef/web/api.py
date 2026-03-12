@@ -902,7 +902,7 @@ async def search_order_products(item_name: str, request: Request):
     search_term = (ing["root"] if ing and ing["root"] else item_name).strip()
 
     # Get preferences first
-    prefs = get_preferred_products(conn, item_name, limit=3, user_id=user_id)
+    prefs = get_preferred_products(conn, user_id, item_name, limit=3)
     pref_list = [{
         "upc": p.upc,
         "name": p.description,
@@ -1065,7 +1065,7 @@ async def select_product(body: dict, request: Request):
         description=product["name"], brand=product.get("brand", ""),
         size=product.get("size", ""),
     )
-    save_preference(conn, item_name, kp, source="picked", user_id=user_id)
+    save_preference(conn, user_id, item_name, kp, source="picked")
 
     return await get_order(request)
 
@@ -1412,7 +1412,7 @@ async def close_receipt(request: Request):
         )
         kp.price = r["receipt_price"]
         try:
-            save_preference(conn, r["name"], kp, source="receipt", user_id=user_id)
+            save_preference(conn, user_id, r["name"], kp, source="receipt")
         except Exception:
             pass
 
