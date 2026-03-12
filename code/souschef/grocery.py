@@ -16,6 +16,7 @@ def build_grocery_list(
     meals: list[Meal],
     start_date: str = "",
     end_date: str = "",
+    user_id: str = "default",
 ) -> GroceryList:
     """Build a grocery list from a list of meals."""
     from souschef.planner import SIDE_INGREDIENTS
@@ -84,7 +85,7 @@ def build_grocery_list(
 
     # Subtract pantry stock; skip regulars (handled separately via checklist)
     from souschef.regulars import list_regulars
-    regular_names = {r.name.lower() for r in list_regulars(conn)}
+    regular_names = {r.name.lower() for r in list_regulars(conn, user_id)}
 
     items: list[GroceryListItem] = []
     staples_used: list[str] = []
@@ -95,7 +96,7 @@ def build_grocery_list(
         if info["name"].lower() in regular_names:
             continue
 
-        pantry_qty = get_pantry_quantity(conn, iid)
+        pantry_qty = get_pantry_quantity(conn, user_id, iid)
         needed = info["quantity"] - pantry_qty
         if needed <= 0:
             continue

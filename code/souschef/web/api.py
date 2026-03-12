@@ -59,7 +59,7 @@ async def get_past_meals(request: Request):
     today = date.today()
     end = today - timedelta(days=1)
     start = today - timedelta(days=7)
-    meals = load_meals(conn, start.isoformat(), end.isoformat(), user_id)
+    meals = load_meals(conn, user_id, start.isoformat(), end.isoformat())
     meal_map = {m.slot_date: m for m in meals}
 
     days = []
@@ -83,7 +83,7 @@ async def swap_meal(date: str, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    do_swap(conn, date, user_id)
+    do_swap(conn, user_id, date)
     return await get_meals(request)
 
 
@@ -156,7 +156,7 @@ async def swap_meal_smart(date: str, request: Request, body: dict = None):
                         removable.append(display["name"] if display else name_lower)
 
         # Now do the swap
-        do_swap(conn, date, user_id)
+        do_swap(conn, user_id, date)
         meals_data = await get_meals(request)
 
         # Get the new meal's name
@@ -235,7 +235,7 @@ async def get_sides(date: str, request: Request):
         return {"sides": [], "current": FIXED_SIDES[recipe_name], "fixed": True}
 
     s, e = rolling_range()
-    week_meals = load_meals(conn, s, e, user_id)
+    week_meals = load_meals(conn, user_id, s, e)
     used_sides = [m.side for m in week_meals if m.slot_date != date and m.side]
 
     sides = []
@@ -264,7 +264,7 @@ async def set_side(date: str, body: dict, request: Request):
 
     meal = _row_to_meal(row)
     meal.side = body.get("side", "")
-    save_meal(conn, meal, user_id)
+    save_meal(conn, user_id, meal)
     return await get_meals(request)
 
 
@@ -274,7 +274,7 @@ async def swap_side(date: str, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    swap_meal_side(conn, date, user_id)
+    swap_meal_side(conn, user_id, date)
     return await get_meals(request)
 
 
@@ -284,7 +284,7 @@ async def toggle_grocery(date: str, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    do_toggle(conn, date, user_id)
+    do_toggle(conn, user_id, date)
     return await get_meals(request)
 
 
@@ -297,7 +297,7 @@ async def set_meal(date: str, body: dict, request: Request):
     conn = _conn()
     recipe = get_recipe(conn, body["recipe_id"])
     if recipe:
-        do_set(conn, date, recipe.name, user_id)
+        do_set(conn, user_id, date, recipe.name)
     return await get_meals(request)
 
 
@@ -310,7 +310,7 @@ async def suggest_meals(request: Request):
     from souschef import workflow
 
     mw = workflow.get_rolling_meals(conn, user_id)
-    fill_dates(conn, mw.start_date, mw.end_date, user_id)
+    fill_dates(conn, user_id, mw.start_date, mw.end_date)
     return await get_meals(request)
 
 
@@ -324,7 +324,7 @@ async def all_to_grocery(request: Request):
 
     mw = workflow.get_rolling_meals(conn, user_id)
     if mw.meals:
-        set_all_grocery(conn, mw.start_date, mw.end_date, on=True, user_id=user_id)
+        set_all_grocery(conn, user_id, mw.start_date, mw.end_date, on=True)
     return await get_meals(request)
 
 
@@ -334,7 +334,7 @@ async def remove_meal(date: str, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    do_remove(conn, date, user_id)
+    do_remove(conn, user_id, date)
     return await get_meals(request)
 
 
@@ -344,7 +344,7 @@ async def set_freeform(date: str, body: dict, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    set_freeform_meal(conn, date, body["name"], user_id)
+    set_freeform_meal(conn, user_id, date, body["name"])
     return await get_meals(request)
 
 
@@ -354,7 +354,7 @@ async def swap_days(body: dict, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    swap_dates(conn, body["date_a"], body["date_b"], user_id)
+    swap_dates(conn, user_id, body["date_a"], body["date_b"])
     return await get_meals(request)
 
 
@@ -365,7 +365,7 @@ async def get_candidates(date: str, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    candidates = do_get(conn, date, user_id)
+    candidates = do_get(conn, user_id, date)
     all_recipes = list_recipes(conn)
     return {
         "candidates": [_recipe_dict(r) for r in candidates],
@@ -417,10 +417,10 @@ def _build_trip_from_meals(conn, trip_id: int, mw, user_id: str) -> None:
         # Collect skip overrides for all meals on the plan
         skip_pairs: set[tuple[str, str]] = set()
         for meal in grocery_meals:
-            for item_name in get_skips_for_meal(conn, meal.recipe_name, user_id):
+            for item_name in get_skips_for_meal(conn, user_id, meal.recipe_name):
                 skip_pairs.add((item_name, meal.recipe_name))
 
-        gl = build_grocery_list(conn, grocery_meals, mw.start_date, mw.end_date, user_id)
+        gl = build_grocery_list(conn, grocery_meals, mw.start_date, mw.end_date, user_id=user_id)
         by_store = split_by_store(gl)
         for items in by_store.values():
             for item in items:
@@ -446,7 +446,7 @@ def _build_trip_from_meals(conn, trip_id: int, mw, user_id: str) -> None:
         # Add auto-include overrides
         seen_adds: set[str] = set()
         for meal in grocery_meals:
-            for add in get_adds_for_meal(conn, meal.recipe_name, user_id):
+            for add in get_adds_for_meal(conn, user_id, meal.recipe_name):
                 name = add["item_name"]
                 if name in seen_adds:
                     continue
@@ -508,7 +508,7 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
     # Build fresh meal items
     fresh_meal_items: dict[str, dict] = {}
     if grocery_meals:
-        gl = build_grocery_list(conn, grocery_meals, mw.start_date, mw.end_date, user_id)
+        gl = build_grocery_list(conn, grocery_meals, mw.start_date, mw.end_date, user_id=user_id)
         by_store = split_by_store(gl)
         for items in by_store.values():
             for item in items:
@@ -710,7 +710,7 @@ async def build_my_list(request: Request, body: dict = None):
 
     # First, toggle all meals to grocery list
     if mw.meals:
-        set_all_grocery(conn, mw.start_date, mw.end_date, on=True, user_id=user_id)
+        set_all_grocery(conn, user_id, mw.start_date, mw.end_date, on=True)
         # Refresh mw to pick up the on_grocery changes
         mw = workflow.get_rolling_meals(conn, user_id)
 
@@ -1454,7 +1454,7 @@ async def get_regulars(request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    regulars = list_regulars(conn, active_only=False, user_id=user_id)
+    regulars = list_regulars(conn, user_id, active_only=False)
     return {
         "regulars": [
             {
@@ -1476,7 +1476,7 @@ async def add_regular(body: dict, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    r = do_add(conn, body["name"], body.get("shopping_group", ""), body.get("store_pref", "either"), user_id=user_id)
+    r = do_add(conn, user_id, body["name"], body.get("shopping_group", ""), body.get("store_pref", "either"))
     return {
         "id": r.id,
         "name": r.name,
@@ -1493,7 +1493,7 @@ async def toggle_regular(regular_id: int, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    r = do_toggle(conn, regular_id, user_id)
+    r = do_toggle(conn, user_id, regular_id)
     if r is None:
         return {"ok": False}
     return {
@@ -1512,7 +1512,7 @@ async def remove_regular(name: str, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    ok = do_remove(conn, name, user_id)
+    ok = do_remove(conn, user_id, name)
     return {"ok": ok}
 
 
@@ -1526,7 +1526,7 @@ async def grocery_suggestions(request: Request):
     names: set[str] = set()
 
     # Regulars
-    for r in list_regulars(conn, active_only=False, user_id=user_id):
+    for r in list_regulars(conn, user_id, active_only=False):
         names.add(r.name)
 
     # All ingredients
@@ -1597,7 +1597,7 @@ async def add_pantry(body: dict, request: Request):
         )
         conn.commit()
 
-    result = add_pantry_item(conn, name.lower(), quantity, unit, user_id)
+    result = add_pantry_item(conn, user_id, name.lower(), quantity, unit)
     if result is None:
         return {"ok": False}
     return {"ok": True, "id": result.id, "name": result.ingredient_name}
@@ -1756,7 +1756,7 @@ async def get_meal_history(request: Request):
                   MAX(slot_date) as last_made
            FROM meals
            WHERE recipe_id IS NOT NULL AND user_id = :user_id
-           GROUP BY recipe_id
+           GROUP BY recipe_id, recipe_name
            ORDER BY cook_count DESC"""),
         {"user_id": user_id},
     ).fetchall()
@@ -1796,7 +1796,7 @@ async def get_learning_suggestions(request: Request):
     trip_ids = [t["id"] for t in trips]
 
     # Items that appear on 3+ consecutive trips but aren't regulars
-    regulars = list_regulars(conn, active_only=False, user_id=user_id)
+    regulars = list_regulars(conn, user_id, active_only=False)
     regular_names = {r.name.lower() for r in regulars}
 
     item_freq = {}
