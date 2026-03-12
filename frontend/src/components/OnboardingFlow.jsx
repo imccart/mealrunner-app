@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../api/client'
+import ladleImg from '../assets/ladle.png'
 
 const COMMON_REGULARS = [
   'milk', 'eggs', 'butter', 'bread', 'cheese', 'yogurt',
@@ -80,7 +81,7 @@ export function WelcomeScreen({ onStart }) {
             because someone has to plan dinner<br />and get groceries
           </div>
           <div className={moverClass} ref={ladleRef} style={moverStyle}>
-            <img className={ladleClass} src="/ladle.png" alt="" />
+            <img className={ladleClass} src={ladleImg} alt="" />
             {phase >= 2 && phase < 3 && <div className="welcome-drip" ref={dripRef} />}
           </div>
         </div>

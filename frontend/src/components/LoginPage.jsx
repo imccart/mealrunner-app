@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
+import ladleImg from '../assets/ladle.png'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [waitlist, setWaitlist] = useState(false)
   const [error, setError] = useState(null)
 
   // Check for expired magic link and clean up the URL
@@ -24,8 +26,10 @@ export default function LoginPage() {
     setError(null)
     try {
       const result = await api.login(email.trim())
-      if (result.ok) {
+      if (result.sent) {
         setSent(true)
+      } else if (result.waitlist) {
+        setWaitlist(true)
       } else {
         setError(result.error || 'Something went wrong')
       }
@@ -38,15 +42,29 @@ export default function LoginPage() {
   return (
     <div className="login">
       <div className="login-card">
-        <img className="login-ladle" src="/ladle.png" alt="" />
+        <img className="login-ladle" src={ladleImg} alt="" />
         <div className="login-wordmark">sous<em>chef</em></div>
 
-        {sent ? (
+        {waitlist ? (
+          <div className="login-sent">
+            <div className="login-sent-icon">{'\u{1F331}'}</div>
+            <div className="login-sent-title">Early access</div>
+            <div className="login-sent-desc">
+              Souschef is in early access. We'll let you know when there's a spot for you.
+            </div>
+            <button
+              className="login-resend"
+              onClick={() => { setWaitlist(false); setEmail('') }}
+            >
+              Try a different email
+            </button>
+          </div>
+        ) : sent ? (
           <div className="login-sent">
             <div className="login-sent-icon">{'\u2709\uFE0F'}</div>
             <div className="login-sent-title">Check your inbox</div>
             <div className="login-sent-desc">
-              If <strong>{email}</strong> is on our list, you'll get a sign-in link. Check your email and click it to continue.
+              We sent a sign-in link to <strong>{email}</strong>. Click it to continue.
             </div>
             <button
               className="login-resend"

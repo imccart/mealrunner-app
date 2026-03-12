@@ -137,8 +137,7 @@ async def auth_login(body: dict):
     conn = get_connection()
     try:
         if not is_email_allowed(conn, email):
-            # Don't reveal whether email exists
-            return {"ok": True, "message": "If that email is on our list, check your inbox."}
+            return {"ok": False, "waitlist": True}
 
         user_id = find_or_create_user(conn, email)
         token = create_magic_link(conn, user_id)
@@ -146,7 +145,7 @@ async def auth_login(body: dict):
     finally:
         conn.close()
 
-    return {"ok": True, "message": "If that email is on our list, check your inbox."}
+    return {"ok": True, "sent": True}
 
 
 @app.get("/api/auth/verify")

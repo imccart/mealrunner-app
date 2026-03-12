@@ -460,6 +460,73 @@ def stores_remove_cmd(key):
         console.print(f"[red]No store with key '{key}'[/red]")
 
 
+# ── Whitelist ────────────────────────────────────────────
+
+
+@cli.group("whitelist")
+def whitelist_group():
+    """Manage beta access emails."""
+    pass
+
+
+@whitelist_group.command("list")
+def whitelist_list_cmd():
+    """Show all allowed emails."""
+    from souschef.database import get_connection
+    from sqlalchemy import text
+
+    conn = get_connection()
+    rows = conn.execute(text("SELECT email FROM allowed_emails ORDER BY email")).fetchall()
+    conn.close()
+
+    if not rows:
+        console.print("[dim]No emails on the whitelist.[/dim]")
+        return
+
+    for row in rows:
+        console.print(f"  {row['email']}")
+    console.print(f"\n[dim]{len(rows)} email(s)[/dim]")
+
+
+@whitelist_group.command("add")
+@click.argument("email")
+def whitelist_add_cmd(email):
+    """Add an email to the beta whitelist."""
+    from souschef.database import get_connection
+    from sqlalchemy import text
+
+    email = email.strip().lower()
+    conn = get_connection()
+    conn.execute(
+        text("INSERT INTO allowed_emails (email) VALUES (:email) ON CONFLICT DO NOTHING"),
+        {"email": email},
+    )
+    conn.commit()
+    conn.close()
+    console.print(f"[green]Added {email}[/green]")
+
+
+@whitelist_group.command("remove")
+@click.argument("email")
+def whitelist_remove_cmd(email):
+    """Remove an email from the beta whitelist."""
+    from souschef.database import get_connection
+    from sqlalchemy import text
+
+    email = email.strip().lower()
+    conn = get_connection()
+    result = conn.execute(
+        text("DELETE FROM allowed_emails WHERE LOWER(email) = LOWER(:email)"),
+        {"email": email},
+    )
+    conn.commit()
+    conn.close()
+    if result.rowcount > 0:
+        console.print(f"[yellow]Removed {email}[/yellow]")
+    else:
+        console.print(f"[red]{email} not found[/red]")
+
+
 # ── Kroger ───────────────────────────────────────────────
 
 
