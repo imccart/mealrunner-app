@@ -41,6 +41,11 @@ export const api = {
     body: JSON.stringify({ name }),
   }),
   getCandidates: (date) => request(`/meals/${date}/candidates`),
+  getMealHistory: () => request('/meals/history'),
+  addToPool: (name) => request('/meals/add-to-pool', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  }),
 
   // Order
   getOrder: () => request('/order'),
@@ -62,9 +67,10 @@ export const api = {
   getGrocerySuggestions: () => request('/grocery/suggestions'),
   getGroceryTrips: () => request('/grocery/trips'),
   getCarryover: () => request('/grocery/carryover'),
-  buildMyList: (carryover = []) => request('/grocery/build', {
+  getActiveTrip: () => request('/grocery/active-trip'),
+  buildMyList: (carryover = [], regulars = [], pantryItems = []) => request('/grocery/build', {
     method: 'POST',
-    body: JSON.stringify({ carryover }),
+    body: JSON.stringify({ carryover, regulars, pantry_items: pantryItems }),
   }),
 
   // Receipt
@@ -91,4 +97,28 @@ export const api = {
 
   // Recipes
   getRecipes: () => request('/recipes'),
+
+  // Pantry
+  getPantry: () => request('/pantry'),
+  addPantryItem: (name, shoppingGroup) => request('/pantry', {
+    method: 'POST',
+    body: JSON.stringify({ name, shopping_group: shoppingGroup || 'Other' }),
+  }),
+  removePantryItem: (id) => request(`/pantry/${id}`, { method: 'DELETE' }),
+
+  // Stores
+  getStores: () => request('/stores'),
+  addStore: (name, key, mode, apiType) => request('/stores', {
+    method: 'POST',
+    body: JSON.stringify({ name, key, mode: mode || 'in-person', api: apiType || 'none' }),
+  }),
+  removeStore: (key) => request(`/stores/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+
+  // Onboarding
+  getOnboardingStatus: () => request('/onboarding/status'),
+  completeOnboarding: () => request('/onboarding/complete', { method: 'POST' }),
+
+  // Learning
+  getLearningSuggestions: () => request('/learning/suggestions'),
+  dismissLearning: (name) => request(`/learning/dismiss/${encodeURIComponent(name)}`, { method: 'POST' }),
 }

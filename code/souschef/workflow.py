@@ -7,9 +7,11 @@ Both CLI and web frontends call these functions.
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
+from sqlalchemy import text
+
+from souschef.database import DictConnection
 from souschef.models import GrocerySelections, Meal, MealWeek, WorkflowStatus
 from souschef.planner import (
     DAY_NAMES,
@@ -30,10 +32,10 @@ _RECONCILE_FILE = _CONFIG_DIR / "reconcile_result.json"
 # ── Meal Operations ───────────────────────────────────
 
 
-def list_weeks(conn: sqlite3.Connection) -> list[dict]:
+def list_weeks(conn: DictConnection) -> list[dict]:
     """List all weeks that have meals. Returns [{start_date, end_date, meal_count, accepted}, ...]."""
     rows = conn.execute(
-        "SELECT slot_date FROM meals ORDER BY slot_date"
+        text("SELECT slot_date FROM meals ORDER BY slot_date")
     ).fetchall()
     if not rows:
         return []
@@ -50,7 +52,7 @@ def list_weeks(conn: sqlite3.Connection) -> list[dict]:
 
     # Get status for each meal
     all_meals = conn.execute(
-        "SELECT slot_date, status FROM meals"
+        text("SELECT slot_date, status FROM meals")
     ).fetchall()
     status_map = {r["slot_date"]: r["status"] for r in all_meals}
 
@@ -70,19 +72,19 @@ def list_weeks(conn: sqlite3.Connection) -> list[dict]:
 
 
 def get_meals_for_week(
-    conn: sqlite3.Connection, week: str | None = None
+    conn: DictConnection, week: str | None = None
 ) -> MealWeek:
     """Load meals for a week. week is any date in that week (defaults to current)."""
     return load_meal_week(conn, week)
 
 
-def get_rolling_meals(conn: sqlite3.Connection) -> MealWeek:
+def get_rolling_meals(conn: DictConnection) -> MealWeek:
     """Load meals for the rolling 7-day window starting today."""
     return load_rolling_week(conn)
 
 
 def get_meals(
-    conn: sqlite3.Connection, start_date: str, end_date: str
+    conn: DictConnection, start_date: str, end_date: str
 ) -> list[Meal]:
     """Load meals in a date range."""
     return load_meals(conn, start_date, end_date)
@@ -102,7 +104,7 @@ def parse_day(day_str: str) -> int | None:
 # ── Legacy compatibility ──────────────────────────────
 
 
-def list_plans(conn: sqlite3.Connection) -> list[dict]:
+def list_plans(conn: DictConnection) -> list[dict]:
     """Legacy: list plans. Now returns weeks."""
     weeks = list_weeks(conn)
     # Add synthetic 'id' for templates that still reference it
@@ -111,7 +113,7 @@ def list_plans(conn: sqlite3.Connection) -> list[dict]:
     return weeks
 
 
-def get_plan(conn: sqlite3.Connection, plan_id: int | None = None):
+def get_plan(conn: DictConnection, plan_id: int | None = None):
     """Legacy: load a plan by ID or latest. Returns MealPlan for backward compat."""
     from souschef.planner import load_latest_plan, load_plan
     if plan_id:
@@ -201,7 +203,7 @@ def remove_grocery_item(name: str) -> None:
 
 
 def reconstruct_grocery_list(
-    conn: sqlite3.Connection,
+    conn: DictConnection,
     meals: list[Meal],
     start_date: str = "",
     end_date: str = "",
@@ -238,7 +240,7 @@ def reconstruct_grocery_list(
 
 
 def get_search_list(
-    conn: sqlite3.Connection,
+    conn: DictConnection,
     start_date: str = "",
     end_date: str = "",
     plan_id: int = 0,
@@ -329,7 +331,7 @@ def clear_reconcile_result() -> None:
 
 
 def reconcile_receipt(
-    conn: sqlite3.Connection,
+    conn: DictConnection,
     receipt_items: list[dict],
     start_date: str = "",
     end_date: str = "",
@@ -396,7 +398,7 @@ def parse_receipt(source_path: str) -> list[dict]:
 
 
 def export_to_sheets(
-    conn: sqlite3.Connection,
+    conn: DictConnection,
     start_date: str = "",
     end_date: str = "",
     plan_id: int | None = None,
@@ -452,7 +454,7 @@ def export_to_sheets(
 # ── Workflow Status ─────────────────────────────────────
 
 
-def get_workflow_status(conn: sqlite3.Connection) -> WorkflowStatus:
+def get_workflow_status(conn: DictConnection) -> WorkflowStatus:
     """Get the current state of the workflow for the rolling window."""
     from souschef.kroger import load_order
 

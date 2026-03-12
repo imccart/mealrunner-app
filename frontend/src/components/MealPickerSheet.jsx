@@ -2,13 +2,33 @@ import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import useSwipeDismiss from '../hooks/useSwipeDismiss'
 
+function daysAgo(dateStr) {
+  if (!dateStr) return null
+  const d = new Date(dateStr + 'T00:00:00')
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diff = Math.floor((today - d) / (1000 * 60 * 60 * 24))
+  if (diff === 0) return 'today'
+  if (diff === 1) return 'yesterday'
+  if (diff < 7) return `${diff} days ago`
+  if (diff < 30) return `${Math.floor(diff / 7)} weeks ago`
+  return `${Math.floor(diff / 30)}mo ago`
+}
+
 export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, onClose }) {
   const [data, setData] = useState(null)
+  const [history, setHistory] = useState(null)
   const [search, setSearch] = useState('')
   const swipeHandlers = useSwipeDismiss(onClose)
 
   useEffect(() => {
-    api.getCandidates(date).then(setData)
+    Promise.all([
+      api.getCandidates(date),
+      api.getMealHistory(),
+    ]).then(([candidates, hist]) => {
+      setData(candidates)
+      setHistory(hist.history || [])
+    })
   }, [date])
 
   if (!data) return (
@@ -27,7 +47,14 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
     ? all_recipes.filter(r => r.name.toLowerCase().includes(query))
     : []
 
-  const recent = candidates.slice(0, 8)
+  // Build favorites from history (cooked 2+ times, sorted by frequency)
+  const favorites = history
+    ? history.filter(h => h.cook_count >= 2).slice(0, 8)
+    : []
+
+  // Recipes the user hasn't cooked yet
+  const historyIds = new Set((history || []).map(h => h.recipe_id))
+  const otherRecipes = candidates.filter(r => !historyIds.has(r.id)).slice(0, 6)
 
   return (
     <div className="sheet-overlay" onClick={onClose}>
@@ -55,11 +82,19 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
         {query ? (
           <div className="picker-results">
             {filtered.length > 0 ? (
-              filtered.map(r => (
-                <button key={r.id} className="picker-option" onClick={() => onSelect(r.id)}>
-                  {r.name}
-                </button>
-              ))
+              filtered.map(r => {
+                const h = (history || []).find(x => x.recipe_id === r.id)
+                return (
+                  <button key={r.id} className="picker-option" onClick={() => onSelect(r.id)}>
+                    {r.name}
+                    {h && (
+                      <span className="picker-favorite-meta">
+                        Made {h.cook_count} time{h.cook_count !== 1 ? 's' : ''}, last {daysAgo(h.last_made)}
+                      </span>
+                    )}
+                  </button>
+                )
+              })
             ) : (
               <button className="picker-option freeform" onClick={() => onFreeform(search.trim())}>
                 Add "{search.trim()}" as a meal
@@ -68,9 +103,31 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
           </div>
         ) : (
           <>
-            <div className="picker-section-label">Suggested</div>
+            {/* Favorites */}
+            {favorites.length > 0 && (
+              <>
+                <div className="picker-section-label">Your favorites</div>
+                <div className="picker-pills" style={{ marginBottom: '16px' }}>
+                  {favorites.map(f => (
+                    <button
+                      key={f.recipe_id}
+                      className="meal-pill"
+                      onClick={() => onSelect(f.recipe_id)}
+                      title={`Made ${f.cook_count} times, last ${daysAgo(f.last_made)}`}
+                    >
+                      {f.recipe_name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Suggested / Other */}
+            <div className="picker-section-label">
+              {favorites.length > 0 ? 'Other recipes' : 'Suggested'}
+            </div>
             <div className="picker-pills">
-              {recent.map(r => (
+              {(favorites.length > 0 ? otherRecipes : candidates.slice(0, 8)).map(r => (
                 <button key={r.id} className="meal-pill" onClick={() => onSelect(r.id)}>
                   {r.name}
                 </button>

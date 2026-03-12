@@ -11,16 +11,24 @@ from fastapi.templating import Jinja2Templates
 
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy import text
+
 from souschef.db import ensure_db
 from souschef.web.api import router as api_router
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _FRONTEND_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
 
+import os
+
+_CORS_ORIGINS = os.environ.get(
+    "CORS_ORIGINS", "http://localhost:5173"
+).split(",")
+
 app = FastAPI(title="Souschef")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
+    allow_origins=_CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -53,6 +61,20 @@ def _date_label(start: str, end: str) -> str:
     if s.month == e.month:
         return f"{s.strftime('%b %d')} - {e.strftime('%d')}"
     return f"{s.strftime('%b %d')} - {e.strftime('%b %d')}"
+
+
+# ── Health Check ──────────────────────────────────────────
+
+@app.get("/health")
+async def health():
+    """Health check for Railway / load balancers."""
+    try:
+        conn = get_conn()
+        conn.execute(text("SELECT 1"))
+        conn.close()
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 
 # ── Routes ────────────────────────────────────────────────
@@ -397,7 +419,8 @@ async def rate_product_route(request: Request, item_name: str):
 
     conn = get_conn()
     desc_row = conn.execute(
-        "SELECT product_description FROM product_preferences WHERE upc = ? LIMIT 1", (upc,)
+        text("SELECT product_description FROM product_preferences WHERE upc = :upc LIMIT 1"),
+        {"upc": upc},
     ).fetchone()
     desc = desc_row["product_description"] if desc_row else ""
     rate_product(conn, upc, rating, product_description=desc)

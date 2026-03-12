@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
+import { api } from './api/client'
 import Nav from './components/Nav'
 import PlanPage from './components/PlanPage'
 import GroceryPage from './components/GroceryPage'
 import OrderPage from './components/OrderPage'
 import ReceiptPage from './components/ReceiptPage'
+import PreferencesSheet from './components/PreferencesSheet'
+import OnboardingFlow from './components/OnboardingFlow'
 import StatusBar from './components/StatusBar'
 
 function useIsWide(breakpoint = 1024) {
@@ -31,16 +34,32 @@ function formatDateRange(start, end) {
 
 function App() {
   const [page, setPage] = useState('plan')
+  const [showPrefs, setShowPrefs] = useState(false)
+  const [onboardingDone, setOnboardingDone] = useState(null)
   const isWide = useIsWide()
   const [mealData, setMealData] = useState(null)
 
   const handlePlanLoad = useCallback((data) => setMealData(data), [])
 
+  useEffect(() => {
+    api.getOnboardingStatus()
+      .then(data => setOnboardingDone(data.completed))
+      .catch(() => setOnboardingDone(true))
+  }, [])
+
   const dateRange = mealData ? formatDateRange(mealData.start_date, mealData.end_date) : null
+
+  if (onboardingDone === null) {
+    return <div className="loading" style={{ paddingTop: '40vh' }}>Setting the table...</div>
+  }
+
+  if (!onboardingDone) {
+    return <OnboardingFlow onComplete={() => setOnboardingDone(true)} />
+  }
 
   return (
     <div className="app">
-      <Nav page={page} setPage={setPage} />
+      <Nav page={page} setPage={setPage} prefsOpen={showPrefs} onTogglePrefs={() => setShowPrefs(p => !p)} />
       <main>
         {isWide && (page === 'plan' || page === 'grocery') ? (
           <>
@@ -57,13 +76,13 @@ function App() {
               </>
             )}
             <div className="two-col">
-              <div className="col-plan"><PlanPage showHeader={false} onLoad={handlePlanLoad} /></div>
+              <div className="col-plan"><PlanPage showHeader={false} onLoad={handlePlanLoad} onNavigate={setPage} /></div>
               <div className="col-grocery"><GroceryPage sidebar /></div>
             </div>
           </>
         ) : (
           <>
-            {page === 'plan' && <PlanPage />}
+            {page === 'plan' && <PlanPage onNavigate={setPage} />}
             {page === 'grocery' && <GroceryPage />}
           </>
         )}
@@ -88,6 +107,8 @@ function App() {
           <div className="nav-tab-label">Receipt</div>
         </div>
       </nav>
+
+      {showPrefs && <PreferencesSheet onClose={() => setShowPrefs(false)} />}
     </div>
   )
 }

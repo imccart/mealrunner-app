@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
+
+from sqlalchemy import text
+
+from souschef.database import DictConnection
 
 
 @dataclass
@@ -15,12 +18,12 @@ class Essential:
     active: bool = True
 
 
-def list_essentials(conn: sqlite3.Connection, active_only: bool = True) -> list[Essential]:
+def list_essentials(conn: DictConnection, active_only: bool = True) -> list[Essential]:
     query = "SELECT * FROM essentials"
     if active_only:
         query += " WHERE active = 1"
     query += " ORDER BY shopping_group, name"
-    rows = conn.execute(query).fetchall()
+    rows = conn.execute(text(query)).fetchall()
     return [
         Essential(
             id=r["id"],
@@ -34,16 +37,16 @@ def list_essentials(conn: sqlite3.Connection, active_only: bool = True) -> list[
 
 
 def add_essential(
-    conn: sqlite3.Connection, name: str, shopping_group: str, store_pref: str = "either"
+    conn: DictConnection, name: str, shopping_group: str, store_pref: str = "either"
 ) -> Essential:
-    cursor = conn.execute(
-        """INSERT INTO essentials (name, shopping_group, store_pref)
-           VALUES (?, ?, ?)
-           ON CONFLICT(name) DO UPDATE SET active = 1, shopping_group = excluded.shopping_group, store_pref = excluded.store_pref""",
-        (name, shopping_group, store_pref),
+    conn.execute(
+        text("""INSERT INTO essentials (name, shopping_group, store_pref)
+           VALUES (:name, :group, :store)
+           ON CONFLICT(name) DO UPDATE SET active = 1, shopping_group = excluded.shopping_group, store_pref = excluded.store_pref"""),
+        {"name": name, "group": shopping_group, "store": store_pref},
     )
     conn.commit()
-    row = conn.execute("SELECT * FROM essentials WHERE name = ?", (name,)).fetchone()
+    row = conn.execute(text("SELECT * FROM essentials WHERE name = :name"), {"name": name}).fetchone()
     return Essential(
         id=row["id"],
         name=row["name"],
@@ -53,13 +56,16 @@ def add_essential(
     )
 
 
-def remove_essential(conn: sqlite3.Connection, name: str) -> bool:
-    cursor = conn.execute("UPDATE essentials SET active = 0 WHERE name = ? AND active = 1", (name,))
+def remove_essential(conn: DictConnection, name: str) -> bool:
+    result = conn.execute(
+        text("UPDATE essentials SET active = 0 WHERE name = :name AND active = 1"),
+        {"name": name},
+    )
     conn.commit()
-    return cursor.rowcount > 0
+    return result.rowcount > 0
 
 
-def get_active_essentials_by_group(conn: sqlite3.Connection) -> dict[str, list[Essential]]:
+def get_active_essentials_by_group(conn: DictConnection) -> dict[str, list[Essential]]:
     items = list_essentials(conn, active_only=True)
     groups: dict[str, list[Essential]] = {}
     for item in items:

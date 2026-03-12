@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
+
+from souschef.database import DictConnection
 
 from souschef.grocery import build_grocery_list, split_by_store
 from souschef.models import Meal, MealPlan, MealWeek
@@ -73,7 +74,7 @@ def _get_sheets_service():
 
 
 def export_grocery_list(
-    conn: sqlite3.Connection,
+    conn: DictConnection,
     plan: MealPlan,
     spreadsheet_id: str | None = None,
     regulars_list: list | None = None,

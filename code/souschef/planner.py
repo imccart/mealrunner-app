@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import random
-import sqlite3
 from datetime import date, timedelta
 
+from sqlalchemy import text
+
+from souschef.database import DictConnection
 from souschef.models import Meal, MealWeek
 from souschef.recipes import filter_recipes, get_recipe_by_name
 
@@ -107,7 +109,7 @@ def rolling_range(days: int = 10) -> tuple[str, str]:
     return today.isoformat(), end.isoformat()
 
 
-def load_rolling_week(conn: sqlite3.Connection, days: int = 10) -> MealWeek:
+def load_rolling_week(conn: DictConnection, days: int = 10) -> MealWeek:
     """Load a MealWeek for the rolling window starting today."""
     s, e = rolling_range(days)
     meals = load_meals(conn, s, e)
@@ -127,15 +129,15 @@ def _assign_side(recipe_name: str, used_sides: list[str]) -> str:
 
 # ── Load / save meals ───────────────────────────────────
 
-def load_meals(conn: sqlite3.Connection, start_date: str, end_date: str) -> list[Meal]:
+def load_meals(conn: DictConnection, start_date: str, end_date: str) -> list[Meal]:
     """Load all meals in a date range."""
     rows = conn.execute(
-        """SELECT m.*, COALESCE(r.name, m.recipe_name) AS rname
+        text("""SELECT m.*, COALESCE(r.name, m.recipe_name) AS rname
            FROM meals m
            LEFT JOIN recipes r ON r.id = m.recipe_id
-           WHERE m.slot_date BETWEEN ? AND ?
-           ORDER BY m.slot_date""",
-        (start_date, end_date),
+           WHERE m.slot_date BETWEEN :start_date AND :end_date
+           ORDER BY m.slot_date"""),
+        {"start_date": start_date, "end_date": end_date},
     ).fetchall()
     return [
         Meal(
@@ -150,75 +152,75 @@ def load_meals(conn: sqlite3.Connection, start_date: str, end_date: str) -> list
     ]
 
 
-def load_current_week(conn: sqlite3.Connection) -> list[Meal]:
+def load_current_week(conn: DictConnection) -> list[Meal]:
     start, end = week_range()
     return load_meals(conn, start, end)
 
 
-def load_meal_week(conn: sqlite3.Connection, start: str | None = None) -> MealWeek:
+def load_meal_week(conn: DictConnection, start: str | None = None) -> MealWeek:
     """Load a MealWeek view for display."""
     s, e = week_range(start)
     meals = load_meals(conn, s, e)
     return MealWeek(start_date=s, end_date=e, meals=meals)
 
 
-def save_meals(conn: sqlite3.Connection, meals: list[Meal]) -> list[Meal]:
+def save_meals(conn: DictConnection, meals: list[Meal]) -> list[Meal]:
     """Insert or update meals."""
     for meal in meals:
         if meal.id:
             conn.execute(
-                """UPDATE meals SET recipe_id = ?, recipe_name = ?, status = ?,
-                   side = ?, locked = ?, is_followup = ?, on_grocery = ?
-                   WHERE id = ?""",
-                (meal.recipe_id, meal.recipe_name, meal.status,
-                 meal.side, int(meal.locked), int(meal.is_followup),
-                 int(meal.on_grocery), meal.id),
+                text("""UPDATE meals SET recipe_id = :recipe_id, recipe_name = :recipe_name, status = :status,
+                   side = :side, locked = :locked, is_followup = :is_followup, on_grocery = :on_grocery
+                   WHERE id = :id"""),
+                {"recipe_id": meal.recipe_id, "recipe_name": meal.recipe_name, "status": meal.status,
+                 "side": meal.side, "locked": int(meal.locked), "is_followup": int(meal.is_followup),
+                 "on_grocery": int(meal.on_grocery), "id": meal.id},
             )
         else:
             cur = conn.execute(
-                """INSERT INTO meals (slot_date, recipe_id, recipe_name, status, side, locked, is_followup, on_grocery)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (meal.slot_date, meal.recipe_id, meal.recipe_name, meal.status,
-                 meal.side, int(meal.locked), int(meal.is_followup),
-                 int(meal.on_grocery)),
+                text("""INSERT INTO meals (slot_date, recipe_id, recipe_name, status, side, locked, is_followup, on_grocery)
+                   VALUES (:slot_date, :recipe_id, :recipe_name, :status, :side, :locked, :is_followup, :on_grocery)"""),
+                {"slot_date": meal.slot_date, "recipe_id": meal.recipe_id, "recipe_name": meal.recipe_name,
+                 "status": meal.status, "side": meal.side, "locked": int(meal.locked),
+                 "is_followup": int(meal.is_followup), "on_grocery": int(meal.on_grocery)},
             )
             meal.id = cur.lastrowid
     conn.commit()
     return meals
 
 
-def save_meal(conn: sqlite3.Connection, meal: Meal) -> Meal:
+def save_meal(conn: DictConnection, meal: Meal) -> Meal:
     """Save a single meal."""
     return save_meals(conn, [meal])[0]
 
 
 # ── Rotation history ────────────────────────────────────
 
-def _get_recent_recipe_ids(conn: sqlite3.Connection, before_date: str,
+def _get_recent_recipe_ids(conn: DictConnection, before_date: str,
                            lookback_days: int = 14) -> set[int]:
     """Get recipe IDs from recent accepted meals to avoid repeats."""
     cutoff = (date.fromisoformat(before_date) - timedelta(days=lookback_days)).isoformat()
     rows = conn.execute(
-        """SELECT DISTINCT recipe_id FROM meals
-           WHERE slot_date < ? AND slot_date >= ? AND recipe_id IS NOT NULL""",
-        (before_date, cutoff),
+        text("""SELECT DISTINCT recipe_id FROM meals
+           WHERE slot_date < :before_date AND slot_date >= :cutoff AND recipe_id IS NOT NULL"""),
+        {"before_date": before_date, "cutoff": cutoff},
     ).fetchall()
     return {r["recipe_id"] for r in rows}
 
 
-def get_last_made(conn: sqlite3.Connection, recipe_id: int) -> str | None:
+def get_last_made(conn: DictConnection, recipe_id: int) -> str | None:
     """Return the most recent slot_date this recipe was used, or None."""
     row = conn.execute(
-        "SELECT MAX(slot_date) AS last FROM meals WHERE recipe_id = ?",
-        (recipe_id,),
+        text("SELECT MAX(slot_date) AS last FROM meals WHERE recipe_id = :recipe_id"),
+        {"recipe_id": recipe_id},
     ).fetchone()
     return row["last"] if row and row["last"] else None
 
 
-def get_last_made_map(conn: sqlite3.Connection) -> dict[int, str]:
+def get_last_made_map(conn: DictConnection) -> dict[int, str]:
     """Return {recipe_id: last_slot_date} for all recipes ever used."""
     rows = conn.execute(
-        "SELECT recipe_id, MAX(slot_date) AS last FROM meals WHERE recipe_id IS NOT NULL GROUP BY recipe_id"
+        text("SELECT recipe_id, MAX(slot_date) AS last FROM meals WHERE recipe_id IS NOT NULL GROUP BY recipe_id")
     ).fetchall()
     return {r["recipe_id"]: r["last"] for r in rows}
 
@@ -226,7 +228,7 @@ def get_last_made_map(conn: sqlite3.Connection) -> dict[int, str]:
 # ── Plan generation ─────────────────────────────────────
 
 def fill_dates(
-    conn: sqlite3.Connection, start_date: str, end_date: str
+    conn: DictConnection, start_date: str, end_date: str
 ) -> list[Meal]:
     """Fill empty dates in a range with suggested meals. Returns all meals in the range."""
     existing = load_meals(conn, start_date, end_date)
@@ -313,7 +315,7 @@ def fill_dates(
 
 
 def _schedule_carryover_followups(
-    conn: sqlite3.Connection, start_date: str,
+    conn: DictConnection, start_date: str,
     empty_dates: list[date], new_meals: list[Meal], used_ids: set[int]
 ) -> None:
     """If days just before this range had a big cook, place a follow-up."""
@@ -348,7 +350,7 @@ def _schedule_carryover_followups(
 
 
 def _schedule_same_range_followups(
-    conn: sqlite3.Connection, all_meals: list[Meal],
+    conn: DictConnection, all_meals: list[Meal],
     new_meals: list[Meal], used_ids: set[int]
 ) -> None:
     """If a big cook is in this range, replace a later slot with a follow-up."""
@@ -393,7 +395,7 @@ def _schedule_same_range_followups(
 
 
 def _ensure_light_meal(
-    conn: sqlite3.Connection, all_meals: list[Meal],
+    conn: DictConnection, all_meals: list[Meal],
     new_meals: list[Meal], used_ids: set[int]
 ) -> None:
     has_light = any(m.recipe_name in LIGHT_MEALS for m in all_meals)
@@ -427,7 +429,7 @@ def _ensure_light_meal(
 
 # ── Swap / edit operations ──────────────────────────────
 
-def swap_meal(conn: sqlite3.Connection, slot_date: str) -> Meal:
+def swap_meal(conn: DictConnection, slot_date: str) -> Meal:
     """Swap the meal on a date with a new random pick."""
     s, e = week_range(slot_date)
     week_meals = load_meals(conn, s, e)
@@ -457,7 +459,7 @@ def swap_meal(conn: sqlite3.Connection, slot_date: str) -> Meal:
     return meal
 
 
-def swap_meal_side(conn: sqlite3.Connection, slot_date: str) -> Meal:
+def swap_meal_side(conn: DictConnection, slot_date: str) -> Meal:
     """Swap just the side dish for a date."""
     s, e = week_range(slot_date)
     week_meals = load_meals(conn, s, e)
@@ -477,10 +479,16 @@ def swap_meal_side(conn: sqlite3.Connection, slot_date: str) -> Meal:
     return meal
 
 
-def swap_dates(conn: sqlite3.Connection, date_a: str, date_b: str) -> list[Meal]:
+def swap_dates(conn: DictConnection, date_a: str, date_b: str) -> list[Meal]:
     """Swap meals between two dates. Returns updated week."""
-    rows_a = conn.execute("SELECT * FROM meals WHERE slot_date = ?", (date_a,)).fetchall()
-    rows_b = conn.execute("SELECT * FROM meals WHERE slot_date = ?", (date_b,)).fetchall()
+    rows_a = conn.execute(
+        text("SELECT * FROM meals WHERE slot_date = :slot_date"),
+        {"slot_date": date_a},
+    ).fetchall()
+    rows_b = conn.execute(
+        text("SELECT * FROM meals WHERE slot_date = :slot_date"),
+        {"slot_date": date_b},
+    ).fetchall()
     meal_a = _row_to_meal(rows_a[0]) if rows_a else None
     meal_b = _row_to_meal(rows_b[0]) if rows_b else None
 
@@ -496,13 +504,13 @@ def swap_dates(conn: sqlite3.Connection, date_a: str, date_b: str) -> list[Meal]
     return load_meals(conn, s, e)
 
 
-def set_meal(conn: sqlite3.Connection, slot_date: str, recipe_name: str) -> Meal | str:
+def set_meal(conn: DictConnection, slot_date: str, recipe_name: str) -> Meal | str:
     """Manually set a date's recipe by name. No rule enforcement."""
     recipe = get_recipe_by_name(conn, recipe_name)
     if recipe is None:
         row = conn.execute(
-            "SELECT * FROM recipes WHERE name LIKE ? ORDER BY name LIMIT 1",
-            (f"%{recipe_name}%",),
+            text("SELECT * FROM recipes WHERE name LIKE :pattern ORDER BY name LIMIT 1"),
+            {"pattern": f"%{recipe_name}%"},
         ).fetchone()
         if row:
             from souschef.recipes import get_recipe
@@ -510,7 +518,10 @@ def set_meal(conn: sqlite3.Connection, slot_date: str, recipe_name: str) -> Meal
         if recipe is None:
             return f"Recipe '{recipe_name}' not found."
 
-    existing = conn.execute("SELECT * FROM meals WHERE slot_date = ?", (slot_date,)).fetchone()
+    existing = conn.execute(
+        text("SELECT * FROM meals WHERE slot_date = :slot_date"),
+        {"slot_date": slot_date},
+    ).fetchone()
     if existing:
         meal = _row_to_meal(existing)
     else:
@@ -531,19 +542,25 @@ def set_meal(conn: sqlite3.Connection, slot_date: str, recipe_name: str) -> Meal
     return meal
 
 
-def remove_meal(conn: sqlite3.Connection, slot_date: str) -> None:
+def remove_meal(conn: DictConnection, slot_date: str) -> None:
     """Remove a meal from a date entirely."""
-    conn.execute("DELETE FROM meals WHERE slot_date = ?", (slot_date,))
+    conn.execute(
+        text("DELETE FROM meals WHERE slot_date = :slot_date"),
+        {"slot_date": slot_date},
+    )
     conn.commit()
 
 
-def set_freeform_meal(conn: sqlite3.Connection, slot_date: str, name: str) -> Meal:
+def set_freeform_meal(conn: DictConnection, slot_date: str, name: str) -> Meal:
     """Set a freeform meal (no recipe) like 'Eating Out' or 'Leftovers'.
 
     Freeform meals have no ingredients, so they're automatically on_grocery=True
     (nothing to add to the list).
     """
-    existing = conn.execute("SELECT * FROM meals WHERE slot_date = ?", (slot_date,)).fetchone()
+    existing = conn.execute(
+        text("SELECT * FROM meals WHERE slot_date = :slot_date"),
+        {"slot_date": slot_date},
+    ).fetchone()
     if existing:
         meal = _row_to_meal(existing)
     else:
@@ -558,7 +575,7 @@ def set_freeform_meal(conn: sqlite3.Connection, slot_date: str, name: str) -> Me
     return meal
 
 
-def get_candidates(conn: sqlite3.Connection, slot_date: str) -> list:
+def get_candidates(conn: DictConnection, slot_date: str) -> list:
     """Return valid recipe candidates for a date, with last-made context."""
     s, e = week_range(slot_date)
     week_meals = load_meals(conn, s, e)
@@ -584,9 +601,12 @@ def get_candidates(conn: sqlite3.Connection, slot_date: str) -> list:
     return candidates
 
 
-def toggle_grocery(conn: sqlite3.Connection, slot_date: str) -> Meal | None:
+def toggle_grocery(conn: DictConnection, slot_date: str) -> Meal | None:
     """Toggle a meal's on_grocery flag. Returns updated meal."""
-    row = conn.execute("SELECT * FROM meals WHERE slot_date = ?", (slot_date,)).fetchone()
+    row = conn.execute(
+        text("SELECT * FROM meals WHERE slot_date = :slot_date"),
+        {"slot_date": slot_date},
+    ).fetchone()
     if not row:
         return None
     meal = _row_to_meal(row)
@@ -595,20 +615,20 @@ def toggle_grocery(conn: sqlite3.Connection, slot_date: str) -> Meal | None:
     return meal
 
 
-def set_all_grocery(conn: sqlite3.Connection, start_date: str, end_date: str, on: bool = True) -> None:
+def set_all_grocery(conn: DictConnection, start_date: str, end_date: str, on: bool = True) -> None:
     """Set on_grocery for all meals in a date range."""
     conn.execute(
-        "UPDATE meals SET on_grocery = ? WHERE slot_date BETWEEN ? AND ?",
-        (int(on), start_date, end_date),
+        text("UPDATE meals SET on_grocery = :on WHERE slot_date BETWEEN :start_date AND :end_date"),
+        {"on": int(on), "start_date": start_date, "end_date": end_date},
     )
     conn.commit()
 
 
-def accept_meals(conn: sqlite3.Connection, start_date: str, end_date: str) -> None:
+def accept_meals(conn: DictConnection, start_date: str, end_date: str) -> None:
     """Legacy: accept all meals in a date range. Now also sets on_grocery."""
     conn.execute(
-        "UPDATE meals SET status = 'accepted', on_grocery = 1 WHERE slot_date BETWEEN ? AND ?",
-        (start_date, end_date),
+        text("UPDATE meals SET status = 'accepted', on_grocery = 1 WHERE slot_date BETWEEN :start_date AND :end_date"),
+        {"start_date": start_date, "end_date": end_date},
     )
     conn.commit()
 
@@ -625,7 +645,7 @@ def _row_to_meal(row) -> Meal:
     )
 
 
-def _get_producer_recipe_ids(conn: sqlite3.Connection) -> set[int]:
+def _get_producer_recipe_ids(conn: DictConnection) -> set[int]:
     ids = set()
     for name in LEFTOVER_PRODUCERS:
         recipe = get_recipe_by_name(conn, name)
@@ -679,7 +699,7 @@ BULK_PREPPABLE = {
 }
 
 
-def detect_bulk_components(conn: sqlite3.Connection, meals: list[Meal]) -> list[str]:
+def detect_bulk_components(conn: DictConnection, meals: list[Meal]) -> list[str]:
     """Find ingredients used across multiple meals that could be prepped in bulk."""
     from collections import Counter
     ingredient_meals: Counter = Counter()
@@ -689,11 +709,11 @@ def detect_bulk_components(conn: sqlite3.Connection, meals: list[Meal]) -> list[
         if not meal.recipe_id:
             continue
         rows = conn.execute(
-            """SELECT ri.ingredient_id, i.name, ri.component
+            text("""SELECT ri.ingredient_id, i.name, ri.component
                FROM recipe_ingredients ri
                JOIN ingredients i ON i.id = ri.ingredient_id
-               WHERE ri.recipe_id = ? AND ri.component NOT IN ('', 'formed')""",
-            (meal.recipe_id,),
+               WHERE ri.recipe_id = :recipe_id AND ri.component NOT IN ('', 'formed')"""),
+            {"recipe_id": meal.recipe_id},
         ).fetchall()
         for r in rows:
             if r["name"] in BULK_PREPPABLE:
@@ -736,7 +756,10 @@ def load_plan(conn, plan_id):
     from souschef.models import MealPlan, MealPlanSlot
     # Try old table first
     try:
-        row = conn.execute("SELECT * FROM meal_plans WHERE id = ?", (plan_id,)).fetchone()
+        row = conn.execute(
+            text("SELECT * FROM meal_plans WHERE id = :plan_id"),
+            {"plan_id": plan_id},
+        ).fetchone()
         if row:
             week_of = row["week_of"]
             s, e = week_range(week_of)
@@ -760,7 +783,7 @@ def load_plan(conn, plan_id):
 def load_latest_plan(conn):
     """Legacy: load the most recent plan."""
     try:
-        row = conn.execute("SELECT id FROM meal_plans ORDER BY id DESC LIMIT 1").fetchone()
+        row = conn.execute(text("SELECT id FROM meal_plans ORDER BY id DESC LIMIT 1")).fetchone()
         if row:
             return load_plan(conn, row["id"])
     except Exception:

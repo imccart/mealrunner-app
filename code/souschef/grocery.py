@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections import defaultdict
 
+from sqlalchemy import text
+
+from souschef.database import DictConnection
 from souschef.models import GroceryList, GroceryListItem, Meal
 from souschef.pantry import get_pantry_quantity
 
 
 def build_grocery_list(
-    conn: sqlite3.Connection,
+    conn: DictConnection,
     meals: list[Meal],
     start_date: str = "",
     end_date: str = "",
@@ -28,8 +30,8 @@ def build_grocery_list(
                 if side_name in SIDE_INGREDIENTS:
                     ing_name, qty, unit = SIDE_INGREDIENTS[side_name]
                     ing_row = conn.execute(
-                        "SELECT id, store_pref, aisle, is_pantry_staple, category FROM ingredients WHERE name = ?",
-                        (ing_name,)
+                        text("SELECT id, store_pref, aisle, is_pantry_staple, category FROM ingredients WHERE name = :name"),
+                        {"name": ing_name}
                     ).fetchone()
                     if ing_row:
                         iid = ing_row["id"]
@@ -52,12 +54,12 @@ def build_grocery_list(
             continue
 
         rows = conn.execute(
-            """SELECT ri.ingredient_id, ri.quantity, ri.unit, ri.component,
+            text("""SELECT ri.ingredient_id, ri.quantity, ri.unit, ri.component,
                       i.name, i.store_pref, i.aisle, i.is_pantry_staple, i.category
                FROM recipe_ingredients ri
                JOIN ingredients i ON i.id = ri.ingredient_id
-               WHERE ri.recipe_id = ?""",
-            (meal.recipe_id,),
+               WHERE ri.recipe_id = :recipe_id"""),
+            {"recipe_id": meal.recipe_id},
         ).fetchall()
 
         for r in rows:
@@ -117,21 +119,22 @@ def build_grocery_list(
     return gl
 
 
-def save_grocery_list(conn: sqlite3.Connection, gl: GroceryList) -> GroceryList:
+def save_grocery_list(conn: DictConnection, gl: GroceryList) -> GroceryList:
     cursor = conn.execute(
-        "INSERT INTO grocery_lists (plan_id, start_date, end_date) VALUES (?, ?, ?)",
-        (gl.plan_id, gl.start_date, gl.end_date),
+        text("INSERT INTO grocery_lists (plan_id, start_date, end_date) VALUES (:plan_id, :start_date, :end_date)"),
+        {"plan_id": gl.plan_id, "start_date": gl.start_date, "end_date": gl.end_date},
     )
     gl.id = cursor.lastrowid
 
     for item in gl.items:
         item.list_id = gl.id
         cur = conn.execute(
-            """INSERT INTO grocery_list_items
+            text("""INSERT INTO grocery_list_items
                (list_id, ingredient_id, total_quantity, unit, store, aisle, from_pantry)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (item.list_id, item.ingredient_id, item.total_quantity,
-             item.unit, item.store, item.aisle, item.from_pantry),
+               VALUES (:list_id, :ingredient_id, :total_quantity, :unit, :store, :aisle, :from_pantry)"""),
+            {"list_id": item.list_id, "ingredient_id": item.ingredient_id,
+             "total_quantity": item.total_quantity, "unit": item.unit,
+             "store": item.store, "aisle": item.aisle, "from_pantry": item.from_pantry},
         )
         item.id = cur.lastrowid
 

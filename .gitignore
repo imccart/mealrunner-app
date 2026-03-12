@@ -1,12 +1,51 @@
-*.db
-*.db.corrupted
+# Python
 __pycache__/
 *.pyc
+*.pyo
 *.egg-info/
 dist/
 build/
 .eggs/
-scratch/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.db-journal
+*.db-wal
+*.db.corrupted
+
+# Credentials & secrets (all live in ~/.souschef/, not in repo)
+# Just in case someone copies them here:
+*credentials*.json
+*token*.json
+*secret*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Frontend
 node_modules/
 frontend/dist/
+
+# Project
+scratch/
 .claude/
+.pytest_cache/
+CLAUDE.md

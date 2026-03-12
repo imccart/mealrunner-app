@@ -43,10 +43,22 @@ def parse_receipt_image(image_path: str) -> list[dict]:
     if not media_type:
         raise ValueError(f"Unsupported image format: {suffix}")
 
-    with open(path, "rb") as f:
-        image_data = base64.standard_b64encode(f.read()).decode("utf-8")
+    # Resize if over 4MB to stay under Claude's 5MB limit
+    raw = path.read_bytes()
+    if len(raw) > 4 * 1024 * 1024:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(raw))
+        # Scale down keeping aspect ratio
+        max_dim = 2000
+        img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        raw = buf.getvalue()
+        media_type = "image/jpeg"
+    image_data = base64.standard_b64encode(raw).decode("utf-8")
 
-    client = anthropic.Anthropic()
+    client = _get_client()
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=4096,
@@ -66,10 +78,12 @@ def parse_receipt_image(image_path: str) -> list[dict]:
                     "text": (
                         "Parse this grocery receipt. Extract every purchased item as JSON.\n"
                         "Return ONLY a JSON array, no other text. Each object should have:\n"
-                        '- "item": product name/description as shown on receipt\n'
+                        '- "item": the FULL interpreted product name — grocery receipts often use '
+                        'abbreviations like "ORG BNNNAS" for "Organic Bananas" or "GRK YGRT" for '
+                        '"Greek Yogurt". Decode these into clear, readable product names.\n'
                         '- "qty": quantity (integer, default 1)\n'
                         '- "price": total price for that line item (float)\n'
-                        "Ignore subtotals, tax, totals, savings lines, and store info.\n"
+                        "Ignore subtotals, tax, totals, savings lines, store info, and payment lines.\n"
                         "If an item was voided or removed, skip it.\n"
                     ),
                 },
@@ -334,11 +348,19 @@ def diff_grocery_list(grocery_names: list[str], receipt_items: list[dict]) -> di
             # Spaceless substring match: "lacroix" in "lacroixlimeflavored..."
             if g_compact and g_compact in r_compact:
                 score = max(len(g_compact) / len(r_compact), 0.6)
+            elif r_compact and r_compact in g_compact:
+                score = max(len(r_compact) / len(g_compact), 0.6)
             # Word subset match: "ground beef" words in "Kroger 93/7 Ground Beef Tray"
             elif g_words and g_words.issubset(r_words):
                 score = max(len(g_words) / len(r_words), 0.6)
             else:
-                overlap = len(g_words & r_words)
+                # Stem-aware overlap: "banana" matches "bananas"
+                overlap = 0
+                for gw in g_words:
+                    for rw in r_words:
+                        if gw.startswith(rw) or rw.startswith(gw):
+                            overlap += 1
+                            break
                 total = max(len(g_words), 1)
                 score = overlap / total
 
@@ -346,13 +368,69 @@ def diff_grocery_list(grocery_names: list[str], receipt_items: list[dict]) -> di
                 best_score = score
                 best_name = (g_norm, g_original)
 
-        if best_name and best_score >= 0.5:
+        if best_name and best_score >= 0.6:
             remaining_names.pop(best_name[0])
             matched.append({"grocery_name": best_name[1], "receipt": r_item})
         else:
             unmatched.append(r_item)
 
+    # AI-assisted matching for remaining unmatched receipt items against remaining grocery names
+    if unmatched and remaining_names:
+        try:
+            ai_matches = _ai_match(list(remaining_names.values()), unmatched)
+            for grocery_name, r_item in ai_matches:
+                g_norm = _norm(grocery_name)
+                if g_norm in remaining_names:
+                    remaining_names.pop(g_norm)
+                    matched.append({"grocery_name": grocery_name, "receipt": r_item})
+                    unmatched = [u for u in unmatched if u is not r_item]
+        except Exception:
+            pass  # fall back to regex-only matches
+
     return {
         "matched": matched,
         "unmatched": unmatched,
     }
+
+
+def _ai_match(grocery_names: list[str], receipt_items: list[dict]) -> list[tuple[str, dict]]:
+    """Use Claude to match ambiguous receipt items to grocery list names."""
+    import json
+
+    client = _get_client()
+    receipt_descriptions = [r["item"] for r in receipt_items]
+
+    message = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": (
+                "Match receipt items to grocery list items. Receipt items use store abbreviations "
+                "(e.g. 'PUB ALMONDS SLCD' = sliced almonds, 'NESTLE BAKING COCO' = baking cocoa).\n\n"
+                f"Grocery list: {json.dumps(grocery_names)}\n"
+                f"Receipt items: {json.dumps(receipt_descriptions)}\n\n"
+                "Return ONLY a JSON array of matches: [{\"grocery\": \"item from grocery list\", "
+                "\"receipt\": \"item from receipt\"}]. Only include confident matches. "
+                "Return [] if no matches."
+            ),
+        }],
+    )
+
+    pairs = _extract_json(message.content[0].text)
+    if not pairs:
+        return []
+
+    # Map receipt descriptions back to full receipt item dicts
+    receipt_by_name = {}
+    for r in receipt_items:
+        receipt_by_name.setdefault(r["item"], r)
+
+    results = []
+    for pair in pairs:
+        g_name = pair.get("grocery", "")
+        r_name = pair.get("receipt", "")
+        if g_name in grocery_names and r_name in receipt_by_name:
+            results.append((g_name, receipt_by_name[r_name]))
+
+    return results

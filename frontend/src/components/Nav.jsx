@@ -1,4 +1,6 @@
-export default function Nav({ page, setPage }) {
+import BentSpoonIcon from './BentSpoonIcon'
+
+export default function Nav({ page, setPage, prefsOpen, onTogglePrefs }) {
   const link = (name, label) => (
     <a
       href="#"
@@ -14,11 +16,18 @@ export default function Nav({ page, setPage }) {
       <a href="#" className="logo" onClick={(e) => { e.preventDefault(); setPage('plan') }}>
         sous<em>chef</em>
       </a>
-      <div className="nav-links">
-        {link('plan', 'Plan')}
-        {link('grocery', 'Grocery')}
-        {link('order', 'Order')}
-        {link('receipt', 'Receipt')}
+      <div className="nav-right">
+        <div className="nav-links">
+          {link('plan', 'Plan')}
+          {link('grocery', 'Grocery')}
+          {link('order', 'Order')}
+          {link('receipt', 'Receipt')}
+        </div>
+        <BentSpoonIcon
+          size={22}
+          active={prefsOpen}
+          onClick={onTogglePrefs}
+        />
       </div>
     </nav>
   )

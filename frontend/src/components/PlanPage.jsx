@@ -3,7 +3,7 @@ import { api } from '../api/client'
 import useSwipeDismiss from '../hooks/useSwipeDismiss'
 import StatusBar from './StatusBar'
 import MealPickerSheet from './MealPickerSheet'
-import CarryoverSheet from './CarryoverSheet'
+import BuildListFlow from './BuildListFlow'
 import SwapPrompt from './SwapPrompt'
 import SidePickerSheet from './SidePickerSheet'
 
@@ -23,18 +23,19 @@ function isToday(dateStr) {
   return dateStr === new Date().toISOString().split('T')[0]
 }
 
-export default function PlanPage({ showHeader = true, onLoad }) {
+export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const [data, setData] = useState(null)
   const [actionDate, setActionDate] = useState(null) // date for action bottom sheet
   const [pickerDate, setPickerDate] = useState(null) // date for meal picker
   const [pickerMode, setPickerMode] = useState(null) // 'add' or 'replace'
-  const [carryoverItems, setCarryoverItems] = useState(null)
+  const [showBuildFlow, setShowBuildFlow] = useState(false)
   const [swapPrompt, setSwapPrompt] = useState(null)
   const [loading, setLoading] = useState(true)
   const [dragFrom, setDragFrom] = useState(null)
   const [pastDays, setPastDays] = useState(null)
   const [showPast, setShowPast] = useState(false)
   const [sidePickerDate, setSidePickerDate] = useState(null)
+  const [erasing, setErasing] = useState(false)
   const actionSwipe = useSwipeDismiss(() => setActionDate(null))
 
   // Touch drag refs
@@ -170,29 +171,15 @@ export default function PlanPage({ showHeader = true, onLoad }) {
     setSidePickerDate(null)
   }
 
-  const handleBuildMyList = async () => {
-    const carryover = await api.getCarryover()
-    if (carryover.has_carryover) {
-      setCarryoverItems(carryover.items)
-    } else {
-      await api.buildMyList([])
-      const result = await api.getMeals()
-      setData(result)
-    }
+  const handleBuildMyList = () => {
+    setShowBuildFlow(true)
   }
 
-  const handleCarryoverConfirm = async (selectedNames) => {
-    await api.buildMyList(selectedNames)
-    setCarryoverItems(null)
+  const handleBuildFlowComplete = async () => {
+    setShowBuildFlow(false)
     const result = await api.getMeals()
     setData(result)
-  }
-
-  const handleCarryoverSkip = async () => {
-    await api.buildMyList([])
-    setCarryoverItems(null)
-    const result = await api.getMeals()
-    setData(result)
+    if (onNavigate) onNavigate('grocery')
   }
 
   const handleSwapConfirm = async (choices) => {
@@ -202,8 +189,13 @@ export default function PlanPage({ showHeader = true, onLoad }) {
   }
 
   const handleStartNewPlan = async () => {
-    const result = await api.suggestMeals()
-    setData(result)
+    setErasing(true)
+    // Wait for erase animation to finish before loading new data
+    setTimeout(async () => {
+      const result = await api.suggestMeals()
+      setData(result)
+      setErasing(false)
+    }, 700)
   }
 
   const handleViewPast = async () => {
@@ -271,8 +263,8 @@ export default function PlanPage({ showHeader = true, onLoad }) {
         </div>
       )}
 
-      <div className="meal-rows" ref={rowsRef}>
-        {days.map(({ date, day_short, meal }) => {
+      <div className={`meal-rows${erasing ? ' erasing' : ''}`} ref={rowsRef}>
+        {days.map(({ date, day_short, meal }, idx) => {
           const today = isToday(date)
           const hasMeal = !!meal
           const isFreeform = hasMeal && !meal.recipe_id
@@ -287,6 +279,7 @@ export default function PlanPage({ showHeader = true, onLoad }) {
                 key={date}
                 data-date={date}
                 className={`add-meal-row ${today ? 'today' : ''}`}
+                style={{ '--row-index': idx }}
                 onClick={() => handleEmptyTap(date)}
               >
                 <div className="meal-day">{day_short}</div>
@@ -301,6 +294,7 @@ export default function PlanPage({ showHeader = true, onLoad }) {
             <div
               key={date}
               data-date={date}
+              style={{ '--row-index': idx }}
               className={`meal-row ${today ? 'today' : ''} ${onList ? 'on-list' : ''} ${isDragging ? 'dragging' : ''}`}
               onClick={() => handleMealTap(date)}
               onTouchStart={(e) => handleTouchStart(e, date)}
@@ -369,16 +363,23 @@ export default function PlanPage({ showHeader = true, onLoad }) {
         </div>
       )}
 
+      {/* Floating Build My List FAB */}
+      {hasMeals && (
+        <button className="build-list-fab" onClick={handleBuildMyList}>
+          <span className="fab-icon">+</span> Build My List
+        </button>
+      )}
+
       {/* Plan footer */}
       <div className="plan-footer">
-        {hasMeals && (
-          <button className="build-list-btn" onClick={handleBuildMyList}>
-            Build My List {'\u2192'}
-          </button>
-        )}
-        <span className="start-new-plan" onClick={handleStartNewPlan}>
-          Start a new plan
-        </span>
+        <button className="fresh-start-btn" onClick={handleStartNewPlan}>
+          <svg className="fresh-start-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1" y="9" width="10" height="5" rx="1" transform="rotate(-30 1 9)" />
+            <line x1="12" y1="3" x2="14" y2="1" />
+            <line x1="4" y1="14" x2="14" y2="14" />
+          </svg>
+          Fresh Start
+        </button>
       </div>
 
       {/* Meal picker sheet */}
@@ -392,12 +393,11 @@ export default function PlanPage({ showHeader = true, onLoad }) {
         />
       )}
 
-      {/* Carryover sheet */}
-      {carryoverItems && (
-        <CarryoverSheet
-          items={carryoverItems}
-          onConfirm={handleCarryoverConfirm}
-          onSkip={handleCarryoverSkip}
+      {/* Build List Flow */}
+      {showBuildFlow && (
+        <BuildListFlow
+          onComplete={handleBuildFlowComplete}
+          onClose={() => setShowBuildFlow(false)}
         />
       )}
 

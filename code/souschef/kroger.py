@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import time
 import webbrowser
 from dataclasses import dataclass
@@ -12,6 +11,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import requests
+from sqlalchemy import text
+
+from souschef.database import DictConnection
 
 _CONFIG_DIR = Path.home() / ".souschef"
 _CREDS_FILE = _CONFIG_DIR / "kroger_credentials.json"
@@ -316,17 +318,17 @@ def _get_product_prices(product_ids: list[str], location_id: str) -> dict[str, d
     return results
 
 
-def get_preferred_products(conn: sqlite3.Connection, search_term: str, limit: int = 3) -> list[KrogerProduct]:
+def get_preferred_products(conn: DictConnection, search_term: str, limit: int = 3) -> list[KrogerProduct]:
     """Get recent preferred products for a search term, ranked by recency then selection > receipt.
 
     Returns up to `limit` distinct products from the last 3 orders.
     """
     rows = conn.execute(
-        """SELECT upc, product_description, size, source, last_picked, order_id
+        text("""SELECT upc, product_description, size, source, last_picked, order_id
            FROM product_preferences
-           WHERE search_term = ?
-           ORDER BY last_picked DESC""",
-        (search_term.lower(),),
+           WHERE search_term = :search_term
+           ORDER BY last_picked DESC"""),
+        {"search_term": search_term.lower()},
     ).fetchall()
     if not rows:
         return []
@@ -365,63 +367,66 @@ def get_preferred_products(conn: sqlite3.Connection, search_term: str, limit: in
     return results
 
 
-def get_preferred_product(conn: sqlite3.Connection, search_term: str) -> KrogerProduct | None:
+def get_preferred_product(conn: DictConnection, search_term: str) -> KrogerProduct | None:
     """Get the top preferred product for a search term. Convenience wrapper."""
     prefs = get_preferred_products(conn, search_term, limit=1)
     return prefs[0] if prefs else None
 
 
-def save_preference(conn: sqlite3.Connection, search_term: str, product: KrogerProduct,
+def save_preference(conn: DictConnection, search_term: str, product: KrogerProduct,
                     source: str = "picked", order_id: str = "") -> None:
     """Save or update a product preference for a search term."""
     conn.execute(
-        """INSERT INTO product_preferences (search_term, upc, product_description, size, source, order_id)
-           VALUES (?, ?, ?, ?, ?, ?)
+        text("""INSERT INTO product_preferences (search_term, upc, product_description, size, source, order_id)
+           VALUES (:search_term, :upc, :product_description, :size, :source, :order_id)
            ON CONFLICT(search_term, upc) DO UPDATE SET
                product_description = excluded.product_description,
                size = excluded.size,
                times_picked = times_picked + 1,
-               last_picked = datetime('now'),
+               last_picked = CURRENT_TIMESTAMP,
                source = excluded.source,
-               order_id = excluded.order_id""",
-        (search_term.lower(), product.upc, product.description, product.size, source, order_id),
+               order_id = excluded.order_id"""),
+        {"search_term": search_term.lower(), "upc": product.upc,
+         "product_description": product.description, "size": product.size,
+         "source": source, "order_id": order_id},
     )
     conn.commit()
 
 
-def rate_product(conn: sqlite3.Connection, upc: str, rating: int,
+def rate_product(conn: DictConnection, upc: str, rating: int,
                  product_description: str = "", user_id: str = "default") -> None:
     """Rate a product: 1 = thumbs up, -1 = thumbs down, 0 = remove rating."""
     if rating == 0:
         conn.execute(
-            "DELETE FROM product_ratings WHERE user_id = ? AND upc = ?",
-            (user_id, upc),
+            text("DELETE FROM product_ratings WHERE user_id = :user_id AND upc = :upc"),
+            {"user_id": user_id, "upc": upc},
         )
     else:
         conn.execute(
-            """INSERT INTO product_ratings (user_id, upc, product_description, rating)
-               VALUES (?, ?, ?, ?)
+            text("""INSERT INTO product_ratings (user_id, upc, product_description, rating)
+               VALUES (:user_id, :upc, :product_description, :rating)
                ON CONFLICT(user_id, upc) DO UPDATE SET
                    rating = excluded.rating,
-                   updated_at = datetime('now')""",
-            (user_id, upc, product_description, rating),
+                   updated_at = CURRENT_TIMESTAMP"""),
+            {"user_id": user_id, "upc": upc,
+             "product_description": product_description, "rating": rating},
         )
     conn.commit()
 
 
-def get_product_ratings(conn: sqlite3.Connection, upc: str, user_id: str = "default") -> dict:
+def get_product_ratings(conn: DictConnection, upc: str, user_id: str = "default") -> dict:
     """Get rating summary for a product. Returns {your_rating, up_count, down_count}."""
     your = conn.execute(
-        "SELECT rating FROM product_ratings WHERE user_id = ? AND upc = ?",
-        (user_id, upc),
+        text("SELECT rating FROM product_ratings WHERE user_id = :user_id AND upc = :upc"),
+        {"user_id": user_id, "upc": upc},
     ).fetchone()
 
     counts = conn.execute(
-        """SELECT
+        text("""SELECT
                SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) AS up_count,
                SUM(CASE WHEN rating = -1 THEN 1 ELSE 0 END) AS down_count
-           FROM product_ratings WHERE upc = ?""",
-        (upc,),
+           FROM product_ratings WHERE upc = :upc"""),
+        {"upc": upc},
     ).fetchone()
 
     return {
@@ -431,7 +436,7 @@ def get_product_ratings(conn: sqlite3.Connection, upc: str, user_id: str = "defa
     }
 
 
-def get_product_history(conn: sqlite3.Connection, search_term: str,
+def get_product_history(conn: DictConnection, search_term: str,
                         user_id: str = "default") -> list[dict]:
     """Get products for a search term, with ratings from product_ratings.
 
@@ -440,18 +445,26 @@ def get_product_history(conn: sqlite3.Connection, search_term: str,
     """
     # Check if any receipt-confirmed products exist
     has_receipt = conn.execute(
-        "SELECT 1 FROM product_preferences WHERE search_term = ? AND source = 'receipt' LIMIT 1",
-        (search_term.lower(),),
+        text("SELECT 1 FROM product_preferences WHERE search_term = :search_term AND source = 'receipt' LIMIT 1"),
+        {"search_term": search_term.lower()},
     ).fetchone()
 
-    source_filter = "AND p.source = 'receipt'" if has_receipt else ""
-    rows = conn.execute(
-        f"""SELECT p.upc, p.product_description, p.size, p.times_picked, p.last_picked, p.source
-           FROM product_preferences p
-           WHERE p.search_term = ? {source_filter}
-           ORDER BY p.last_picked DESC""",
-        (search_term.lower(),),
-    ).fetchall()
+    if has_receipt:
+        rows = conn.execute(
+            text("""SELECT p.upc, p.product_description, p.size, p.times_picked, p.last_picked, p.source
+               FROM product_preferences p
+               WHERE p.search_term = :search_term AND p.source = 'receipt'
+               ORDER BY p.last_picked DESC"""),
+            {"search_term": search_term.lower()},
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            text("""SELECT p.upc, p.product_description, p.size, p.times_picked, p.last_picked, p.source
+               FROM product_preferences p
+               WHERE p.search_term = :search_term
+               ORDER BY p.last_picked DESC"""),
+            {"search_term": search_term.lower()},
+        ).fetchall()
 
     results = []
     for r in rows:

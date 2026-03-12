@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-import sqlite3
+from sqlalchemy import text
 
+from souschef.database import DictConnection
 from souschef.models import PantryItem
 
 
-def list_pantry(conn: sqlite3.Connection) -> list[PantryItem]:
+def list_pantry(conn: DictConnection) -> list[PantryItem]:
     rows = conn.execute(
-        """SELECT p.*, i.name AS ingredient_name
+        text("""SELECT p.*, i.name AS ingredient_name
            FROM pantry p
            JOIN ingredients i ON i.id = p.ingredient_id
-           ORDER BY i.name"""
+           ORDER BY i.name""")
     ).fetchall()
     return [
         PantryItem(
@@ -28,29 +29,29 @@ def list_pantry(conn: sqlite3.Connection) -> list[PantryItem]:
 
 
 def add_pantry_item(
-    conn: sqlite3.Connection, ingredient_name: str, quantity: float, unit: str
+    conn: DictConnection, ingredient_name: str, quantity: float, unit: str
 ) -> PantryItem | None:
     ing = conn.execute(
-        "SELECT id FROM ingredients WHERE name = ?", (ingredient_name,)
+        text("SELECT id FROM ingredients WHERE name = :name"), {"name": ingredient_name}
     ).fetchone()
     if ing is None:
         return None
 
     conn.execute(
-        """INSERT INTO pantry (ingredient_id, quantity, unit)
-           VALUES (?, ?, ?)
+        text("""INSERT INTO pantry (ingredient_id, quantity, unit)
+           VALUES (:ingredient_id, :quantity, :unit)
            ON CONFLICT(ingredient_id) DO UPDATE SET
                quantity = quantity + excluded.quantity,
-               updated_at = datetime('now')""",
-        (ing["id"], quantity, unit),
+               updated_at = CURRENT_TIMESTAMP"""),
+        {"ingredient_id": ing["id"], "quantity": quantity, "unit": unit},
     )
     conn.commit()
 
     row = conn.execute(
-        """SELECT p.*, i.name AS ingredient_name
+        text("""SELECT p.*, i.name AS ingredient_name
            FROM pantry p JOIN ingredients i ON i.id = p.ingredient_id
-           WHERE p.ingredient_id = ?""",
-        (ing["id"],),
+           WHERE p.ingredient_id = :ingredient_id"""),
+        {"ingredient_id": ing["id"]},
     ).fetchone()
 
     return PantryItem(
@@ -64,35 +65,38 @@ def add_pantry_item(
 
 
 def set_pantry_item(
-    conn: sqlite3.Connection, ingredient_name: str, quantity: float, unit: str
+    conn: DictConnection, ingredient_name: str, quantity: float, unit: str
 ) -> PantryItem | None:
     ing = conn.execute(
-        "SELECT id FROM ingredients WHERE name = ?", (ingredient_name,)
+        text("SELECT id FROM ingredients WHERE name = :name"), {"name": ingredient_name}
     ).fetchone()
     if ing is None:
         return None
 
     if quantity <= 0:
-        conn.execute("DELETE FROM pantry WHERE ingredient_id = ?", (ing["id"],))
+        conn.execute(
+            text("DELETE FROM pantry WHERE ingredient_id = :ingredient_id"),
+            {"ingredient_id": ing["id"]},
+        )
         conn.commit()
         return PantryItem(id=None, ingredient_id=ing["id"], quantity=0, unit=unit,
                           ingredient_name=ingredient_name)
 
     conn.execute(
-        """INSERT INTO pantry (ingredient_id, quantity, unit)
-           VALUES (?, ?, ?)
+        text("""INSERT INTO pantry (ingredient_id, quantity, unit)
+           VALUES (:ingredient_id, :quantity, :unit)
            ON CONFLICT(ingredient_id) DO UPDATE SET
                quantity = excluded.quantity,
-               updated_at = datetime('now')""",
-        (ing["id"], quantity, unit),
+               updated_at = CURRENT_TIMESTAMP"""),
+        {"ingredient_id": ing["id"], "quantity": quantity, "unit": unit},
     )
     conn.commit()
 
     row = conn.execute(
-        """SELECT p.*, i.name AS ingredient_name
+        text("""SELECT p.*, i.name AS ingredient_name
            FROM pantry p JOIN ingredients i ON i.id = p.ingredient_id
-           WHERE p.ingredient_id = ?""",
-        (ing["id"],),
+           WHERE p.ingredient_id = :ingredient_id"""),
+        {"ingredient_id": ing["id"]},
     ).fetchone()
 
     return PantryItem(
@@ -105,14 +109,15 @@ def set_pantry_item(
     )
 
 
-def clear_pantry(conn: sqlite3.Connection) -> int:
-    cursor = conn.execute("DELETE FROM pantry")
+def clear_pantry(conn: DictConnection) -> int:
+    cursor = conn.execute(text("DELETE FROM pantry"))
     conn.commit()
     return cursor.rowcount
 
 
-def get_pantry_quantity(conn: sqlite3.Connection, ingredient_id: int) -> float:
+def get_pantry_quantity(conn: DictConnection, ingredient_id: int) -> float:
     row = conn.execute(
-        "SELECT quantity FROM pantry WHERE ingredient_id = ?", (ingredient_id,)
+        text("SELECT quantity FROM pantry WHERE ingredient_id = :ingredient_id"),
+        {"ingredient_id": ingredient_id},
     ).fetchone()
     return row["quantity"] if row else 0.0

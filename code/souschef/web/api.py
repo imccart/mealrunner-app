@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, UploadFile, File
+from sqlalchemy import text
 
 from souschef.db import ensure_db
 
@@ -103,8 +104,8 @@ async def swap_meal_smart(date: str, body: dict = None):
     if action == "preview":
         # Get the old meal's info before swapping
         old_meal = conn.execute(
-            "SELECT recipe_id, recipe_name, on_grocery FROM meals WHERE slot_date = ?",
-            (date,),
+            text("SELECT recipe_id, recipe_name, on_grocery FROM meals WHERE slot_date = :date"),
+            {"date": date},
         ).fetchone()
         old_was_on_list = old_meal and old_meal["on_grocery"]
 
@@ -115,10 +116,10 @@ async def swap_meal_smart(date: str, body: dict = None):
             # Get all ingredients for the OLD meal
             old_ingredients = set()
             rows = conn.execute(
-                """SELECT i.name FROM recipe_ingredients ri
+                text("""SELECT i.name FROM recipe_ingredients ri
                    JOIN ingredients i ON ri.ingredient_id = i.id
-                   WHERE ri.recipe_id = ?""",
-                (old_meal["recipe_id"],),
+                   WHERE ri.recipe_id = :recipe_id"""),
+                {"recipe_id": old_meal["recipe_id"]},
             ).fetchall()
             old_ingredients = {r["name"].lower() for r in rows}
 
@@ -127,10 +128,10 @@ async def swap_meal_smart(date: str, body: dict = None):
             for m in mw.meals:
                 if m.on_grocery and m.recipe_id and m.slot_date != date:
                     other_rows = conn.execute(
-                        """SELECT i.name FROM recipe_ingredients ri
+                        text("""SELECT i.name FROM recipe_ingredients ri
                            JOIN ingredients i ON ri.ingredient_id = i.id
-                           WHERE ri.recipe_id = ?""",
-                        (m.recipe_id,),
+                           WHERE ri.recipe_id = :recipe_id"""),
+                        {"recipe_id": m.recipe_id},
                     ).fetchall()
                     shared |= {r["name"].lower() for r in other_rows}
 
@@ -139,14 +140,14 @@ async def swap_meal_smart(date: str, body: dict = None):
             if trip:
                 for name_lower in old_ingredients - shared:
                     item = conn.execute(
-                        "SELECT checked, ordered FROM trip_items WHERE trip_id = ? AND LOWER(name) = ?",
-                        (trip["id"], name_lower),
+                        text("SELECT checked, ordered FROM trip_items WHERE trip_id = :trip_id AND LOWER(name) = :name"),
+                        {"trip_id": trip["id"], "name": name_lower},
                     ).fetchone()
                     if item and not item["checked"] and not item["ordered"]:
                         # Get display name from trip_items
                         display = conn.execute(
-                            "SELECT name FROM trip_items WHERE trip_id = ? AND LOWER(name) = ?",
-                            (trip["id"], name_lower),
+                            text("SELECT name FROM trip_items WHERE trip_id = :trip_id AND LOWER(name) = :name"),
+                            {"trip_id": trip["id"], "name": name_lower},
                         ).fetchone()
                         removable.append(display["name"] if display else name_lower)
 
@@ -156,7 +157,8 @@ async def swap_meal_smart(date: str, body: dict = None):
 
         # Get the new meal's name
         new_meal = conn.execute(
-            "SELECT recipe_name FROM meals WHERE slot_date = ?", (date,)
+            text("SELECT recipe_name FROM meals WHERE slot_date = :date"),
+            {"date": date},
         ).fetchone()
 
         return {
@@ -180,19 +182,21 @@ async def swap_meal_smart(date: str, body: dict = None):
             # Remove specified items from trip
             for name in remove_items:
                 conn.execute(
-                    "DELETE FROM trip_items WHERE trip_id = ? AND LOWER(name) = LOWER(?)",
-                    (trip["id"], name),
+                    text("DELETE FROM trip_items WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
+                    {"trip_id": trip["id"], "name": name},
                 )
 
         if add_to_list:
             # Toggle on_grocery for the new meal
             conn.execute(
-                "UPDATE meals SET on_grocery = 1 WHERE slot_date = ?", (date,)
+                text("UPDATE meals SET on_grocery = 1 WHERE slot_date = :date"),
+                {"date": date},
             )
         else:
             # "No" = mark cart as done (on_grocery stays false — "I've got this covered")
             conn.execute(
-                "UPDATE meals SET on_grocery = 1 WHERE slot_date = ?", (date,)
+                text("UPDATE meals SET on_grocery = 1 WHERE slot_date = :date"),
+                {"date": date},
             )
             # Mark it as on_grocery but we won't add ingredients since refresh handles it
 
@@ -212,7 +216,10 @@ async def get_sides(date: str):
     from souschef.planner import SIDE_OPTIONS, NO_SIDE, FIXED_SIDES, load_meals, rolling_range
 
     conn = _conn()
-    meal_row = conn.execute("SELECT recipe_name, side FROM meals WHERE slot_date = ?", (date,)).fetchone()
+    meal_row = conn.execute(
+        text("SELECT recipe_name, side FROM meals WHERE slot_date = :date"),
+        {"date": date},
+    ).fetchone()
     if not meal_row:
         return {"sides": [], "current": None, "fixed": False}
 
@@ -242,7 +249,10 @@ async def set_side(date: str, body: dict):
     from souschef.planner import load_meals, save_meal, rolling_range, _row_to_meal
 
     conn = _conn()
-    row = conn.execute("SELECT * FROM meals WHERE slot_date = ?", (date,)).fetchone()
+    row = conn.execute(
+        text("SELECT * FROM meals WHERE slot_date = :date"),
+        {"date": date},
+    ).fetchone()
     if not row:
         return await get_meals()
 
@@ -354,7 +364,7 @@ async def get_candidates(date: str):
 def _get_active_trip(conn):
     """Return the most recent active trip row, or None."""
     return conn.execute(
-        "SELECT * FROM grocery_trips WHERE active = 1 ORDER BY id DESC LIMIT 1"
+        text("SELECT * FROM grocery_trips WHERE active = 1 ORDER BY id DESC LIMIT 1")
     ).fetchone()
 
 
@@ -363,13 +373,15 @@ def _infer_item_group(conn, name: str) -> str:
     from souschef.regulars import _infer_group
 
     row = conn.execute(
-        "SELECT aisle FROM ingredients WHERE LOWER(name) = LOWER(?)", (name,)
+        text("SELECT aisle FROM ingredients WHERE LOWER(name) = LOWER(:name)"),
+        {"name": name},
     ).fetchone()
     if row and row["aisle"]:
         return row["aisle"]
 
     row = conn.execute(
-        "SELECT shopping_group FROM regulars WHERE LOWER(name) = LOWER(?)", (name,)
+        text("SELECT shopping_group FROM regulars WHERE LOWER(name) = LOWER(:name)"),
+        {"name": name},
     ).fetchone()
     if row and row["shopping_group"]:
         return row["shopping_group"]
@@ -392,36 +404,14 @@ def _build_trip_from_meals(conn, trip_id: int, mw) -> None:
                 group = item.aisle or "Other"
                 for_meals = ",".join(item.meals) if item.meals else ""
                 conn.execute(
-                    """INSERT OR IGNORE INTO trip_items
+                    text("""INSERT INTO trip_items
                        (trip_id, name, shopping_group, source, for_meals, meal_count)
-                       VALUES (?, ?, ?, 'meal', ?, ?)""",
-                    (trip_id, item.ingredient_name.lower(), group, for_meals, len(item.meals)),
+                       VALUES (:trip_id, :name, :group, 'meal', :for_meals, :meal_count)
+                       ON CONFLICT DO NOTHING"""),
+                    {"trip_id": trip_id, "name": item.ingredient_name.lower(),
+                     "group": group, "for_meals": for_meals,
+                     "meal_count": len(item.meals)},
                 )
-
-    # Carry over extras from saved file-based selections (backward compat)
-    dk = workflow._date_key(mw.start_date, mw.end_date)
-    sel = workflow.load_grocery_selections(date_key=dk)
-    if sel:
-        for name in sel.extras:
-            name_lower = name.lower()
-            group = _infer_item_group(conn, name_lower)
-            conn.execute(
-                """INSERT OR IGNORE INTO trip_items
-                   (trip_id, name, shopping_group, source, for_meals, meal_count)
-                   VALUES (?, ?, ?, 'extra', '', 0)""",
-                (trip_id, name_lower, group),
-            )
-
-    # Carry over checked state from reconcile file (backward compat)
-    reconciled = workflow.load_reconcile_result()
-    if reconciled:
-        checked_set = {n.lower() for n in reconciled}
-        for name_lower in checked_set:
-            conn.execute(
-                """UPDATE trip_items SET checked = 1, checked_at = datetime('now')
-                   WHERE trip_id = ? AND LOWER(name) = ?""",
-                (trip_id, name_lower),
-            )
 
     conn.commit()
 
@@ -433,20 +423,26 @@ def _ensure_active_trip(conn, mw):
     if trip:
         # If date range shifted, deactivate old trip and create fresh one
         if trip["start_date"] != mw.start_date or trip["end_date"] != mw.end_date:
-            conn.execute("UPDATE grocery_trips SET active = 0 WHERE id = ?", (trip["id"],))
+            conn.execute(
+                text("UPDATE grocery_trips SET active = 0 WHERE id = :id"),
+                {"id": trip["id"]},
+            )
             conn.commit()
             trip = None
 
     if trip is None:
         cursor = conn.execute(
-            """INSERT INTO grocery_trips (trip_type, start_date, end_date, active)
-               VALUES ('plan', ?, ?, 1)""",
-            (mw.start_date, mw.end_date),
+            text("""INSERT INTO grocery_trips (trip_type, start_date, end_date, active)
+               VALUES ('plan', :start_date, :end_date, 1)"""),
+            {"start_date": mw.start_date, "end_date": mw.end_date},
         )
         conn.commit()
         trip_id = cursor.lastrowid
         _build_trip_from_meals(conn, trip_id, mw)
-        trip = conn.execute("SELECT * FROM grocery_trips WHERE id = ?", (trip_id,)).fetchone()
+        trip = conn.execute(
+            text("SELECT * FROM grocery_trips WHERE id = :id"),
+            {"id": trip_id},
+        ).fetchone()
     else:
         # Refresh meal-sourced items (meals may have changed) but preserve extras and checked state
         _refresh_trip_meal_items(conn, trip["id"], mw)
@@ -478,33 +474,37 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw) -> None:
 
     # Get existing meal-sourced items and their checked state
     existing = conn.execute(
-        "SELECT id, name, checked FROM trip_items WHERE trip_id = ? AND source = 'meal'",
-        (trip_id,),
+        text("SELECT id, name, checked FROM trip_items WHERE trip_id = :trip_id AND source = 'meal'"),
+        {"trip_id": trip_id},
     ).fetchall()
     existing_map = {r["name"].lower(): r for r in existing}
 
     # Remove meal items no longer needed
     for name_lower, row in existing_map.items():
         if name_lower not in fresh_meal_items:
-            conn.execute("DELETE FROM trip_items WHERE id = ?", (row["id"],))
+            conn.execute(
+                text("DELETE FROM trip_items WHERE id = :id"),
+                {"id": row["id"]},
+            )
 
     # Add or update meal items
     for name_lower, info in fresh_meal_items.items():
         if name_lower in existing_map:
             # Update for_meals/meal_count but keep checked state
             conn.execute(
-                """UPDATE trip_items SET for_meals = ?, meal_count = ?, shopping_group = ?
-                   WHERE id = ?""",
-                (info["for_meals"], info["meal_count"], info["shopping_group"],
-                 existing_map[name_lower]["id"]),
+                text("""UPDATE trip_items SET for_meals = :for_meals, meal_count = :meal_count, shopping_group = :group
+                   WHERE id = :id"""),
+                {"for_meals": info["for_meals"], "meal_count": info["meal_count"],
+                 "group": info["shopping_group"], "id": existing_map[name_lower]["id"]},
             )
         else:
             conn.execute(
-                """INSERT OR IGNORE INTO trip_items
+                text("""INSERT INTO trip_items
                    (trip_id, name, shopping_group, source, for_meals, meal_count)
-                   VALUES (?, ?, ?, 'meal', ?, ?)""",
-                (trip_id, info["name"], info["shopping_group"],
-                 info["for_meals"], info["meal_count"]),
+                   VALUES (:trip_id, :name, :group, 'meal', :for_meals, :meal_count)
+                   ON CONFLICT DO NOTHING"""),
+                {"trip_id": trip_id, "name": info["name"], "group": info["shopping_group"],
+                 "for_meals": info["for_meals"], "meal_count": info["meal_count"]},
             )
 
     conn.commit()
@@ -521,8 +521,8 @@ async def get_grocery():
 
     # Read all items from the trip
     rows = conn.execute(
-        "SELECT * FROM trip_items WHERE trip_id = ? ORDER BY shopping_group, name",
-        (trip["id"],),
+        text("SELECT * FROM trip_items WHERE trip_id = :trip_id ORDER BY shopping_group, name"),
+        {"trip_id": trip["id"]},
     ).fetchall()
 
     items_by_group: dict[str, list[dict]] = {}
@@ -568,29 +568,13 @@ async def add_grocery_item(body: dict):
 
     group = _infer_item_group(conn, name)
     conn.execute(
-        """INSERT OR IGNORE INTO trip_items
+        text("""INSERT INTO trip_items
            (trip_id, name, shopping_group, source, for_meals, meal_count)
-           VALUES (?, ?, ?, 'extra', '', 0)""",
-        (trip["id"], name, group),
+           VALUES (:trip_id, :name, :group, 'extra', '', 0)
+           ON CONFLICT DO NOTHING"""),
+        {"trip_id": trip["id"], "name": name, "group": group},
     )
     conn.commit()
-
-    # Also save to file-based extras for CLI backward compat
-    dk = workflow._date_key(mw.start_date, mw.end_date)
-    sel = workflow.load_grocery_selections(date_key=dk)
-    if sel:
-        if name.lower() not in {n.lower() for n in sel.extras}:
-            sel.extras.append(name)
-            workflow.save_grocery_selections(
-                regulars=sel.regulars,
-                extras=sel.extras, meal_items=sel.meal_items,
-                store_assignments=sel.stores, date_key=dk,
-            )
-    else:
-        workflow.save_grocery_selections(
-            regulars=[], extras=[name], meal_items=[],
-            store_assignments={}, date_key=dk,
-        )
 
     return await get_grocery()
 
@@ -606,44 +590,35 @@ async def toggle_grocery_item(item_name: str):
         return {"name": item_name, "checked": False}
 
     row = conn.execute(
-        "SELECT id, checked FROM trip_items WHERE trip_id = ? AND LOWER(name) = LOWER(?)",
-        (trip["id"], item_name),
+        text("SELECT id, checked FROM trip_items WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
+        {"trip_id": trip["id"], "name": item_name},
     ).fetchone()
 
     if row:
         new_checked = 0 if row["checked"] else 1
         if new_checked:
             conn.execute(
-                "UPDATE trip_items SET checked = 1, checked_at = datetime('now') WHERE id = ?",
-                (row["id"],),
+                text("UPDATE trip_items SET checked = 1, checked_at = CURRENT_TIMESTAMP WHERE id = :id"),
+                {"id": row["id"]},
             )
             # If checking off an item not ordered via Kroger, it's in-store
             if not row.get("ordered"):
                 conn.execute(
-                    """UPDATE grocery_trips SET order_source = CASE
+                    text("""UPDATE grocery_trips SET order_source = CASE
                            WHEN order_source IN ('none', 'in_store') THEN 'in_store'
                            ELSE 'mixed'
-                       END WHERE id = ?""",
-                    (trip["id"],),
+                       END WHERE id = :id"""),
+                    {"id": trip["id"]},
                 )
         else:
             conn.execute(
-                "UPDATE trip_items SET checked = 0, checked_at = NULL WHERE id = ?",
-                (row["id"],),
+                text("UPDATE trip_items SET checked = 0, checked_at = NULL WHERE id = :id"),
+                {"id": row["id"]},
             )
         conn.commit()
         checked = bool(new_checked)
     else:
         checked = False
-
-    # Also update file-based reconcile state for CLI backward compat
-    reconciled = workflow.load_reconcile_result() or []
-    reconciled_set = {n.lower() for n in reconciled}
-    if checked:
-        reconciled_set.add(item_name.lower())
-    else:
-        reconciled_set.discard(item_name.lower())
-    workflow.set_reconcile_result(list(reconciled_set))
 
     return {"name": item_name, "checked": checked}
 
@@ -657,8 +632,8 @@ async def get_carryover():
         return {"has_carryover": False, "items": []}
 
     rows = conn.execute(
-        "SELECT name, shopping_group FROM trip_items WHERE trip_id = ? AND checked = 0 AND ordered = 0",
-        (trip["id"],),
+        text("SELECT name, shopping_group FROM trip_items WHERE trip_id = :trip_id AND checked = 0 AND ordered = 0"),
+        {"trip_id": trip["id"]},
     ).fetchall()
 
     items = [{"name": r["name"], "shopping_group": r["shopping_group"]} for r in rows]
@@ -672,7 +647,9 @@ async def build_my_list(body: dict = None):
     from souschef.planner import set_all_grocery
 
     body = body or {}
-    carryover_items = body.get("carryover", [])  # list of item name strings to carry over
+    carryover_items = body.get("carryover", [])
+    regular_items = body.get("regulars", [])
+    pantry_items = body.get("pantry_items", [])
 
     conn = _conn()
     mw = workflow.get_rolling_meals(conn)
@@ -687,16 +664,16 @@ async def build_my_list(body: dict = None):
     old_trip = _get_active_trip(conn)
     if old_trip:
         conn.execute(
-            "UPDATE grocery_trips SET active = 0, completed_at = datetime('now') WHERE id = ?",
-            (old_trip["id"],),
+            text("UPDATE grocery_trips SET active = 0, completed_at = CURRENT_TIMESTAMP WHERE id = :id"),
+            {"id": old_trip["id"]},
         )
         conn.commit()
 
     # Create new trip
     cursor = conn.execute(
-        """INSERT INTO grocery_trips (trip_type, start_date, end_date, active)
-           VALUES ('plan', ?, ?, 1)""",
-        (mw.start_date, mw.end_date),
+        text("""INSERT INTO grocery_trips (trip_type, start_date, end_date, active)
+           VALUES ('plan', :start_date, :end_date, 1)"""),
+        {"start_date": mw.start_date, "end_date": mw.end_date},
     )
     conn.commit()
     trip_id = cursor.lastrowid
@@ -705,16 +682,41 @@ async def build_my_list(body: dict = None):
     _build_trip_from_meals(conn, trip_id, mw)
 
     # Add carryover items
-    carryover_set = {n.lower() for n in carryover_items}
     for name in carryover_items:
         name_lower = name.lower()
         group = _infer_item_group(conn, name_lower)
         conn.execute(
-            """INSERT OR IGNORE INTO trip_items
+            text("""INSERT INTO trip_items
                (trip_id, name, shopping_group, source, for_meals, meal_count)
-               VALUES (?, ?, ?, 'carryover', '', 0)""",
-            (trip_id, name_lower, group),
+               VALUES (:trip_id, :name, :group, 'carryover', '', 0)
+               ON CONFLICT DO NOTHING"""),
+            {"trip_id": trip_id, "name": name_lower, "group": group},
         )
+
+    # Add selected regulars
+    for name in regular_items:
+        name_lower = name.lower()
+        group = _infer_item_group(conn, name_lower)
+        conn.execute(
+            text("""INSERT INTO trip_items
+               (trip_id, name, shopping_group, source, for_meals, meal_count)
+               VALUES (:trip_id, :name, :group, 'regular', '', 0)
+               ON CONFLICT DO NOTHING"""),
+            {"trip_id": trip_id, "name": name_lower, "group": group},
+        )
+
+    # Add selected pantry items (running low)
+    for name in pantry_items:
+        name_lower = name.lower()
+        group = _infer_item_group(conn, name_lower)
+        conn.execute(
+            text("""INSERT INTO trip_items
+               (trip_id, name, shopping_group, source, for_meals, meal_count)
+               VALUES (:trip_id, :name, :group, 'pantry', '', 0)
+               ON CONFLICT DO NOTHING"""),
+            {"trip_id": trip_id, "name": name_lower, "group": group},
+        )
+
     conn.commit()
 
     return await get_grocery()
@@ -725,14 +727,14 @@ async def get_grocery_trips():
     """Return all grocery trips with summary stats."""
     conn = _conn()
     trips = conn.execute(
-        "SELECT * FROM grocery_trips ORDER BY id DESC"
+        text("SELECT * FROM grocery_trips ORDER BY id DESC")
     ).fetchall()
 
     result = []
     for t in trips:
         items = conn.execute(
-            "SELECT name, checked FROM trip_items WHERE trip_id = ?",
-            (t["id"],),
+            text("SELECT name, checked FROM trip_items WHERE trip_id = :trip_id"),
+            {"trip_id": t["id"]},
         ).fetchall()
         total = len(items)
         checked = sum(1 for i in items if i["checked"])
@@ -769,10 +771,10 @@ async def get_order():
     trip = _ensure_active_trip(conn, mw)
 
     rows = conn.execute(
-        """SELECT * FROM trip_items WHERE trip_id = ?
+        text("""SELECT * FROM trip_items WHERE trip_id = :trip_id
            AND checked = 0
-           ORDER BY shopping_group, name""",
-        (trip["id"],),
+           ORDER BY shopping_group, name"""),
+        {"trip_id": trip["id"]},
     ).fetchall()
 
     pending = []
@@ -834,8 +836,8 @@ async def search_order_products(item_name: str):
 
     # Use ingredient root as search term if available
     ing = conn.execute(
-        "SELECT root FROM ingredients WHERE LOWER(name) = ?",
-        (item_name.lower(),),
+        text("SELECT root FROM ingredients WHERE LOWER(name) = :name"),
+        {"name": item_name.lower()},
     ).fetchone()
     search_term = (ing["root"] if ing and ing["root"] else item_name).strip()
 
@@ -867,12 +869,14 @@ async def search_order_products(item_name: str):
     cached = {}
     if products:
         upcs = [p.upc for p in products[:6]]
+        placeholders = ", ".join(f":p{i}" for i in range(len(upcs)))
+        params = {f"p{i}": upc for i, upc in enumerate(upcs)}
         rows = conn.execute(
-            f"SELECT upc, nova_group, nutriscore, price, promo_price, "
-            f"in_stock, curbside, score_fetched_at, price_fetched_at "
-            f"FROM product_scores "
-            f"WHERE upc IN ({','.join('?' * len(upcs))})",
-            upcs,
+            text(f"SELECT upc, nova_group, nutriscore, price, promo_price, "
+                 f"in_stock, curbside, score_fetched_at, price_fetched_at "
+                 f"FROM product_scores "
+                 f"WHERE upc IN ({placeholders})"),
+            params,
         ).fetchall()
         cached = {r["upc"]: dict(r) for r in rows}
 
@@ -916,18 +920,19 @@ async def search_order_products(item_name: str):
     # --- Save everything to cache ---
     for p in products[:6]:
         conn.execute(
-            """INSERT INTO product_scores
+            text("""INSERT INTO product_scores
                (upc, nova_group, nutriscore, score_fetched_at, price, promo_price, in_stock, curbside, price_fetched_at)
-               VALUES (?, ?, ?, datetime('now'), ?, ?, ?, ?, datetime('now'))
+               VALUES (:upc, :nova_group, :nutriscore, CURRENT_TIMESTAMP, :price, :promo_price, :in_stock, :curbside, CURRENT_TIMESTAMP)
                ON CONFLICT(upc) DO UPDATE SET
                nova_group=COALESCE(excluded.nova_group, nova_group),
                nutriscore=CASE WHEN excluded.nova_group IS NOT NULL THEN excluded.nutriscore ELSE nutriscore END,
                score_fetched_at=CASE WHEN excluded.nova_group IS NOT NULL THEN excluded.score_fetched_at ELSE score_fetched_at END,
                price=excluded.price, promo_price=excluded.promo_price,
                in_stock=excluded.in_stock, curbside=excluded.curbside,
-               price_fetched_at=excluded.price_fetched_at""",
-            (p.upc, p.nova_group, p.nutriscore or "", p.price, p.promo_price,
-             int(p.in_stock), int(p.curbside)),
+               price_fetched_at=excluded.price_fetched_at"""),
+            {"upc": p.upc, "nova_group": p.nova_group, "nutriscore": p.nutriscore or "",
+             "price": p.price, "promo_price": p.promo_price,
+             "in_stock": int(p.in_stock), "curbside": int(p.curbside)},
         )
     conn.commit()
 
@@ -973,23 +978,23 @@ async def select_product(body: dict):
     trip = _ensure_active_trip(conn, mw)
 
     conn.execute(
-        """UPDATE trip_items SET
-               product_upc = ?, product_name = ?, product_brand = ?,
-               product_size = ?, product_price = ?, product_image = ?,
-               ordered = 1, ordered_at = datetime('now'), selected_at = datetime('now')
-           WHERE trip_id = ? AND LOWER(name) = ?""",
-        (product["upc"], product["name"], product.get("brand", ""),
-         product.get("size", ""), product.get("price"),
-         product.get("image", ""),
-         trip["id"], item_name.lower()),
+        text("""UPDATE trip_items SET
+               product_upc = :upc, product_name = :name, product_brand = :brand,
+               product_size = :size, product_price = :price, product_image = :image,
+               ordered = 1, ordered_at = CURRENT_TIMESTAMP, selected_at = CURRENT_TIMESTAMP
+           WHERE trip_id = :trip_id AND LOWER(name) = :item_name"""),
+        {"upc": product["upc"], "name": product["name"], "brand": product.get("brand", ""),
+         "size": product.get("size", ""), "price": product.get("price"),
+         "image": product.get("image", ""),
+         "trip_id": trip["id"], "item_name": item_name.lower()},
     )
     # Update trip source based on what's happening
     conn.execute(
-        """UPDATE grocery_trips SET order_source = CASE
+        text("""UPDATE grocery_trips SET order_source = CASE
                WHEN order_source IN ('none', 'kroger') THEN 'kroger'
                ELSE 'mixed'
-           END WHERE id = ?""",
-        (trip["id"],),
+           END WHERE id = :id"""),
+        {"id": trip["id"]},
     )
     conn.commit()
 
@@ -1014,12 +1019,12 @@ async def deselect_product(item_name: str):
     trip = _ensure_active_trip(conn, mw)
 
     conn.execute(
-        """UPDATE trip_items SET
+        text("""UPDATE trip_items SET
                product_upc = '', product_name = '', product_brand = '',
                product_size = '', product_price = NULL, product_image = '',
                ordered = 0, ordered_at = NULL, selected_at = NULL
-           WHERE trip_id = ? AND LOWER(name) = ?""",
-        (trip["id"], item_name.lower()),
+           WHERE trip_id = :trip_id AND LOWER(name) = :name"""),
+        {"trip_id": trip["id"], "name": item_name.lower()},
     )
     conn.commit()
 
@@ -1037,9 +1042,9 @@ async def submit_order():
     trip = _ensure_active_trip(conn, mw)
 
     rows = conn.execute(
-        """SELECT product_upc FROM trip_items
-           WHERE trip_id = ? AND product_upc != '' AND ordered = 1""",
-        (trip["id"],),
+        text("""SELECT product_upc FROM trip_items
+           WHERE trip_id = :trip_id AND product_upc != '' AND ordered = 1"""),
+        {"trip_id": trip["id"]},
     ).fetchall()
 
     if not rows:
@@ -1065,24 +1070,22 @@ async def get_receipt():
         return {"has_trip": False}
 
     order_source = trip["order_source"] if "order_source" in trip.keys() else "none"
-    has_ordered = conn.execute(
-        "SELECT COUNT(*) as n FROM trip_items WHERE trip_id = ? AND ordered = 1",
-        (trip["id"],),
-    ).fetchone()["n"]
-    has_checked = conn.execute(
-        "SELECT COUNT(*) as n FROM trip_items WHERE trip_id = ? AND checked = 1",
-        (trip["id"],),
-    ).fetchone()["n"]
     has_receipt = bool(trip["receipt_data"]) if "receipt_data" in trip.keys() and trip["receipt_data"] else False
 
-    # Get all trip items with their states
+    # Get all trip items with their states (single query)
     rows = conn.execute(
-        "SELECT * FROM trip_items WHERE trip_id = ? ORDER BY shopping_group, name",
-        (trip["id"],),
+        text("SELECT * FROM trip_items WHERE trip_id = :trip_id ORDER BY shopping_group, name"),
+        {"trip_id": trip["id"]},
     ).fetchall()
 
     items = []
+    has_ordered = False
+    has_checked = False
     for r in rows:
+        if r["checked"]:
+            has_checked = True
+        if r["ordered"]:
+            has_ordered = True
         items.append({
             "name": r["name"],
             "shopping_group": r["shopping_group"],
@@ -1108,8 +1111,8 @@ async def get_receipt():
         "trip_id": trip["id"],
         "order_source": order_source,
         "has_receipt": has_receipt,
-        "has_ordered": has_ordered > 0,
-        "has_checked": has_checked > 0,
+        "has_ordered": has_ordered,
+        "has_checked": has_checked,
         "matched": matched,
         "substituted": substituted,
         "not_fulfilled": not_fulfilled,
@@ -1122,7 +1125,7 @@ async def upload_receipt(body: dict):
     """Upload and parse a receipt. Accepts {type: 'text'|'pdf_path'|'image_path', content: str}."""
     from souschef.reconcile import (
         parse_receipt_text, parse_receipt_pdf, parse_receipt_image,
-        diff_order, diff_grocery_list,
+        parse_receipt_email, diff_order, diff_grocery_list,
     )
 
     conn = _conn()
@@ -1139,6 +1142,8 @@ async def upload_receipt(body: dict):
             receipt_items = parse_receipt_pdf(content)
         elif receipt_type == "image_path":
             receipt_items = parse_receipt_image(content)
+        elif receipt_type == "eml_path":
+            receipt_items = parse_receipt_email(content)
         else:
             receipt_items = parse_receipt_text(content)
     except Exception as e:
@@ -1147,19 +1152,32 @@ async def upload_receipt(body: dict):
     if not receipt_items:
         return {"ok": False, "error": "No items found on receipt"}
 
-    # Save raw receipt data
+    # Append receipt data (support multiple receipts per trip)
     import json
+    existing_data = trip["receipt_data"] if "receipt_data" in trip.keys() and trip["receipt_data"] else None
+    if existing_data:
+        try:
+            all_receipts = json.loads(existing_data)
+            if isinstance(all_receipts, list) and all_receipts and not isinstance(all_receipts[0], list):
+                # First receipt was stored as flat list — wrap it
+                all_receipts = [all_receipts]
+            all_receipts.append(receipt_items)
+        except (json.JSONDecodeError, TypeError):
+            all_receipts = [receipt_items]
+    else:
+        all_receipts = [receipt_items]
     conn.execute(
-        "UPDATE grocery_trips SET receipt_data = ?, receipt_parsed_at = datetime('now') WHERE id = ?",
-        (json.dumps(receipt_items), trip["id"]),
+        text("UPDATE grocery_trips SET receipt_data = :data, receipt_parsed_at = CURRENT_TIMESTAMP WHERE id = :id"),
+        {"data": json.dumps(all_receipts), "id": trip["id"]},
     )
 
-    # Get trip items that were ordered or checked
+    # Get trip items that still need matching (unresolved or not_fulfilled from prior receipt)
     rows = conn.execute(
-        """SELECT * FROM trip_items WHERE trip_id = ?
+        text("""SELECT * FROM trip_items WHERE trip_id = :trip_id
            AND (ordered = 1 OR checked = 1)
-           ORDER BY name""",
-        (trip["id"],),
+           AND receipt_status IN ('', 'not_fulfilled')
+           ORDER BY name"""),
+        {"trip_id": trip["id"]},
     ).fetchall()
 
     # Choose diff method based on whether we have UPC data
@@ -1172,20 +1190,21 @@ async def upload_receipt(body: dict):
         for m in diff["matched"]:
             r = m["receipt"]
             conn.execute(
-                """UPDATE trip_items SET
-                       receipt_item = ?, receipt_price = ?, receipt_upc = ?,
+                text("""UPDATE trip_items SET
+                       receipt_item = :receipt_item, receipt_price = :receipt_price, receipt_upc = :receipt_upc,
                        receipt_status = 'matched'
-                   WHERE trip_id = ? AND LOWER(name) = LOWER(?)""",
-                (r.get("item", ""), r.get("price"), r.get("upc", ""),
-                 trip["id"], m["submitted"]["item"]),
+                   WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
+                {"receipt_item": r.get("item", ""), "receipt_price": r.get("price"),
+                 "receipt_upc": r.get("upc", ""),
+                 "trip_id": trip["id"], "name": m["submitted"]["item"]},
             )
 
         # Mark removed items as not fulfilled
         for r in diff["removed"]:
             conn.execute(
-                """UPDATE trip_items SET receipt_status = 'not_fulfilled'
-                   WHERE trip_id = ? AND LOWER(name) = LOWER(?)""",
-                (trip["id"], r.get("item", r.get("product", ""))),
+                text("""UPDATE trip_items SET receipt_status = 'not_fulfilled'
+                   WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
+                {"trip_id": trip["id"], "name": r.get("item", r.get("product", ""))},
             )
 
         # Added items are potential substitutions — mark as substituted
@@ -1198,12 +1217,13 @@ async def upload_receipt(body: dict):
         for m in diff["matched"]:
             r = m["receipt"]
             conn.execute(
-                """UPDATE trip_items SET
-                       receipt_item = ?, receipt_price = ?, receipt_upc = ?,
+                text("""UPDATE trip_items SET
+                       receipt_item = :receipt_item, receipt_price = :receipt_price, receipt_upc = :receipt_upc,
                        receipt_status = 'matched'
-                   WHERE trip_id = ? AND LOWER(name) = LOWER(?)""",
-                (r.get("item", ""), r.get("price"), r.get("upc", ""),
-                 trip["id"], m["grocery_name"]),
+                   WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
+                {"receipt_item": r.get("item", ""), "receipt_price": r.get("price"),
+                 "receipt_upc": r.get("upc", ""),
+                 "trip_id": trip["id"], "name": m["grocery_name"]},
             )
 
         # Items checked/ordered but not on receipt
@@ -1211,8 +1231,8 @@ async def upload_receipt(body: dict):
         for r in rows:
             if r["name"].lower() not in matched_names:
                 conn.execute(
-                    "UPDATE trip_items SET receipt_status = 'not_fulfilled' WHERE id = ?",
-                    (r["id"],),
+                    text("UPDATE trip_items SET receipt_status = 'not_fulfilled' WHERE id = :id"),
+                    {"id": r["id"]},
                 )
 
         extra_items = diff.get("unmatched", [])
@@ -1255,8 +1275,8 @@ async def upload_receipt_file(file: UploadFile = File(...)):
             body = {"type": "image_path", "content": tmp_path}
         else:
             # Try as text
-            text = content.decode("utf-8", errors="replace")
-            body = {"type": "text", "content": text}
+            text_content = content.decode("utf-8", errors="replace")
+            body = {"type": "text", "content": text_content}
 
         return await upload_receipt(body)
     finally:
@@ -1278,8 +1298,8 @@ async def resolve_receipt_item(body: dict):
     status = body["status"]
 
     conn.execute(
-        "UPDATE trip_items SET receipt_status = ? WHERE trip_id = ? AND LOWER(name) = LOWER(?)",
-        (status, trip["id"], name),
+        text("UPDATE trip_items SET receipt_status = :status WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
+        {"status": status, "trip_id": trip["id"], "name": name},
     )
     conn.commit()
     return {"ok": True}
@@ -1297,16 +1317,16 @@ async def close_receipt():
 
     # Update preferences from receipt data (confirmed purchases)
     matched = conn.execute(
-        """SELECT * FROM trip_items WHERE trip_id = ? AND receipt_status = 'matched'
-           AND receipt_upc != ''""",
-        (trip["id"],),
+        text("""SELECT * FROM trip_items WHERE trip_id = :trip_id AND receipt_status = 'matched'
+           AND receipt_upc != ''"""),
+        {"trip_id": trip["id"]},
     ).fetchall()
 
     for r in matched:
         kp = KrogerProduct(
             product_id="", upc=r["receipt_upc"],
             description=r["receipt_item"], brand="",
-            size=r["product_size"],
+            size=r["product_size"] if "product_size" in r.keys() and r["product_size"] else "",
         )
         kp.price = r["receipt_price"]
         try:
@@ -1316,8 +1336,8 @@ async def close_receipt():
 
     # Mark trip complete
     conn.execute(
-        "UPDATE grocery_trips SET active = 0, completed_at = datetime('now') WHERE id = ?",
-        (trip["id"],),
+        text("UPDATE grocery_trips SET active = 0, completed_at = CURRENT_TIMESTAMP WHERE id = :id"),
+        {"id": trip["id"]},
     )
     conn.commit()
 
@@ -1333,8 +1353,8 @@ async def close_no_receipt():
         return {"ok": False, "error": "No active trip"}
 
     conn.execute(
-        "UPDATE grocery_trips SET active = 0, completed_at = datetime('now') WHERE id = ?",
-        (trip["id"],),
+        text("UPDATE grocery_trips SET active = 0, completed_at = CURRENT_TIMESTAMP WHERE id = :id"),
+        {"id": trip["id"]},
     )
     conn.commit()
 
@@ -1422,7 +1442,7 @@ async def grocery_suggestions():
         names.add(r.name)
 
     # All ingredients
-    rows = conn.execute("SELECT name FROM ingredients").fetchall()
+    rows = conn.execute(text("SELECT name FROM ingredients")).fetchall()
     for row in rows:
         names.add(row["name"])
 
@@ -1439,6 +1459,303 @@ async def get_recipes():
     conn = _conn()
     recipes = list_recipes(conn)
     return {"recipes": [_recipe_dict(r) for r in recipes]}
+
+
+# ── Pantry ──────────────────────────────────────────────
+
+
+@router.get("/pantry")
+async def get_pantry():
+    """List all pantry items."""
+    from souschef.pantry import list_pantry
+
+    conn = _conn()
+    items = list_pantry(conn)
+    return {
+        "items": [
+            {
+                "id": p.id,
+                "ingredient_id": p.ingredient_id,
+                "name": p.ingredient_name,
+                "quantity": p.quantity,
+                "unit": p.unit,
+            }
+            for p in items
+        ]
+    }
+
+
+@router.post("/pantry")
+async def add_pantry(body: dict):
+    """Add a pantry item by ingredient name."""
+    from souschef.pantry import add_pantry_item
+
+    conn = _conn()
+    name = body.get("name", "").strip()
+    quantity = body.get("quantity", 1.0)
+    unit = body.get("unit", "count")
+
+    # If ingredient doesn't exist, create it
+    ing = conn.execute(
+        text("SELECT id FROM ingredients WHERE LOWER(name) = :name"),
+        {"name": name.lower()},
+    ).fetchone()
+    if not ing:
+        conn.execute(
+            text("INSERT INTO ingredients (name, aisle) VALUES (:name, :aisle)"),
+            {"name": name.lower(), "aisle": body.get("shopping_group", "Other")},
+        )
+        conn.commit()
+
+    result = add_pantry_item(conn, name.lower(), quantity, unit)
+    if result is None:
+        return {"ok": False}
+    return {"ok": True, "id": result.id, "name": result.ingredient_name}
+
+
+@router.delete("/pantry/{item_id}")
+async def remove_pantry(item_id: int):
+    """Remove a pantry item."""
+    conn = _conn()
+    conn.execute(
+        text("DELETE FROM pantry WHERE id = :id"),
+        {"id": item_id},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
+# ── Stores ─────────────────────────────────────────────
+
+
+@router.get("/stores")
+async def get_stores():
+    """List configured stores."""
+    from souschef.stores import list_stores
+
+    return {"stores": list_stores()}
+
+
+@router.post("/stores")
+async def add_store(body: dict):
+    """Add a store."""
+    from souschef.stores import add_store as do_add
+
+    name = body.get("name", "").strip()
+    key = body.get("key", name[:1].lower() if name else "x")
+    mode = body.get("mode", "in-person")
+    api_type = body.get("api", "none")
+
+    try:
+        store = do_add(name, key, mode, api_type)
+        return {"ok": True, "store": store}
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.delete("/stores/{key}")
+async def remove_store(key: str):
+    """Remove a store by key."""
+    from souschef.stores import remove_store as do_remove
+
+    removed = do_remove(key)
+    return {"ok": bool(removed), "name": removed}
+
+
+# ── Onboarding ─────────────────────────────────────────
+
+
+@router.get("/onboarding/status")
+async def onboarding_status():
+    """Check whether onboarding has been completed."""
+    from pathlib import Path
+
+    marker = Path.home() / ".souschef" / "onboarding_complete"
+    return {"completed": marker.exists()}
+
+
+@router.post("/onboarding/complete")
+async def onboarding_complete():
+    """Mark onboarding as done."""
+    from pathlib import Path
+
+    marker = Path.home() / ".souschef" / "onboarding_complete"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.touch()
+    return {"ok": True}
+
+
+@router.post("/meals/add-to-pool")
+async def add_meal_to_pool(body: dict):
+    """Create a recipe stub (name only) for onboarding. No ingredients."""
+    conn = _conn()
+    name = body.get("name", "").strip()
+    if not name:
+        return {"ok": False}
+
+    # Check if recipe already exists
+    existing = conn.execute(
+        text("SELECT id FROM recipes WHERE LOWER(name) = :name"),
+        {"name": name.lower()},
+    ).fetchone()
+    if existing:
+        return {"ok": True, "id": existing["id"], "name": name}
+
+    cursor = conn.execute(
+        text("""INSERT INTO recipes (name, cuisine, effort, cleanup, outdoor, kid_friendly, premade,
+           prep_minutes, cook_minutes, servings)
+           VALUES (:name, '', 'medium', 'medium', 0, 1, 0, 0, 0, 4)"""),
+        {"name": name},
+    )
+    conn.commit()
+    return {"ok": True, "id": cursor.lastrowid, "name": name}
+
+
+# ── Grocery Active Trip ────────────────────────────────
+
+
+@router.get("/grocery/active-trip")
+async def get_active_trip_info():
+    """Return info about the active trip, or null if none."""
+    conn = _conn()
+    trip = _get_active_trip(conn)
+    if not trip:
+        return {"active_trip": None}
+
+    item_count = conn.execute(
+        text("SELECT COUNT(*) as c FROM trip_items WHERE trip_id = :trip_id"),
+        {"trip_id": trip["id"]},
+    ).fetchone()["c"]
+    checked_count = conn.execute(
+        text("SELECT COUNT(*) as c FROM trip_items WHERE trip_id = :trip_id AND checked = 1"),
+        {"trip_id": trip["id"]},
+    ).fetchone()["c"]
+
+    return {
+        "active_trip": {
+            "id": trip["id"],
+            "start_date": trip["start_date"],
+            "end_date": trip["end_date"],
+            "created_at": trip["created_at"],
+            "total_items": item_count,
+            "checked_items": checked_count,
+        }
+    }
+
+
+# ── Meal History & Suggestions ─────────────────────────
+
+
+@router.get("/meals/history")
+async def get_meal_history():
+    """Get meal frequency stats from all history."""
+    conn = _conn()
+    rows = conn.execute(
+        text("""SELECT recipe_id, recipe_name, COUNT(*) as cook_count,
+                  MAX(slot_date) as last_made
+           FROM meals
+           WHERE recipe_id IS NOT NULL
+           GROUP BY recipe_id
+           ORDER BY cook_count DESC""")
+    ).fetchall()
+    return {
+        "history": [
+            {
+                "recipe_id": r["recipe_id"],
+                "recipe_name": r["recipe_name"],
+                "cook_count": r["cook_count"],
+                "last_made": r["last_made"],
+            }
+            for r in rows
+        ]
+    }
+
+
+# ── Learning ───────────────────────────────────────────
+
+
+@router.get("/learning/suggestions")
+async def get_learning_suggestions():
+    """Suggest regulars additions/removals based on trip patterns."""
+    from souschef.regulars import list_regulars
+
+    conn = _conn()
+
+    # Get completed trips (last 5)
+    trips = conn.execute(
+        text("SELECT id FROM grocery_trips WHERE active = 0 ORDER BY id DESC LIMIT 5")
+    ).fetchall()
+
+    if len(trips) < 3:
+        return {"add": [], "remove": []}
+
+    trip_ids = [t["id"] for t in trips]
+
+    # Items that appear on 3+ consecutive trips but aren't regulars
+    regulars = list_regulars(conn, active_only=False)
+    regular_names = {r.name.lower() for r in regulars}
+
+    item_freq = {}
+    for tid in trip_ids:
+        items = conn.execute(
+            text("SELECT DISTINCT LOWER(name) as name FROM trip_items WHERE trip_id = :trip_id"),
+            {"trip_id": tid},
+        ).fetchall()
+        for item in items:
+            item_freq[item["name"]] = item_freq.get(item["name"], 0) + 1
+
+    add_suggestions = []
+    for name, count in item_freq.items():
+        if count >= 3 and name not in regular_names:
+            # Check not dismissed
+            dismissed = conn.execute(
+                text("SELECT 1 FROM learning_dismissed WHERE name = :name"),
+                {"name": name},
+            ).fetchone()
+            if not dismissed:
+                add_suggestions.append({"name": name, "trip_count": count})
+
+    # Regulars that are active but unchecked on recent trips
+    remove_suggestions = []
+    active_regulars = [r for r in regulars if r.active]
+    for reg in active_regulars:
+        name_lower = reg.name.lower()
+        # Check if it was on the trip and unchecked for 3+ trips
+        unchecked_count = 0
+        for tid in trip_ids[:3]:
+            item = conn.execute(
+                text("""SELECT checked FROM trip_items
+                   WHERE trip_id = :trip_id AND LOWER(name) = :name AND source = 'regular'"""),
+                {"trip_id": tid, "name": name_lower},
+            ).fetchone()
+            if item and not item["checked"]:
+                unchecked_count += 1
+            elif not item:
+                unchecked_count += 1  # not even on the trip
+        if unchecked_count >= 3:
+            dismissed = conn.execute(
+                text("SELECT 1 FROM learning_dismissed WHERE name = :name"),
+                {"name": name_lower},
+            ).fetchone()
+            if not dismissed:
+                remove_suggestions.append({"name": reg.name, "id": reg.id})
+
+    return {
+        "add": add_suggestions[:5],
+        "remove": remove_suggestions[:5],
+    }
+
+
+@router.post("/learning/dismiss/{name:path}")
+async def dismiss_learning(name: str):
+    """Dismiss a learning suggestion so it doesn't appear again."""
+    conn = _conn()
+    conn.execute(
+        text("INSERT INTO learning_dismissed (name) VALUES (:name) ON CONFLICT DO NOTHING"),
+        {"name": name.lower()},
+    )
+    conn.commit()
+    return {"ok": True}
 
 
 # ── Helpers ──────────────────────────────────────────────

@@ -8,6 +8,11 @@ export default function ReceiptPage() {
   const [pasteText, setPasteText] = useState('')
   const [showPaste, setShowPaste] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [collapsedSections, setCollapsedSections] = useState({})
+
+  const toggleSection = (key) => {
+    setCollapsedSections(prev => ({ ...prev, [key]: !prev[key] }))
+  }
 
   const loadReceipt = () => {
     api.getReceipt().then(setReceipt)
@@ -55,21 +60,18 @@ export default function ReceiptPage() {
   }
 
   const handleResolve = async (name, status) => {
-    await api.resolveReceiptItem(name, status)
-    loadReceipt()
+    try {
+      await api.resolveReceiptItem(name, status)
+      loadReceipt()
+    } catch { /* ignore — item stays in current state */ }
   }
 
-  const handleClose = async () => {
+  const handleCloseTrip = async (apiFn) => {
     setClosing(true)
-    await api.closeReceipt()
-    loadReceipt()
-    setClosing(false)
-  }
-
-  const handleCloseNoReceipt = async () => {
-    setClosing(true)
-    await api.closeNoReceipt()
-    loadReceipt()
+    try {
+      await apiFn()
+      loadReceipt()
+    } catch { /* ignore — stays on page */ }
     setClosing(false)
   }
 
@@ -92,7 +94,8 @@ export default function ReceiptPage() {
 
   const hasAnyActivity = receipt.has_ordered || receipt.has_checked
   const hasReconciled = receipt.matched.length > 0 || receipt.substituted.length > 0 || receipt.not_fulfilled.length > 0
-  const allResolved = receipt.unresolved.length === 0 && hasReconciled
+  const canUploadMore = receipt.unresolved.length > 0 || receipt.not_fulfilled.length > 0
+  const allResolved = !canUploadMore && hasReconciled
 
   return (
     <>
@@ -105,10 +108,12 @@ export default function ReceiptPage() {
         </div>
       </div>
 
-      {/* Upload section — show if no receipt yet */}
-      {!receipt.has_receipt && hasAnyActivity && (
+      {/* Upload section — show when items still need a receipt */}
+      {hasAnyActivity && canUploadMore && (
         <div className="receipt-upload">
-          <div className="receipt-upload-label">Upload your receipt</div>
+          <div className="receipt-upload-label">
+            {receipt.has_receipt ? 'Upload another receipt' : 'Upload your receipt'}
+          </div>
           <div className="receipt-upload-actions">
             <label className="receipt-btn">
               Upload PDF or image
@@ -143,10 +148,13 @@ export default function ReceiptPage() {
             </div>
           )}
 
-          {uploadResult && !uploadResult.ok && (
+          {uploading && (
+            <div className="receipt-processing">Reading the receipt...</div>
+          )}
+          {!uploading && uploadResult && !uploadResult.ok && (
             <div className="submit-error">{uploadResult.error}</div>
           )}
-          {uploadResult && uploadResult.ok && (
+          {!uploading && uploadResult && uploadResult.ok && (
             <div className="submit-success">
               Matched {uploadResult.matched} item{uploadResult.matched !== 1 ? 's' : ''}
             </div>
@@ -154,8 +162,8 @@ export default function ReceiptPage() {
         </div>
       )}
 
-      {/* Unresolved items — need receipt */}
-      {!hasReconciled && receipt.unresolved.length > 0 && (
+      {/* Unresolved items — still need receipt */}
+      {receipt.unresolved.length > 0 && (
         <div className="receipt-section">
           <div className="receipt-section-label">
             Awaiting receipt ({receipt.unresolved.length} item{receipt.unresolved.length !== 1 ? 's' : ''})
@@ -175,10 +183,13 @@ export default function ReceiptPage() {
       {/* Matched items */}
       {receipt.matched.length > 0 && (
         <div className="receipt-section">
-          <div className="receipt-section-label matched-label">
-            Matched ({receipt.matched.length})
+          <div
+            className="receipt-section-label matched-label collapsible"
+            onClick={() => toggleSection('matched')}
+          >
+            <span>{collapsedSections.matched ? '\u25B6' : '\u25BC'} Matched ({receipt.matched.length})</span>
           </div>
-          {receipt.matched.map(item => (
+          {!collapsedSections.matched && receipt.matched.map(item => (
             <div key={item.name} className="receipt-item matched">
               <div className="receipt-item-check">{'\u2713'}</div>
               <div className="receipt-item-info">
@@ -198,10 +209,13 @@ export default function ReceiptPage() {
       {/* Substituted items */}
       {receipt.substituted.length > 0 && (
         <div className="receipt-section">
-          <div className="receipt-section-label substituted-label">
-            Substituted ({receipt.substituted.length})
+          <div
+            className="receipt-section-label substituted-label collapsible"
+            onClick={() => toggleSection('substituted')}
+          >
+            <span>{collapsedSections.substituted ? '\u25B6' : '\u25BC'} Substituted ({receipt.substituted.length})</span>
           </div>
-          {receipt.substituted.map(item => (
+          {!collapsedSections.substituted && receipt.substituted.map(item => (
             <div key={item.name} className="receipt-item substituted">
               <div className="receipt-item-info">
                 <div className="receipt-item-name">{item.name}</div>
@@ -234,10 +248,13 @@ export default function ReceiptPage() {
       {/* Not fulfilled items */}
       {receipt.not_fulfilled.length > 0 && (
         <div className="receipt-section">
-          <div className="receipt-section-label not-fulfilled-label">
-            Not fulfilled ({receipt.not_fulfilled.length})
+          <div
+            className="receipt-section-label not-fulfilled-label collapsible"
+            onClick={() => toggleSection('not_fulfilled')}
+          >
+            <span>{collapsedSections.not_fulfilled ? '\u25B6' : '\u25BC'} Not fulfilled ({receipt.not_fulfilled.length})</span>
           </div>
-          {receipt.not_fulfilled.map(item => (
+          {!collapsedSections.not_fulfilled && receipt.not_fulfilled.map(item => (
             <div key={item.name} className="receipt-item not-fulfilled">
               <div className="receipt-item-name">{item.name}</div>
               <div className="receipt-item-meta">Will carry over to next list</div>
@@ -252,7 +269,7 @@ export default function ReceiptPage() {
           {allResolved ? (
             <button
               className="build-list-btn"
-              onClick={handleClose}
+              onClick={() => handleCloseTrip(api.closeReceipt)}
               disabled={closing}
             >
               {closing ? 'Closing...' : `Close Receipt ${'\u2713'}`}
@@ -260,7 +277,7 @@ export default function ReceiptPage() {
           ) : (
             <button
               className="receipt-close-quiet"
-              onClick={handleCloseNoReceipt}
+              onClick={() => handleCloseTrip(api.closeNoReceipt)}
               disabled={closing}
             >
               {closing ? 'Closing...' : 'No receipt \u2014 close anyway'}

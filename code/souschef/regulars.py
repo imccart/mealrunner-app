@@ -7,8 +7,11 @@ what they need each grocery run from a saved list.
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
+
+from sqlalchemy import text
+
+from souschef.database import DictConnection
 
 
 @dataclass
@@ -22,7 +25,7 @@ class Regular:
 
 
 def list_regulars(
-    conn: sqlite3.Connection, active_only: bool = True
+    conn: DictConnection, active_only: bool = True
 ) -> list[Regular]:
     """List regulars, resolving shopping_group from linked ingredient when available."""
     query = """
@@ -33,7 +36,7 @@ def list_regulars(
     if active_only:
         query += " WHERE r.active = 1"
     query += " ORDER BY resolved_group, r.name"
-    rows = conn.execute(query).fetchall()
+    rows = conn.execute(text(query)).fetchall()
     return [
         Regular(
             id=r["id"],
@@ -48,7 +51,7 @@ def list_regulars(
 
 
 def add_regular(
-    conn: sqlite3.Connection,
+    conn: DictConnection,
     name: str,
     shopping_group: str = "",
     store_pref: str = "either",
@@ -59,7 +62,7 @@ def add_regular(
     # If we matched an ingredient and no group was given, inherit it
     if ingredient_id and not shopping_group:
         row = conn.execute(
-            "SELECT aisle FROM ingredients WHERE id = ?", (ingredient_id,)
+            text("SELECT aisle FROM ingredients WHERE id = :id"), {"id": ingredient_id}
         ).fetchone()
         if row and row["aisle"]:
             shopping_group = row["aisle"]
@@ -68,18 +71,18 @@ def add_regular(
         shopping_group = _infer_group(name)
 
     conn.execute(
-        """INSERT INTO regulars (name, ingredient_id, shopping_group, store_pref)
-           VALUES (?, ?, ?, ?)
+        text("""INSERT INTO regulars (name, ingredient_id, shopping_group, store_pref)
+           VALUES (:name, :ingredient_id, :shopping_group, :store_pref)
            ON CONFLICT(name) DO UPDATE SET
                active = 1,
                ingredient_id = COALESCE(excluded.ingredient_id, regulars.ingredient_id),
                shopping_group = CASE WHEN excluded.shopping_group != '' THEN excluded.shopping_group ELSE regulars.shopping_group END,
-               store_pref = excluded.store_pref""",
-        (name, ingredient_id, shopping_group, store_pref),
+               store_pref = excluded.store_pref"""),
+        {"name": name, "ingredient_id": ingredient_id, "shopping_group": shopping_group, "store_pref": store_pref},
     )
     conn.commit()
 
-    row = conn.execute("SELECT * FROM regulars WHERE name = ?", (name,)).fetchone()
+    row = conn.execute(text("SELECT * FROM regulars WHERE name = :name"), {"name": name}).fetchone()
     return Regular(
         id=row["id"],
         name=row["name"],
@@ -90,22 +93,22 @@ def add_regular(
     )
 
 
-def remove_regular(conn: sqlite3.Connection, name: str) -> bool:
+def remove_regular(conn: DictConnection, name: str) -> bool:
     """Soft-delete a regular (sets active=0)."""
     cursor = conn.execute(
-        "UPDATE regulars SET active = 0 WHERE name = ? AND active = 1", (name,)
+        text("UPDATE regulars SET active = 0 WHERE name = :name AND active = 1"), {"name": name}
     )
     conn.commit()
     return cursor.rowcount > 0
 
 
-def toggle_regular(conn: sqlite3.Connection, regular_id: int) -> Regular | None:
+def toggle_regular(conn: DictConnection, regular_id: int) -> Regular | None:
     """Toggle a regular's active state."""
-    row = conn.execute("SELECT * FROM regulars WHERE id = ?", (regular_id,)).fetchone()
+    row = conn.execute(text("SELECT * FROM regulars WHERE id = :id"), {"id": regular_id}).fetchone()
     if not row:
         return None
     new_active = 0 if row["active"] else 1
-    conn.execute("UPDATE regulars SET active = ? WHERE id = ?", (new_active, regular_id))
+    conn.execute(text("UPDATE regulars SET active = :active WHERE id = :id"), {"active": new_active, "id": regular_id})
     conn.commit()
     return Regular(
         id=row["id"],
@@ -118,7 +121,7 @@ def toggle_regular(conn: sqlite3.Connection, regular_id: int) -> Regular | None:
 
 
 def get_regulars_by_group(
-    conn: sqlite3.Connection, active_only: bool = True
+    conn: DictConnection, active_only: bool = True
 ) -> dict[str, list[Regular]]:
     """Return regulars grouped by shopping_group."""
     items = list_regulars(conn, active_only=active_only)
@@ -131,17 +134,17 @@ def get_regulars_by_group(
 # ── Silent matching ──────────────────────────────────────
 
 
-def _match_ingredient(conn: sqlite3.Connection, name: str) -> int | None:
+def _match_ingredient(conn: DictConnection, name: str) -> int | None:
     """Try to match a regular name to an existing ingredient. Returns ingredient_id or None."""
     # Exact match first
     row = conn.execute(
-        "SELECT id FROM ingredients WHERE LOWER(name) = LOWER(?)", (name,)
+        text("SELECT id FROM ingredients WHERE LOWER(name) = LOWER(:name)"), {"name": name}
     ).fetchone()
     if row:
         return row["id"]
 
     # Fuzzy: check if the name contains an ingredient name or vice versa
-    rows = conn.execute("SELECT id, name FROM ingredients").fetchall()
+    rows = conn.execute(text("SELECT id, name FROM ingredients")).fetchall()
     name_lower = name.lower()
     for r in rows:
         ing_name = r["name"].lower()
