@@ -44,9 +44,15 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const didDrag = useRef(false)
   const rowsRef = useRef(null)
 
+  const [loadError, setLoadError] = useState(false)
+
   const load = async () => {
-    const result = await api.getMeals()
-    setData(result)
+    try {
+      const result = await api.getMeals()
+      setData(result)
+    } catch {
+      setLoadError(true)
+    }
     setLoading(false)
   }
 
@@ -112,6 +118,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   }, [])
 
   if (loading) return <div className="loading">Setting the table...</div>
+  if (loadError) return <div className="loading">Something went wrong loading meals. Try refreshing.</div>
   if (!data) return null
 
   const { days, status, start_date, end_date } = data

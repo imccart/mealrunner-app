@@ -525,11 +525,23 @@ def _seed_recipes(conn: DictConnection, path: Path) -> None:
             })
 
 
+_db_initialized = False
+
+
 def ensure_db(db_path: str | None = None) -> DictConnection:
     """Create tables, run migrations, seed if empty. Returns a connection."""
+    global _db_initialized
     conn = get_connection()
-    init_db(conn)
-    row = conn.execute(text("SELECT COUNT(*) AS n FROM recipes")).fetchone()
-    if row["n"] == 0:
-        seed_from_yaml(conn)
+    if not _db_initialized:
+        try:
+            init_db(conn)
+            row = conn.execute(text("SELECT COUNT(*) AS n FROM recipes")).fetchone()
+            if row["n"] == 0:
+                seed_from_yaml(conn)
+            _db_initialized = True
+        except Exception as e:
+            print(f"[db] ensure_db error: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     return conn

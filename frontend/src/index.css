@@ -1125,6 +1125,26 @@ main {
   }
 }
 
+/* Desktop: centered modal instead of bottom sheet */
+@media (min-width: 1024px) {
+  .sheet-overlay {
+    justify-content: center;
+    align-items: center;
+  }
+  .sheet {
+    max-width: 480px;
+    width: 90%;
+    margin: 0;
+    border-radius: 16px;
+    padding: 20px 24px 24px;
+    max-height: 75vh;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
+  }
+  .sheet-handle {
+    display: none;
+  }
+}
+
 .sheet-handle {
   width: 36px;
   height: 4px;

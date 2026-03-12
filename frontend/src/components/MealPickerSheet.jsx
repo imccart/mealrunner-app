@@ -19,6 +19,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
   const [data, setData] = useState(null)
   const [history, setHistory] = useState(null)
   const [search, setSearch] = useState('')
+  const [error, setError] = useState(false)
   const swipeHandlers = useSwipeDismiss(onClose)
 
   useEffect(() => {
@@ -28,8 +29,36 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
     ]).then(([candidates, hist]) => {
       setData(candidates)
       setHistory(hist.history || [])
-    })
+    }).catch(() => setError(true))
   }, [date])
+
+  if (error) return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" {...swipeHandlers} onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="sheet-title">{dayName}</div>
+        <div className="sheet-sub">Couldn't load recipes</div>
+        <input
+          className="picker-search"
+          type="text"
+          placeholder="Type a meal name..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && search.trim()) onFreeform(search.trim())
+          }}
+        />
+        {search.trim() && (
+          <button className="picker-option freeform" onClick={() => onFreeform(search.trim())}>
+            Add "{search.trim()}" as a meal
+          </button>
+        )}
+        <div style={{ marginTop: 12 }}>
+          <button className="picker-option freeform" onClick={() => onFreeform('Eating Out')}>Eating Out</button>
+        </div>
+      </div>
+    </div>
+  )
 
   if (!data) return (
     <div className="sheet-overlay" onClick={onClose}>
