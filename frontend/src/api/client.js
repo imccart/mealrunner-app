@@ -114,6 +114,11 @@ export const api = {
   }),
   removeStore: (key) => request(`/stores/${encodeURIComponent(key)}`, { method: 'DELETE' }),
 
+  // Auth
+  getMe: () => request('/auth/me'),
+  login: (email) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email }) }),
+  logout: () => request('/auth/logout', { method: 'POST' }),
+
   // Onboarding
   getOnboardingStatus: () => request('/onboarding/status'),
   completeOnboarding: () => request('/onboarding/complete', { method: 'POST' }),

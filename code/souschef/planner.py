@@ -109,10 +109,10 @@ def rolling_range(days: int = 10) -> tuple[str, str]:
     return today.isoformat(), end.isoformat()
 
 
-def load_rolling_week(conn: DictConnection, days: int = 10) -> MealWeek:
+def load_rolling_week(conn: DictConnection, user_id: str, days: int = 10) -> MealWeek:
     """Load a MealWeek for the rolling window starting today."""
     s, e = rolling_range(days)
-    meals = load_meals(conn, s, e)
+    meals = load_meals(conn, user_id, s, e)
     return MealWeek(start_date=s, end_date=e, meals=meals)
 
 
@@ -129,15 +129,15 @@ def _assign_side(recipe_name: str, used_sides: list[str]) -> str:
 
 # ── Load / save meals ───────────────────────────────────
 
-def load_meals(conn: DictConnection, start_date: str, end_date: str) -> list[Meal]:
+def load_meals(conn: DictConnection, user_id: str, start_date: str, end_date: str) -> list[Meal]:
     """Load all meals in a date range."""
     rows = conn.execute(
         text("""SELECT m.*, COALESCE(r.name, m.recipe_name) AS rname
            FROM meals m
            LEFT JOIN recipes r ON r.id = m.recipe_id
-           WHERE m.slot_date BETWEEN :start_date AND :end_date
+           WHERE m.user_id = :user_id AND m.slot_date BETWEEN :start_date AND :end_date
            ORDER BY m.slot_date"""),
-        {"start_date": start_date, "end_date": end_date},
+        {"user_id": user_id, "start_date": start_date, "end_date": end_date},
     ).fetchall()
     return [
         Meal(
@@ -152,36 +152,36 @@ def load_meals(conn: DictConnection, start_date: str, end_date: str) -> list[Mea
     ]
 
 
-def load_current_week(conn: DictConnection) -> list[Meal]:
+def load_current_week(conn: DictConnection, user_id: str) -> list[Meal]:
     start, end = week_range()
-    return load_meals(conn, start, end)
+    return load_meals(conn, user_id, start, end)
 
 
-def load_meal_week(conn: DictConnection, start: str | None = None) -> MealWeek:
+def load_meal_week(conn: DictConnection, user_id: str, start: str | None = None) -> MealWeek:
     """Load a MealWeek view for display."""
     s, e = week_range(start)
-    meals = load_meals(conn, s, e)
+    meals = load_meals(conn, user_id, s, e)
     return MealWeek(start_date=s, end_date=e, meals=meals)
 
 
-def save_meals(conn: DictConnection, meals: list[Meal]) -> list[Meal]:
+def save_meals(conn: DictConnection, user_id: str, meals: list[Meal]) -> list[Meal]:
     """Insert or update meals."""
     for meal in meals:
         if meal.id:
             conn.execute(
                 text("""UPDATE meals SET recipe_id = :recipe_id, recipe_name = :recipe_name, status = :status,
                    side = :side, locked = :locked, is_followup = :is_followup, on_grocery = :on_grocery
-                   WHERE id = :id"""),
+                   WHERE id = :id AND user_id = :user_id"""),
                 {"recipe_id": meal.recipe_id, "recipe_name": meal.recipe_name, "status": meal.status,
                  "side": meal.side, "locked": int(meal.locked), "is_followup": int(meal.is_followup),
-                 "on_grocery": int(meal.on_grocery), "id": meal.id},
+                 "on_grocery": int(meal.on_grocery), "id": meal.id, "user_id": user_id},
             )
         else:
             cur = conn.execute(
-                text("""INSERT INTO meals (slot_date, recipe_id, recipe_name, status, side, locked, is_followup, on_grocery)
-                   VALUES (:slot_date, :recipe_id, :recipe_name, :status, :side, :locked, :is_followup, :on_grocery)
+                text("""INSERT INTO meals (user_id, slot_date, recipe_id, recipe_name, status, side, locked, is_followup, on_grocery)
+                   VALUES (:user_id, :slot_date, :recipe_id, :recipe_name, :status, :side, :locked, :is_followup, :on_grocery)
                    RETURNING id"""),
-                {"slot_date": meal.slot_date, "recipe_id": meal.recipe_id, "recipe_name": meal.recipe_name,
+                {"user_id": user_id, "slot_date": meal.slot_date, "recipe_id": meal.recipe_id, "recipe_name": meal.recipe_name,
                  "status": meal.status, "side": meal.side, "locked": int(meal.locked),
                  "is_followup": int(meal.is_followup), "on_grocery": int(meal.on_grocery)},
             )
@@ -190,38 +190,39 @@ def save_meals(conn: DictConnection, meals: list[Meal]) -> list[Meal]:
     return meals
 
 
-def save_meal(conn: DictConnection, meal: Meal) -> Meal:
+def save_meal(conn: DictConnection, user_id: str, meal: Meal) -> Meal:
     """Save a single meal."""
-    return save_meals(conn, [meal])[0]
+    return save_meals(conn, user_id, [meal])[0]
 
 
 # ── Rotation history ────────────────────────────────────
 
-def _get_recent_recipe_ids(conn: DictConnection, before_date: str,
+def _get_recent_recipe_ids(conn: DictConnection, user_id: str, before_date: str,
                            lookback_days: int = 14) -> set[int]:
     """Get recipe IDs from recent accepted meals to avoid repeats."""
     cutoff = (date.fromisoformat(before_date) - timedelta(days=lookback_days)).isoformat()
     rows = conn.execute(
         text("""SELECT DISTINCT recipe_id FROM meals
-           WHERE slot_date < :before_date AND slot_date >= :cutoff AND recipe_id IS NOT NULL"""),
-        {"before_date": before_date, "cutoff": cutoff},
+           WHERE user_id = :user_id AND slot_date < :before_date AND slot_date >= :cutoff AND recipe_id IS NOT NULL"""),
+        {"user_id": user_id, "before_date": before_date, "cutoff": cutoff},
     ).fetchall()
     return {r["recipe_id"] for r in rows}
 
 
-def get_last_made(conn: DictConnection, recipe_id: int) -> str | None:
+def get_last_made(conn: DictConnection, user_id: str, recipe_id: int) -> str | None:
     """Return the most recent slot_date this recipe was used, or None."""
     row = conn.execute(
-        text("SELECT MAX(slot_date) AS last FROM meals WHERE recipe_id = :recipe_id"),
-        {"recipe_id": recipe_id},
+        text("SELECT MAX(slot_date) AS last FROM meals WHERE user_id = :user_id AND recipe_id = :recipe_id"),
+        {"user_id": user_id, "recipe_id": recipe_id},
     ).fetchone()
     return row["last"] if row and row["last"] else None
 
 
-def get_last_made_map(conn: DictConnection) -> dict[int, str]:
+def get_last_made_map(conn: DictConnection, user_id: str) -> dict[int, str]:
     """Return {recipe_id: last_slot_date} for all recipes ever used."""
     rows = conn.execute(
-        text("SELECT recipe_id, MAX(slot_date) AS last FROM meals WHERE recipe_id IS NOT NULL GROUP BY recipe_id")
+        text("SELECT recipe_id, MAX(slot_date) AS last FROM meals WHERE user_id = :user_id AND recipe_id IS NOT NULL GROUP BY recipe_id"),
+        {"user_id": user_id},
     ).fetchall()
     return {r["recipe_id"]: r["last"] for r in rows}
 
@@ -229,10 +230,10 @@ def get_last_made_map(conn: DictConnection) -> dict[int, str]:
 # ── Plan generation ─────────────────────────────────────
 
 def fill_dates(
-    conn: DictConnection, start_date: str, end_date: str
+    conn: DictConnection, user_id: str, start_date: str, end_date: str
 ) -> list[Meal]:
     """Fill empty dates in a range with suggested meals. Returns all meals in the range."""
-    existing = load_meals(conn, start_date, end_date)
+    existing = load_meals(conn, user_id, start_date, end_date)
     filled_dates = {m.slot_date for m in existing}
 
     # Build date list for the range
@@ -250,14 +251,14 @@ def fill_dates(
 
     # Gather used recipe IDs from existing meals in range + recent history
     used_ids = {m.recipe_id for m in existing if m.recipe_id}
-    used_ids |= _get_recent_recipe_ids(conn, start_date)
+    used_ids |= _get_recent_recipe_ids(conn, user_id, start_date)
 
     producer_ids = _get_producer_recipe_ids(conn)
     has_producer = any(m.recipe_id in producer_ids for m in existing)
 
     # Check for carryover follow-ups from meals just before this range
     new_meals: list[Meal] = []
-    _schedule_carryover_followups(conn, start_date, empty_dates, new_meals, used_ids)
+    _schedule_carryover_followups(conn, user_id, start_date, empty_dates, new_meals, used_ids)
     newly_filled = {m.slot_date for m in new_meals}
 
     # Fill remaining empty dates
@@ -310,18 +311,18 @@ def fill_dates(
                 used_sides.append(side)
 
     # Save new meals
-    save_meals(conn, new_meals)
+    save_meals(conn, user_id, new_meals)
 
-    return load_meals(conn, start_date, end_date)
+    return load_meals(conn, user_id, start_date, end_date)
 
 
 def _schedule_carryover_followups(
-    conn: DictConnection, start_date: str,
+    conn: DictConnection, user_id: str, start_date: str,
     empty_dates: list[date], new_meals: list[Meal], used_ids: set[int]
 ) -> None:
     """If days just before this range had a big cook, place a follow-up."""
     lookback = date.fromisoformat(start_date) - timedelta(days=4)
-    recent = load_meals(conn, lookback.isoformat(), start_date)
+    recent = load_meals(conn, user_id, lookback.isoformat(), start_date)
 
     for meal in recent:
         if meal.recipe_name not in LEFTOVER_PRODUCERS:
@@ -430,14 +431,14 @@ def _ensure_light_meal(
 
 # ── Swap / edit operations ──────────────────────────────
 
-def swap_meal(conn: DictConnection, slot_date: str) -> Meal:
+def swap_meal(conn: DictConnection, user_id: str, slot_date: str) -> Meal:
     """Swap the meal on a date with a new random pick."""
     s, e = week_range(slot_date)
-    week_meals = load_meals(conn, s, e)
+    week_meals = load_meals(conn, user_id, s, e)
     meal = next((m for m in week_meals if m.slot_date == slot_date), None)
 
     used_ids = {m.recipe_id for m in week_meals if m.recipe_id and m.slot_date != slot_date}
-    used_ids |= _get_recent_recipe_ids(conn, s)
+    used_ids |= _get_recent_recipe_ids(conn, user_id, s)
 
     weekday = date.fromisoformat(slot_date).weekday()
     theme = DAY_THEMES.get(weekday, {}) or {}
@@ -456,14 +457,14 @@ def swap_meal(conn: DictConnection, slot_date: str) -> Meal:
     used_sides = [m.side for m in week_meals if m.slot_date != slot_date and m.side]
     meal.side = _assign_side(meal.recipe_name, used_sides)
 
-    save_meal(conn, meal)
+    save_meal(conn, user_id, meal)
     return meal
 
 
-def swap_meal_side(conn: DictConnection, slot_date: str) -> Meal:
+def swap_meal_side(conn: DictConnection, user_id: str, slot_date: str) -> Meal:
     """Swap just the side dish for a date."""
     s, e = week_range(slot_date)
-    week_meals = load_meals(conn, s, e)
+    week_meals = load_meals(conn, user_id, s, e)
     meal = next((m for m in week_meals if m.slot_date == slot_date), None)
     if meal is None:
         return None
@@ -476,19 +477,19 @@ def swap_meal_side(conn: DictConnection, slot_date: str) -> Meal:
         used_sides.append(meal.side)
     meal.side = _assign_side(meal.recipe_name, used_sides)
 
-    save_meal(conn, meal)
+    save_meal(conn, user_id, meal)
     return meal
 
 
-def swap_dates(conn: DictConnection, date_a: str, date_b: str) -> list[Meal]:
+def swap_dates(conn: DictConnection, user_id: str, date_a: str, date_b: str) -> list[Meal]:
     """Swap meals between two dates. Returns updated week."""
     rows_a = conn.execute(
-        text("SELECT * FROM meals WHERE slot_date = :slot_date"),
-        {"slot_date": date_a},
+        text("SELECT * FROM meals WHERE user_id = :user_id AND slot_date = :slot_date"),
+        {"user_id": user_id, "slot_date": date_a},
     ).fetchall()
     rows_b = conn.execute(
-        text("SELECT * FROM meals WHERE slot_date = :slot_date"),
-        {"slot_date": date_b},
+        text("SELECT * FROM meals WHERE user_id = :user_id AND slot_date = :slot_date"),
+        {"user_id": user_id, "slot_date": date_b},
     ).fetchall()
     meal_a = _row_to_meal(rows_a[0]) if rows_a else None
     meal_b = _row_to_meal(rows_b[0]) if rows_b else None
@@ -499,13 +500,13 @@ def swap_dates(conn: DictConnection, date_a: str, date_b: str) -> list[Meal]:
             val_b = getattr(meal_b, attr)
             setattr(meal_a, attr, val_b)
             setattr(meal_b, attr, val_a)
-        save_meals(conn, [meal_a, meal_b])
+        save_meals(conn, user_id, [meal_a, meal_b])
 
     s, e = week_range(date_a)
-    return load_meals(conn, s, e)
+    return load_meals(conn, user_id, s, e)
 
 
-def set_meal(conn: DictConnection, slot_date: str, recipe_name: str) -> Meal | str:
+def set_meal(conn: DictConnection, user_id: str, slot_date: str, recipe_name: str) -> Meal | str:
     """Manually set a date's recipe by name. No rule enforcement."""
     recipe = get_recipe_by_name(conn, recipe_name)
     if recipe is None:
@@ -520,8 +521,8 @@ def set_meal(conn: DictConnection, slot_date: str, recipe_name: str) -> Meal | s
             return f"Recipe '{recipe_name}' not found."
 
     existing = conn.execute(
-        text("SELECT * FROM meals WHERE slot_date = :slot_date"),
-        {"slot_date": slot_date},
+        text("SELECT * FROM meals WHERE user_id = :user_id AND slot_date = :slot_date"),
+        {"user_id": user_id, "slot_date": slot_date},
     ).fetchone()
     if existing:
         meal = _row_to_meal(existing)
@@ -535,32 +536,32 @@ def set_meal(conn: DictConnection, slot_date: str, recipe_name: str) -> Meal | s
 
     # Reassign side to match the new meal
     s, e = rolling_range()
-    week_meals = load_meals(conn, s, e)
+    week_meals = load_meals(conn, user_id, s, e)
     used_sides = [m.side for m in week_meals if m.slot_date != slot_date and m.side]
     meal.side = _assign_side(recipe.name, used_sides)
 
-    save_meal(conn, meal)
+    save_meal(conn, user_id, meal)
     return meal
 
 
-def remove_meal(conn: DictConnection, slot_date: str) -> None:
+def remove_meal(conn: DictConnection, user_id: str, slot_date: str) -> None:
     """Remove a meal from a date entirely."""
     conn.execute(
-        text("DELETE FROM meals WHERE slot_date = :slot_date"),
-        {"slot_date": slot_date},
+        text("DELETE FROM meals WHERE user_id = :user_id AND slot_date = :slot_date"),
+        {"user_id": user_id, "slot_date": slot_date},
     )
     conn.commit()
 
 
-def set_freeform_meal(conn: DictConnection, slot_date: str, name: str) -> Meal:
+def set_freeform_meal(conn: DictConnection, user_id: str, slot_date: str, name: str) -> Meal:
     """Set a freeform meal (no recipe) like 'Eating Out' or 'Leftovers'.
 
     Freeform meals have no ingredients, so they're automatically on_grocery=True
     (nothing to add to the list).
     """
     existing = conn.execute(
-        text("SELECT * FROM meals WHERE slot_date = :slot_date"),
-        {"slot_date": slot_date},
+        text("SELECT * FROM meals WHERE user_id = :user_id AND slot_date = :slot_date"),
+        {"user_id": user_id, "slot_date": slot_date},
     ).fetchone()
     if existing:
         meal = _row_to_meal(existing)
@@ -572,17 +573,17 @@ def set_freeform_meal(conn: DictConnection, slot_date: str, name: str) -> Meal:
     meal.side = ""
     meal.is_followup = False
     meal.on_grocery = True
-    save_meal(conn, meal)
+    save_meal(conn, user_id, meal)
     return meal
 
 
-def get_candidates(conn: DictConnection, slot_date: str) -> list:
+def get_candidates(conn: DictConnection, user_id: str, slot_date: str) -> list:
     """Return valid recipe candidates for a date, with last-made context."""
     s, e = week_range(slot_date)
-    week_meals = load_meals(conn, s, e)
+    week_meals = load_meals(conn, user_id, s, e)
 
     used_ids = {m.recipe_id for m in week_meals if m.recipe_id and m.slot_date != slot_date}
-    used_ids |= _get_recent_recipe_ids(conn, s)
+    used_ids |= _get_recent_recipe_ids(conn, user_id, s)
 
     weekday = date.fromisoformat(slot_date).weekday()
     theme = DAY_THEMES.get(weekday, {}) or {}
@@ -602,34 +603,34 @@ def get_candidates(conn: DictConnection, slot_date: str) -> list:
     return candidates
 
 
-def toggle_grocery(conn: DictConnection, slot_date: str) -> Meal | None:
+def toggle_grocery(conn: DictConnection, user_id: str, slot_date: str) -> Meal | None:
     """Toggle a meal's on_grocery flag. Returns updated meal."""
     row = conn.execute(
-        text("SELECT * FROM meals WHERE slot_date = :slot_date"),
-        {"slot_date": slot_date},
+        text("SELECT * FROM meals WHERE user_id = :user_id AND slot_date = :slot_date"),
+        {"user_id": user_id, "slot_date": slot_date},
     ).fetchone()
     if not row:
         return None
     meal = _row_to_meal(row)
     meal.on_grocery = not meal.on_grocery
-    save_meal(conn, meal)
+    save_meal(conn, user_id, meal)
     return meal
 
 
-def set_all_grocery(conn: DictConnection, start_date: str, end_date: str, on: bool = True) -> None:
+def set_all_grocery(conn: DictConnection, user_id: str, start_date: str, end_date: str, on: bool = True) -> None:
     """Set on_grocery for all meals in a date range."""
     conn.execute(
-        text("UPDATE meals SET on_grocery = :on WHERE slot_date BETWEEN :start_date AND :end_date"),
-        {"on": int(on), "start_date": start_date, "end_date": end_date},
+        text("UPDATE meals SET on_grocery = :on WHERE user_id = :user_id AND slot_date BETWEEN :start_date AND :end_date"),
+        {"on": int(on), "user_id": user_id, "start_date": start_date, "end_date": end_date},
     )
     conn.commit()
 
 
-def accept_meals(conn: DictConnection, start_date: str, end_date: str) -> None:
+def accept_meals(conn: DictConnection, user_id: str, start_date: str, end_date: str) -> None:
     """Legacy: accept all meals in a date range. Now also sets on_grocery."""
     conn.execute(
-        text("UPDATE meals SET status = 'accepted', on_grocery = 1 WHERE slot_date BETWEEN :start_date AND :end_date"),
-        {"start_date": start_date, "end_date": end_date},
+        text("UPDATE meals SET status = 'accepted', on_grocery = 1 WHERE user_id = :user_id AND slot_date BETWEEN :start_date AND :end_date"),
+        {"user_id": user_id, "start_date": start_date, "end_date": end_date},
     )
     conn.commit()
 

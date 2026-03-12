@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../api/client'
 
 const COMMON_REGULARS = [
@@ -15,45 +15,95 @@ const COMMON_PANTRY = [
   'soy sauce', 'vinegar', 'cooking spray',
 ]
 
-export default function OnboardingFlow({ onComplete }) {
-  const [step, setStep] = useState(-1)
+export function WelcomeScreen({ onStart }) {
+  const [phase, setPhase] = useState(0) // 0=idle, 1=tilt, 2=drip, 3=lift, 4=text, 5=btn
+  const ladleRef = useRef(null)
+  const logoRef = useRef(null)
+  const dripRef = useRef(null)
+  const [liftDy, setLiftDy] = useState(0)
+  const [splatPos, setSplatPos] = useState({ x: 0, y: 0 })
 
-  // Welcome screen
-  if (step === -1) {
-    return (
-      <div className="welcome">
-        <div className="welcome-content">
-          <div className="welcome-mark">
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <path d="M24 4C24 4 22 8 22 14C22 18 23 22 24 26C25 22 26 18 26 14C26 8 24 4 24 4Z" fill="currentColor" opacity="0.9"/>
-              <path d="M24 26C24 26 20 28 16 34C14 38 14 42 14 44" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-              <ellipse cx="24" cy="26" rx="3" ry="1.5" fill="currentColor" opacity="0.3"/>
-            </svg>
+  const runAnimation = useCallback(() => {
+    setPhase(0)
+    // Small delay to let layout settle
+    const t0 = setTimeout(() => {
+      // Compute lift distance and drip impact from current layout
+      if (ladleRef.current && logoRef.current) {
+        const ladleRect = ladleRef.current.getBoundingClientRect()
+        const logoRect = logoRef.current.getBoundingClientRect()
+        const dy = (logoRect.top + logoRect.height / 2) - (ladleRect.top + ladleRect.height / 2)
+        setLiftDy(dy)
+        // Impact point: drip starts near bottom-left of ladle, falls ~160px
+        const impactX = ladleRect.left + ladleRect.width * 0.33
+        const impactY = ladleRect.top + ladleRect.height * 0.82 + 160
+        setSplatPos({ x: impactX, y: impactY })
+      }
+      setPhase(1) // tilt
+    }, 100)
+    const t1 = setTimeout(() => setPhase(2), 1100) // drip
+    const t2 = setTimeout(() => setPhase(3), 1960) // lift + text
+    const t3 = setTimeout(() => setPhase(4), 2260) // button
+    return () => { clearTimeout(t0); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+  }, [])
+
+  useEffect(() => {
+    let cleanup
+    const start = () => { cleanup = runAnimation() }
+    if (document.fonts) {
+      document.fonts.ready.then(start)
+    } else {
+      start()
+    }
+    return () => { if (cleanup) cleanup() }
+  }, [runAnimation])
+
+  const ladleClass = phase >= 3 ? 'welcome-ladle upright' : phase >= 1 ? 'welcome-ladle tilt' : 'welcome-ladle'
+  const moverClass = phase >= 3 ? 'welcome-ladle-mover lift' : 'welcome-ladle-mover'
+  const moverStyle = phase >= 3 ? { '--lift-dy': `${liftDy}px` } : {}
+
+  return (
+    <div className="welcome">
+      {/* Splatter dots */}
+      {phase >= 2 && (
+        <>
+          <div className="welcome-splat main" style={{ left: splatPos.x - 9, top: splatPos.y - 4 }} />
+          <div className="welcome-splat a" style={{ left: splatPos.x - 18, top: splatPos.y - 3 }} />
+          <div className="welcome-splat b" style={{ left: splatPos.x - 30, top: splatPos.y + 2 }} />
+          <div className="welcome-splat c" style={{ left: splatPos.x - 14, top: splatPos.y + 6 }} />
+        </>
+      )}
+      <div className="welcome-content">
+        <div className="welcome-logo-slot" ref={logoRef} />
+        <div className={`welcome-wordmark ${phase >= 3 ? 'reveal' : ''}`}>sous<em>chef</em></div>
+        <div className="welcome-tagline-slot">
+          <div className={`welcome-tagline ${phase >= 3 ? 'reveal' : ''}`}>
+            because someone has to plan dinner<br />and get groceries
           </div>
-          <div className="welcome-wordmark">sous<em>chef</em></div>
-          <div className="welcome-tagline">Meal planning that fits your life</div>
-          <button className="welcome-btn" onClick={() => setStep(0)}>
-            Get started
-          </button>
+          <div className={moverClass} ref={ladleRef} style={moverStyle}>
+            <img className={ladleClass} src="/ladle.png" alt="" />
+            {phase >= 2 && phase < 3 && <div className="welcome-drip" ref={dripRef} />}
+          </div>
+        </div>
+        <button className={`welcome-btn ${phase >= 4 ? 'reveal' : ''}`} onClick={onStart}>
+          Get started
+        </button>
+        <div className={`welcome-footer ${phase >= 4 ? 'show' : ''}`}>
+          an <a href="https://aletheia.fyi">aletheia</a> project
         </div>
       </div>
-    )
-  }
+    </div>
+  )
+}
 
-  // Step 0: Store
+export default function OnboardingFlow({ onComplete }) {
+  const [step, setStep] = useState(0)
   const [storeName, setStoreName] = useState('')
   const [storeMode, setStoreMode] = useState('in-person')
   const [addedStores, setAddedStores] = useState([])
-
-  // Step 1: Meals
   const [mealInput, setMealInput] = useState('')
   const [addedMeals, setAddedMeals] = useState([])
-
-  // Step 2: Regulars
   const [selectedRegulars, setSelectedRegulars] = useState(new Set())
   const [regularInput, setRegularInput] = useState('')
-
-  // Step 3: Pantry
   const [selectedPantry, setSelectedPantry] = useState(new Set())
   const [pantryInput, setPantryInput] = useState('')
 
@@ -126,8 +176,9 @@ export default function OnboardingFlow({ onComplete }) {
       for (const name of selectedPantry) {
         try { await api.addPantryItem(name) } catch (e) { /* ignore */ }
       }
-      // Mark onboarding complete
+      // Mark onboarding complete — DB + localStorage
       await api.completeOnboarding()
+      localStorage.setItem('souschef_onboarded', 'true')
       onComplete()
       return
     }

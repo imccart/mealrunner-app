@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, Request, UploadFile, File
 from sqlalchemy import text
 
 from souschef.db import ensure_db
@@ -18,13 +18,14 @@ def _conn():
 
 
 @router.get("/meals")
-async def get_meals():
+async def get_meals(request: Request):
     """Get rolling 7-day meals."""
     from souschef import workflow
 
+    user_id = request.state.user_id
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn)
-    status = workflow.get_workflow_status(conn)
+    mw = workflow.get_rolling_meals(conn, user_id)
+    status = workflow.get_workflow_status(conn, user_id)
     return {
         "start_date": mw.start_date,
         "end_date": mw.end_date,
@@ -48,16 +49,17 @@ async def get_meals():
 
 
 @router.get("/meals/past")
-async def get_past_meals():
+async def get_past_meals(request: Request):
     """Get the 7 days before today."""
     from datetime import date, timedelta
     from souschef.planner import load_meals
 
+    user_id = request.state.user_id
     conn = _conn()
     today = date.today()
     end = today - timedelta(days=1)
     start = today - timedelta(days=7)
-    meals = load_meals(conn, start.isoformat(), end.isoformat())
+    meals = load_meals(conn, start.isoformat(), end.isoformat(), user_id)
     meal_map = {m.slot_date: m for m in meals}
 
     days = []
@@ -75,17 +77,18 @@ async def get_past_meals():
 
 
 @router.post("/meals/{date}/swap")
-async def swap_meal(date: str):
+async def swap_meal(date: str, request: Request):
     """Quick swap — replaces a meal, sets on_grocery=False."""
     from souschef.planner import swap_meal as do_swap
 
+    user_id = request.state.user_id
     conn = _conn()
-    do_swap(conn, date)
-    return await get_meals()
+    do_swap(conn, date, user_id)
+    return await get_meals(request)
 
 
 @router.post("/meals/{date}/swap-smart")
-async def swap_meal_smart(date: str, body: dict = None):
+async def swap_meal_smart(date: str, request: Request, body: dict = None):
     """Smart swap with grocery list awareness.
 
     Step 1 (no body or body.action='preview'):
@@ -97,6 +100,7 @@ async def swap_meal_smart(date: str, body: dict = None):
     from souschef.grocery import build_grocery_list, split_by_store
     from souschef import workflow
 
+    user_id = request.state.user_id
     body = body or {}
     action = body.get("action", "preview")
     conn = _conn()
@@ -104,15 +108,15 @@ async def swap_meal_smart(date: str, body: dict = None):
     if action == "preview":
         # Get the old meal's info before swapping
         old_meal = conn.execute(
-            text("SELECT recipe_id, recipe_name, on_grocery FROM meals WHERE slot_date = :date"),
-            {"date": date},
+            text("SELECT recipe_id, recipe_name, on_grocery FROM meals WHERE slot_date = :date AND user_id = :user_id"),
+            {"date": date, "user_id": user_id},
         ).fetchone()
         old_was_on_list = old_meal and old_meal["on_grocery"]
 
         # Find old meal's unique ingredients (not shared by other on-list meals)
         removable = []
         if old_was_on_list and old_meal["recipe_id"]:
-            mw = workflow.get_rolling_meals(conn)
+            mw = workflow.get_rolling_meals(conn, user_id)
             # Get all ingredients for the OLD meal
             old_ingredients = set()
             rows = conn.execute(
@@ -136,7 +140,7 @@ async def swap_meal_smart(date: str, body: dict = None):
                     shared |= {r["name"].lower() for r in other_rows}
 
             # Removable = old ingredients not shared, not already checked/ordered
-            trip = _get_active_trip(conn)
+            trip = _get_active_trip(conn, user_id)
             if trip:
                 for name_lower in old_ingredients - shared:
                     item = conn.execute(
@@ -152,13 +156,13 @@ async def swap_meal_smart(date: str, body: dict = None):
                         removable.append(display["name"] if display else name_lower)
 
         # Now do the swap
-        do_swap(conn, date)
-        meals_data = await get_meals()
+        do_swap(conn, date, user_id)
+        meals_data = await get_meals(request)
 
         # Get the new meal's name
         new_meal = conn.execute(
-            text("SELECT recipe_name FROM meals WHERE slot_date = :date"),
-            {"date": date},
+            text("SELECT recipe_name FROM meals WHERE slot_date = :date AND user_id = :user_id"),
+            {"date": date, "user_id": user_id},
         ).fetchone()
 
         return {
@@ -177,7 +181,7 @@ async def swap_meal_smart(date: str, body: dict = None):
         remove_items = body.get("remove_items", [])
         add_to_list = body.get("add_to_list", False)
 
-        trip = _get_active_trip(conn)
+        trip = _get_active_trip(conn, user_id)
         if trip:
             # Remove specified items from trip
             for name in remove_items:
@@ -189,14 +193,14 @@ async def swap_meal_smart(date: str, body: dict = None):
         if add_to_list:
             # Toggle on_grocery for the new meal
             conn.execute(
-                text("UPDATE meals SET on_grocery = 1 WHERE slot_date = :date"),
-                {"date": date},
+                text("UPDATE meals SET on_grocery = 1 WHERE slot_date = :date AND user_id = :user_id"),
+                {"date": date, "user_id": user_id},
             )
         else:
             # "No" = mark cart as done (on_grocery stays false — "I've got this covered")
             conn.execute(
-                text("UPDATE meals SET on_grocery = 1 WHERE slot_date = :date"),
-                {"date": date},
+                text("UPDATE meals SET on_grocery = 1 WHERE slot_date = :date AND user_id = :user_id"),
+                {"date": date, "user_id": user_id},
             )
             # Mark it as on_grocery but we won't add ingredients since refresh handles it
 
@@ -204,21 +208,22 @@ async def swap_meal_smart(date: str, body: dict = None):
 
         # Refresh trip items if there's an active trip
         if trip:
-            mw = workflow.get_rolling_meals(conn)
-            _refresh_trip_meal_items(conn, trip["id"], mw)
+            mw = workflow.get_rolling_meals(conn, user_id)
+            _refresh_trip_meal_items(conn, trip["id"], mw, user_id)
 
-        return await get_meals()
+        return await get_meals(request)
 
 
 @router.get("/meals/{date}/sides")
-async def get_sides(date: str):
+async def get_sides(date: str, request: Request):
     """Return available side options for a date's meal."""
     from souschef.planner import SIDE_OPTIONS, NO_SIDE, FIXED_SIDES, load_meals, rolling_range
 
+    user_id = request.state.user_id
     conn = _conn()
     meal_row = conn.execute(
-        text("SELECT recipe_name, side FROM meals WHERE slot_date = :date"),
-        {"date": date},
+        text("SELECT recipe_name, side FROM meals WHERE slot_date = :date AND user_id = :user_id"),
+        {"date": date, "user_id": user_id},
     ).fetchone()
     if not meal_row:
         return {"sides": [], "current": None, "fixed": False}
@@ -230,7 +235,7 @@ async def get_sides(date: str):
         return {"sides": [], "current": FIXED_SIDES[recipe_name], "fixed": True}
 
     s, e = rolling_range()
-    week_meals = load_meals(conn, s, e)
+    week_meals = load_meals(conn, s, e, user_id)
     used_sides = [m.side for m in week_meals if m.slot_date != date and m.side]
 
     sides = []
@@ -244,113 +249,123 @@ async def get_sides(date: str):
 
 
 @router.post("/meals/{date}/set-side")
-async def set_side(date: str, body: dict):
+async def set_side(date: str, body: dict, request: Request):
     """Set a specific side for a date's meal."""
     from souschef.planner import load_meals, save_meal, rolling_range, _row_to_meal
 
+    user_id = request.state.user_id
     conn = _conn()
     row = conn.execute(
-        text("SELECT * FROM meals WHERE slot_date = :date"),
-        {"date": date},
+        text("SELECT * FROM meals WHERE slot_date = :date AND user_id = :user_id"),
+        {"date": date, "user_id": user_id},
     ).fetchone()
     if not row:
-        return await get_meals()
+        return await get_meals(request)
 
     meal = _row_to_meal(row)
     meal.side = body.get("side", "")
-    save_meal(conn, meal)
-    return await get_meals()
+    save_meal(conn, meal, user_id)
+    return await get_meals(request)
 
 
 @router.post("/meals/{date}/swap-side")
-async def swap_side(date: str):
+async def swap_side(date: str, request: Request):
     from souschef.planner import swap_meal_side
 
+    user_id = request.state.user_id
     conn = _conn()
-    swap_meal_side(conn, date)
-    return await get_meals()
+    swap_meal_side(conn, date, user_id)
+    return await get_meals(request)
 
 
 @router.post("/meals/{date}/toggle-grocery")
-async def toggle_grocery(date: str):
+async def toggle_grocery(date: str, request: Request):
     from souschef.planner import toggle_grocery as do_toggle
 
+    user_id = request.state.user_id
     conn = _conn()
-    do_toggle(conn, date)
-    return await get_meals()
+    do_toggle(conn, date, user_id)
+    return await get_meals(request)
 
 
 @router.post("/meals/{date}/set")
-async def set_meal(date: str, body: dict):
+async def set_meal(date: str, body: dict, request: Request):
     from souschef.planner import set_meal as do_set
     from souschef.recipes import get_recipe
 
+    user_id = request.state.user_id
     conn = _conn()
     recipe = get_recipe(conn, body["recipe_id"])
     if recipe:
-        do_set(conn, date, recipe.name)
-    return await get_meals()
+        do_set(conn, date, recipe.name, user_id)
+    return await get_meals(request)
 
 
 @router.post("/meals/suggest")
-async def suggest_meals():
+async def suggest_meals(request: Request):
     from souschef.planner import fill_dates
 
+    user_id = request.state.user_id
     conn = _conn()
     from souschef import workflow
 
-    mw = workflow.get_rolling_meals(conn)
-    fill_dates(conn, mw.start_date, mw.end_date)
-    return await get_meals()
+    mw = workflow.get_rolling_meals(conn, user_id)
+    fill_dates(conn, mw.start_date, mw.end_date, user_id)
+    return await get_meals(request)
 
 
 @router.post("/meals/all-to-grocery")
-async def all_to_grocery():
+async def all_to_grocery(request: Request):
     from souschef.planner import set_all_grocery
 
+    user_id = request.state.user_id
     conn = _conn()
     from souschef import workflow
 
-    mw = workflow.get_rolling_meals(conn)
+    mw = workflow.get_rolling_meals(conn, user_id)
     if mw.meals:
-        set_all_grocery(conn, mw.start_date, mw.end_date, on=True)
-    return await get_meals()
+        set_all_grocery(conn, mw.start_date, mw.end_date, on=True, user_id=user_id)
+    return await get_meals(request)
 
 
 @router.delete("/meals/{date}")
-async def remove_meal(date: str):
+async def remove_meal(date: str, request: Request):
     from souschef.planner import remove_meal as do_remove
 
+    user_id = request.state.user_id
     conn = _conn()
-    do_remove(conn, date)
-    return await get_meals()
+    do_remove(conn, date, user_id)
+    return await get_meals(request)
 
 
 @router.post("/meals/{date}/set-freeform")
-async def set_freeform(date: str, body: dict):
+async def set_freeform(date: str, body: dict, request: Request):
     from souschef.planner import set_freeform_meal
 
+    user_id = request.state.user_id
     conn = _conn()
-    set_freeform_meal(conn, date, body["name"])
-    return await get_meals()
+    set_freeform_meal(conn, date, body["name"], user_id)
+    return await get_meals(request)
 
 
 @router.post("/meals/swap-days")
-async def swap_days(body: dict):
+async def swap_days(body: dict, request: Request):
     from souschef.planner import swap_dates
 
+    user_id = request.state.user_id
     conn = _conn()
-    swap_dates(conn, body["date_a"], body["date_b"])
-    return await get_meals()
+    swap_dates(conn, body["date_a"], body["date_b"], user_id)
+    return await get_meals(request)
 
 
 @router.get("/meals/{date}/candidates")
-async def get_candidates(date: str):
+async def get_candidates(date: str, request: Request):
     from souschef.planner import get_candidates as do_get
     from souschef.recipes import list_recipes
 
+    user_id = request.state.user_id
     conn = _conn()
-    candidates = do_get(conn, date)
+    candidates = do_get(conn, date, user_id)
     all_recipes = list_recipes(conn)
     return {
         "candidates": [_recipe_dict(r) for r in candidates],
@@ -361,14 +376,15 @@ async def get_candidates(date: str):
 # ── Grocery (trip-based) ──────────────────────────────────
 
 
-def _get_active_trip(conn):
+def _get_active_trip(conn, user_id: str):
     """Return the most recent active trip row, or None."""
     return conn.execute(
-        text("SELECT * FROM grocery_trips WHERE active = 1 ORDER BY id DESC LIMIT 1")
+        text("SELECT * FROM grocery_trips WHERE active = 1 AND user_id = :user_id ORDER BY id DESC LIMIT 1"),
+        {"user_id": user_id},
     ).fetchone()
 
 
-def _infer_item_group(conn, name: str) -> str:
+def _infer_item_group(conn, name: str, user_id: str) -> str:
     """Resolve shopping group for an item name via ingredients, regulars, or keyword inference."""
     from souschef.regulars import _infer_group
 
@@ -380,8 +396,8 @@ def _infer_item_group(conn, name: str) -> str:
         return row["aisle"]
 
     row = conn.execute(
-        text("SELECT shopping_group FROM regulars WHERE LOWER(name) = LOWER(:name)"),
-        {"name": name},
+        text("SELECT shopping_group FROM regulars WHERE LOWER(name) = LOWER(:name) AND user_id = :user_id"),
+        {"name": name, "user_id": user_id},
     ).fetchone()
     if row and row["shopping_group"]:
         return row["shopping_group"]
@@ -389,7 +405,7 @@ def _infer_item_group(conn, name: str) -> str:
     return _infer_group(name)
 
 
-def _build_trip_from_meals(conn, trip_id: int, mw) -> None:
+def _build_trip_from_meals(conn, trip_id: int, mw, user_id: str) -> None:
     """Populate trip_items from current meal grocery build + saved extras."""
     from souschef import workflow
     from souschef.feedback import get_skips_for_meal, get_adds_for_meal
@@ -401,10 +417,10 @@ def _build_trip_from_meals(conn, trip_id: int, mw) -> None:
         # Collect skip overrides for all meals on the plan
         skip_pairs: set[tuple[str, str]] = set()
         for meal in grocery_meals:
-            for item_name in get_skips_for_meal(conn, meal.recipe_name):
+            for item_name in get_skips_for_meal(conn, meal.recipe_name, user_id):
                 skip_pairs.add((item_name, meal.recipe_name))
 
-        gl = build_grocery_list(conn, grocery_meals, mw.start_date, mw.end_date)
+        gl = build_grocery_list(conn, grocery_meals, mw.start_date, mw.end_date, user_id)
         by_store = split_by_store(gl)
         for items in by_store.values():
             for item in items:
@@ -430,12 +446,12 @@ def _build_trip_from_meals(conn, trip_id: int, mw) -> None:
         # Add auto-include overrides
         seen_adds: set[str] = set()
         for meal in grocery_meals:
-            for add in get_adds_for_meal(conn, meal.recipe_name):
+            for add in get_adds_for_meal(conn, meal.recipe_name, user_id):
                 name = add["item_name"]
                 if name in seen_adds:
                     continue
                 seen_adds.add(name)
-                group = _infer_item_group(conn, name)
+                group = _infer_item_group(conn, name, user_id)
                 conn.execute(
                     text("""INSERT INTO trip_items
                        (trip_id, name, shopping_group, source, for_meals, meal_count)
@@ -448,9 +464,9 @@ def _build_trip_from_meals(conn, trip_id: int, mw) -> None:
     conn.commit()
 
 
-def _ensure_active_trip(conn, mw):
+def _ensure_active_trip(conn, mw, user_id: str):
     """Find or create an active trip for the current rolling window. Returns trip row."""
-    trip = _get_active_trip(conn)
+    trip = _get_active_trip(conn, user_id)
 
     if trip:
         # If date range shifted, deactivate old trip and create fresh one
@@ -464,26 +480,26 @@ def _ensure_active_trip(conn, mw):
 
     if trip is None:
         cursor = conn.execute(
-            text("""INSERT INTO grocery_trips (trip_type, start_date, end_date, active)
-               VALUES ('plan', :start_date, :end_date, 1)
+            text("""INSERT INTO grocery_trips (trip_type, start_date, end_date, active, user_id)
+               VALUES ('plan', :start_date, :end_date, 1, :user_id)
                RETURNING id"""),
-            {"start_date": mw.start_date, "end_date": mw.end_date},
+            {"start_date": mw.start_date, "end_date": mw.end_date, "user_id": user_id},
         )
         conn.commit()
         trip_id = cursor.fetchone()["id"]
-        _build_trip_from_meals(conn, trip_id, mw)
+        _build_trip_from_meals(conn, trip_id, mw, user_id)
         trip = conn.execute(
             text("SELECT * FROM grocery_trips WHERE id = :id"),
             {"id": trip_id},
         ).fetchone()
     else:
         # Refresh meal-sourced items (meals may have changed) but preserve extras and checked state
-        _refresh_trip_meal_items(conn, trip["id"], mw)
+        _refresh_trip_meal_items(conn, trip["id"], mw, user_id)
 
     return trip
 
 
-def _refresh_trip_meal_items(conn, trip_id: int, mw) -> None:
+def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
     """Re-derive meal-sourced items while preserving extras and checked state."""
     from souschef.grocery import build_grocery_list, split_by_store
 
@@ -492,7 +508,7 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw) -> None:
     # Build fresh meal items
     fresh_meal_items: dict[str, dict] = {}
     if grocery_meals:
-        gl = build_grocery_list(conn, grocery_meals, mw.start_date, mw.end_date)
+        gl = build_grocery_list(conn, grocery_meals, mw.start_date, mw.end_date, user_id)
         by_store = split_by_store(gl)
         for items in by_store.values():
             for item in items:
@@ -544,13 +560,14 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw) -> None:
 
 
 @router.get("/grocery")
-async def get_grocery():
+async def get_grocery(request: Request):
     """Get the grocery list from the active trip."""
     from souschef import workflow
 
+    user_id = request.state.user_id
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn)
-    trip = _ensure_active_trip(conn, mw)
+    mw = workflow.get_rolling_meals(conn, user_id)
+    trip = _ensure_active_trip(conn, mw, user_id)
 
     # Read all items from the trip
     rows = conn.execute(
@@ -587,19 +604,20 @@ async def get_grocery():
 
 
 @router.post("/grocery/add")
-async def add_grocery_item(body: dict):
+async def add_grocery_item(body: dict, request: Request):
     """Add a free-form item to the active trip."""
     from souschef import workflow
 
+    user_id = request.state.user_id
     name = body.get("name", "").strip().lower()
     if not name:
         return {"ok": False}
 
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn)
-    trip = _ensure_active_trip(conn, mw)
+    mw = workflow.get_rolling_meals(conn, user_id)
+    trip = _ensure_active_trip(conn, mw, user_id)
 
-    group = _infer_item_group(conn, name)
+    group = _infer_item_group(conn, name, user_id)
     conn.execute(
         text("""INSERT INTO trip_items
            (trip_id, name, shopping_group, source, for_meals, meal_count)
@@ -609,16 +627,17 @@ async def add_grocery_item(body: dict):
     )
     conn.commit()
 
-    return await get_grocery()
+    return await get_grocery(request)
 
 
 @router.post("/grocery/toggle/{item_name:path}")
-async def toggle_grocery_item(item_name: str):
+async def toggle_grocery_item(item_name: str, request: Request):
     """Toggle an item's checked state on the active trip."""
     from souschef import workflow
 
+    user_id = request.state.user_id
     conn = _conn()
-    trip = _get_active_trip(conn)
+    trip = _get_active_trip(conn, user_id)
     if not trip:
         return {"name": item_name, "checked": False}
 
@@ -657,10 +676,11 @@ async def toggle_grocery_item(item_name: str):
 
 
 @router.get("/grocery/carryover")
-async def get_carryover():
+async def get_carryover(request: Request):
     """Check for unchecked items on the active trip (for carryover prompt)."""
+    user_id = request.state.user_id
     conn = _conn()
-    trip = _get_active_trip(conn)
+    trip = _get_active_trip(conn, user_id)
     if not trip:
         return {"has_carryover": False, "items": []}
 
@@ -674,27 +694,28 @@ async def get_carryover():
 
 
 @router.post("/grocery/build")
-async def build_my_list(body: dict = None):
+async def build_my_list(request: Request, body: dict = None):
     """Create a new grocery trip. Deactivates old trip, creates new one with meal ingredients + carryover."""
     from souschef import workflow
     from souschef.planner import set_all_grocery
 
+    user_id = request.state.user_id
     body = body or {}
     carryover_items = body.get("carryover", [])
     regular_items = body.get("regulars", [])
     pantry_items = body.get("pantry_items", [])
 
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn)
+    mw = workflow.get_rolling_meals(conn, user_id)
 
     # First, toggle all meals to grocery list
     if mw.meals:
-        set_all_grocery(conn, mw.start_date, mw.end_date, on=True)
+        set_all_grocery(conn, mw.start_date, mw.end_date, on=True, user_id=user_id)
         # Refresh mw to pick up the on_grocery changes
-        mw = workflow.get_rolling_meals(conn)
+        mw = workflow.get_rolling_meals(conn, user_id)
 
     # Deactivate current active trip
-    old_trip = _get_active_trip(conn)
+    old_trip = _get_active_trip(conn, user_id)
     if old_trip:
         conn.execute(
             text("UPDATE grocery_trips SET active = 0, completed_at = CURRENT_TIMESTAMP WHERE id = :id"),
@@ -704,21 +725,21 @@ async def build_my_list(body: dict = None):
 
     # Create new trip
     cursor = conn.execute(
-        text("""INSERT INTO grocery_trips (trip_type, start_date, end_date, active)
-           VALUES ('plan', :start_date, :end_date, 1)
+        text("""INSERT INTO grocery_trips (trip_type, start_date, end_date, active, user_id)
+           VALUES ('plan', :start_date, :end_date, 1, :user_id)
            RETURNING id"""),
-        {"start_date": mw.start_date, "end_date": mw.end_date},
+        {"start_date": mw.start_date, "end_date": mw.end_date, "user_id": user_id},
     )
     conn.commit()
     trip_id = cursor.fetchone()["id"]
 
     # Build meal items
-    _build_trip_from_meals(conn, trip_id, mw)
+    _build_trip_from_meals(conn, trip_id, mw, user_id)
 
     # Add carryover items
     for name in carryover_items:
         name_lower = name.lower()
-        group = _infer_item_group(conn, name_lower)
+        group = _infer_item_group(conn, name_lower, user_id)
         conn.execute(
             text("""INSERT INTO trip_items
                (trip_id, name, shopping_group, source, for_meals, meal_count)
@@ -730,7 +751,7 @@ async def build_my_list(body: dict = None):
     # Add selected regulars
     for name in regular_items:
         name_lower = name.lower()
-        group = _infer_item_group(conn, name_lower)
+        group = _infer_item_group(conn, name_lower, user_id)
         conn.execute(
             text("""INSERT INTO trip_items
                (trip_id, name, shopping_group, source, for_meals, meal_count)
@@ -742,7 +763,7 @@ async def build_my_list(body: dict = None):
     # Add selected pantry items (running low)
     for name in pantry_items:
         name_lower = name.lower()
-        group = _infer_item_group(conn, name_lower)
+        group = _infer_item_group(conn, name_lower, user_id)
         conn.execute(
             text("""INSERT INTO trip_items
                (trip_id, name, shopping_group, source, for_meals, meal_count)
@@ -753,15 +774,17 @@ async def build_my_list(body: dict = None):
 
     conn.commit()
 
-    return await get_grocery()
+    return await get_grocery(request)
 
 
 @router.get("/grocery/trips")
-async def get_grocery_trips():
+async def get_grocery_trips(request: Request):
     """Return all grocery trips with summary stats."""
+    user_id = request.state.user_id
     conn = _conn()
     trips = conn.execute(
-        text("SELECT * FROM grocery_trips ORDER BY id DESC")
+        text("SELECT * FROM grocery_trips WHERE user_id = :user_id ORDER BY id DESC"),
+        {"user_id": user_id},
     ).fetchall()
 
     result = []
@@ -796,13 +819,14 @@ async def get_grocery_trips():
 
 
 @router.get("/order")
-async def get_order():
+async def get_order(request: Request):
     """Get order state: pending items, selected items, and summary."""
     from souschef import workflow
 
+    user_id = request.state.user_id
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn)
-    trip = _ensure_active_trip(conn, mw)
+    mw = workflow.get_rolling_meals(conn, user_id)
+    trip = _ensure_active_trip(conn, mw, user_id)
 
     rows = conn.execute(
         text("""SELECT * FROM trip_items WHERE trip_id = :trip_id
@@ -850,7 +874,7 @@ _search_cache: dict[str, tuple[float, dict]] = {}  # {term: (timestamp, response
 _SEARCH_CACHE_TTL = 300  # 5 minutes
 
 @router.get("/order/search/{item_name:path}")
-async def search_order_products(item_name: str):
+async def search_order_products(item_name: str, request: Request):
     """Search Kroger products for a grocery item. Returns products + preferences."""
     import time as _time
     from concurrent.futures import ThreadPoolExecutor
@@ -858,6 +882,8 @@ async def search_order_products(item_name: str):
         search_products_fast, fill_prices, _lookup_food_score,
         get_preferred_products,
     )
+
+    user_id = request.state.user_id
 
     # Return cached response if fresh
     cache_key = item_name.lower().strip()
@@ -876,7 +902,7 @@ async def search_order_products(item_name: str):
     search_term = (ing["root"] if ing and ing["root"] else item_name).strip()
 
     # Get preferences first
-    prefs = get_preferred_products(conn, item_name, limit=3)
+    prefs = get_preferred_products(conn, item_name, limit=3, user_id=user_id)
     pref_list = [{
         "upc": p.upc,
         "name": p.description,
@@ -999,17 +1025,18 @@ async def search_order_products(item_name: str):
 
 
 @router.post("/order/select")
-async def select_product(body: dict):
+async def select_product(body: dict, request: Request):
     """Select a Kroger product for a grocery item."""
     from souschef.kroger import save_preference, KrogerProduct
     from souschef import workflow
 
+    user_id = request.state.user_id
     item_name = body["item_name"]
     product = body["product"]  # {upc, name, brand, size, price, image}
 
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn)
-    trip = _ensure_active_trip(conn, mw)
+    mw = workflow.get_rolling_meals(conn, user_id)
+    trip = _ensure_active_trip(conn, mw, user_id)
 
     conn.execute(
         text("""UPDATE trip_items SET
@@ -1038,19 +1065,20 @@ async def select_product(body: dict):
         description=product["name"], brand=product.get("brand", ""),
         size=product.get("size", ""),
     )
-    save_preference(conn, item_name, kp, source="picked")
+    save_preference(conn, item_name, kp, source="picked", user_id=user_id)
 
-    return await get_order()
+    return await get_order(request)
 
 
 @router.post("/order/deselect/{item_name:path}")
-async def deselect_product(item_name: str):
+async def deselect_product(item_name: str, request: Request):
     """Remove product selection for a grocery item."""
     from souschef import workflow
 
+    user_id = request.state.user_id
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn)
-    trip = _ensure_active_trip(conn, mw)
+    mw = workflow.get_rolling_meals(conn, user_id)
+    trip = _ensure_active_trip(conn, mw, user_id)
 
     conn.execute(
         text("""UPDATE trip_items SET
@@ -1062,18 +1090,19 @@ async def deselect_product(item_name: str):
     )
     conn.commit()
 
-    return await get_order()
+    return await get_order(request)
 
 
 @router.post("/order/submit")
-async def submit_order():
+async def submit_order(request: Request):
     """Submit all selected products to Kroger cart."""
     from souschef.kroger import add_to_cart
     from souschef import workflow
 
+    user_id = request.state.user_id
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn)
-    trip = _ensure_active_trip(conn, mw)
+    mw = workflow.get_rolling_meals(conn, user_id)
+    trip = _ensure_active_trip(conn, mw, user_id)
 
     rows = conn.execute(
         text("""SELECT product_upc FROM trip_items
@@ -1096,10 +1125,11 @@ async def submit_order():
 
 
 @router.get("/receipt")
-async def get_receipt():
+async def get_receipt(request: Request):
     """Get receipt/reconciliation state for the active trip."""
+    user_id = request.state.user_id
     conn = _conn()
-    trip = _get_active_trip(conn)
+    trip = _get_active_trip(conn, user_id)
     if not trip:
         return {"has_trip": False}
 
@@ -1155,15 +1185,16 @@ async def get_receipt():
 
 
 @router.post("/receipt/upload")
-async def upload_receipt(body: dict):
+async def upload_receipt(body: dict, request: Request):
     """Upload and parse a receipt. Accepts {type: 'text'|'pdf_path'|'image_path', content: str}."""
     from souschef.reconcile import (
         parse_receipt_text, parse_receipt_pdf, parse_receipt_image,
         parse_receipt_email, diff_order, diff_grocery_list,
     )
 
+    user_id = request.state.user_id
     conn = _conn()
-    trip = _get_active_trip(conn)
+    trip = _get_active_trip(conn, user_id)
     if not trip:
         return {"ok": False, "error": "No active trip"}
 
@@ -1282,13 +1313,14 @@ async def upload_receipt(body: dict):
 
 
 @router.post("/receipt/upload-file")
-async def upload_receipt_file(file: UploadFile = File(...)):
+async def upload_receipt_file(request: Request, file: UploadFile = File(...)):
     """Upload a receipt file (PDF, image, or .eml) and parse + reconcile it."""
     import tempfile
     import os
 
+    user_id = request.state.user_id
     conn = _conn()
-    trip = _get_active_trip(conn)
+    trip = _get_active_trip(conn, user_id)
     if not trip:
         return {"ok": False, "error": "No active trip"}
 
@@ -1312,7 +1344,7 @@ async def upload_receipt_file(file: UploadFile = File(...)):
             text_content = content.decode("utf-8", errors="replace")
             body = {"type": "text", "content": text_content}
 
-        return await upload_receipt(body)
+        return await upload_receipt(body, request)
     finally:
         try:
             os.unlink(tmp_path)
@@ -1321,10 +1353,11 @@ async def upload_receipt_file(file: UploadFile = File(...)):
 
 
 @router.post("/receipt/resolve")
-async def resolve_receipt_item(body: dict):
+async def resolve_receipt_item(body: dict, request: Request):
     """Resolve a receipt item. {name: str, status: 'matched'|'substituted'|'not_fulfilled', note: str?}"""
+    user_id = request.state.user_id
     conn = _conn()
-    trip = _get_active_trip(conn)
+    trip = _get_active_trip(conn, user_id)
     if not trip:
         return {"ok": False}
 
@@ -1354,12 +1387,13 @@ async def resolve_receipt_item(body: dict):
 
 
 @router.post("/receipt/close")
-async def close_receipt():
+async def close_receipt(request: Request):
     """Finalize the receipt — update preferences, return unfulfilled to list."""
     from souschef.kroger import save_preference, KrogerProduct
 
+    user_id = request.state.user_id
     conn = _conn()
-    trip = _get_active_trip(conn)
+    trip = _get_active_trip(conn, user_id)
     if not trip:
         return {"ok": False, "error": "No active trip"}
 
@@ -1378,7 +1412,7 @@ async def close_receipt():
         )
         kp.price = r["receipt_price"]
         try:
-            save_preference(conn, r["name"], kp, source="receipt")
+            save_preference(conn, r["name"], kp, source="receipt", user_id=user_id)
         except Exception:
             pass
 
@@ -1393,10 +1427,11 @@ async def close_receipt():
 
 
 @router.post("/receipt/close-no-receipt")
-async def close_no_receipt():
+async def close_no_receipt(request: Request):
     """Close trip without receipt — just mark complete with whatever state exists."""
+    user_id = request.state.user_id
     conn = _conn()
-    trip = _get_active_trip(conn)
+    trip = _get_active_trip(conn, user_id)
     if not trip:
         return {"ok": False, "error": "No active trip"}
 
@@ -1413,12 +1448,13 @@ async def close_no_receipt():
 
 
 @router.get("/regulars")
-async def get_regulars():
+async def get_regulars(request: Request):
     """Get all regulars, grouped by shopping_group."""
     from souschef.regulars import list_regulars
 
+    user_id = request.state.user_id
     conn = _conn()
-    regulars = list_regulars(conn, active_only=False)
+    regulars = list_regulars(conn, active_only=False, user_id=user_id)
     return {
         "regulars": [
             {
@@ -1434,12 +1470,13 @@ async def get_regulars():
 
 
 @router.post("/regulars")
-async def add_regular(body: dict):
+async def add_regular(body: dict, request: Request):
     """Add a new regular item."""
     from souschef.regulars import add_regular as do_add
 
+    user_id = request.state.user_id
     conn = _conn()
-    r = do_add(conn, body["name"], body.get("shopping_group", ""), body.get("store_pref", "either"))
+    r = do_add(conn, body["name"], body.get("shopping_group", ""), body.get("store_pref", "either"), user_id=user_id)
     return {
         "id": r.id,
         "name": r.name,
@@ -1450,12 +1487,13 @@ async def add_regular(body: dict):
 
 
 @router.post("/regulars/{regular_id}/toggle")
-async def toggle_regular(regular_id: int):
+async def toggle_regular(regular_id: int, request: Request):
     """Toggle a regular's active state."""
     from souschef.regulars import toggle_regular as do_toggle
 
+    user_id = request.state.user_id
     conn = _conn()
-    r = do_toggle(conn, regular_id)
+    r = do_toggle(conn, regular_id, user_id)
     if r is None:
         return {"ok": False}
     return {
@@ -1468,25 +1506,27 @@ async def toggle_regular(regular_id: int):
 
 
 @router.delete("/regulars/{name:path}")
-async def remove_regular(name: str):
+async def remove_regular(name: str, request: Request):
     """Soft-delete a regular."""
     from souschef.regulars import remove_regular as do_remove
 
+    user_id = request.state.user_id
     conn = _conn()
-    ok = do_remove(conn, name)
+    ok = do_remove(conn, name, user_id)
     return {"ok": ok}
 
 
 @router.get("/grocery/suggestions")
-async def grocery_suggestions():
+async def grocery_suggestions(request: Request):
     """Return all known item names for autocomplete."""
     from souschef.regulars import list_regulars
 
+    user_id = request.state.user_id
     conn = _conn()
     names: set[str] = set()
 
     # Regulars
-    for r in list_regulars(conn, active_only=False):
+    for r in list_regulars(conn, active_only=False, user_id=user_id):
         names.add(r.name)
 
     # All ingredients
@@ -1501,7 +1541,7 @@ async def grocery_suggestions():
 
 
 @router.get("/recipes")
-async def get_recipes():
+async def get_recipes(request: Request):
     from souschef.recipes import list_recipes
 
     conn = _conn()
@@ -1513,12 +1553,13 @@ async def get_recipes():
 
 
 @router.get("/pantry")
-async def get_pantry():
+async def get_pantry(request: Request):
     """List all pantry items."""
     from souschef.pantry import list_pantry
 
+    user_id = request.state.user_id
     conn = _conn()
-    items = list_pantry(conn)
+    items = list_pantry(conn, user_id)
     return {
         "items": [
             {
@@ -1534,10 +1575,11 @@ async def get_pantry():
 
 
 @router.post("/pantry")
-async def add_pantry(body: dict):
+async def add_pantry(body: dict, request: Request):
     """Add a pantry item by ingredient name."""
     from souschef.pantry import add_pantry_item
 
+    user_id = request.state.user_id
     conn = _conn()
     name = body.get("name", "").strip()
     quantity = body.get("quantity", 1.0)
@@ -1555,19 +1597,20 @@ async def add_pantry(body: dict):
         )
         conn.commit()
 
-    result = add_pantry_item(conn, name.lower(), quantity, unit)
+    result = add_pantry_item(conn, name.lower(), quantity, unit, user_id)
     if result is None:
         return {"ok": False}
     return {"ok": True, "id": result.id, "name": result.ingredient_name}
 
 
 @router.delete("/pantry/{item_id}")
-async def remove_pantry(item_id: int):
+async def remove_pantry(item_id: int, request: Request):
     """Remove a pantry item."""
     conn = _conn()
+    user_id = request.state.user_id
     conn.execute(
-        text("DELETE FROM pantry WHERE id = :id"),
-        {"id": item_id},
+        text("DELETE FROM pantry WHERE id = :id AND user_id = :user_id"),
+        {"id": item_id, "user_id": user_id},
     )
     conn.commit()
     return {"ok": True}
@@ -1577,7 +1620,7 @@ async def remove_pantry(item_id: int):
 
 
 @router.get("/stores")
-async def get_stores():
+async def get_stores(request: Request):
     """List configured stores."""
     from souschef.stores import list_stores
 
@@ -1585,7 +1628,7 @@ async def get_stores():
 
 
 @router.post("/stores")
-async def add_store(body: dict):
+async def add_store(body: dict, request: Request):
     """Add a store."""
     from souschef.stores import add_store as do_add
 
@@ -1602,7 +1645,7 @@ async def add_store(body: dict):
 
 
 @router.delete("/stores/{key}")
-async def remove_store(key: str):
+async def remove_store(key: str, request: Request):
     """Remove a store by key."""
     from souschef.stores import remove_store as do_remove
 
@@ -1614,31 +1657,34 @@ async def remove_store(key: str):
 
 
 @router.get("/onboarding/status")
-async def onboarding_status():
+async def onboarding_status(request: Request):
     """Check whether onboarding has been completed."""
+    user_id = request.state.user_id
     conn = _conn()
     row = conn.execute(
-        text("SELECT value FROM settings WHERE key = 'onboarding_complete' AND (user_id IS NULL OR user_id = '')"),
+        text("SELECT value FROM settings WHERE key = 'onboarding_complete' AND user_id = :user_id"),
+        {"user_id": user_id},
     ).fetchone()
     return {"completed": row is not None and row["value"] == "true"}
 
 
 @router.post("/onboarding/complete")
-async def onboarding_complete():
+async def onboarding_complete(request: Request):
     """Mark onboarding as done."""
+    user_id = request.state.user_id
     conn = _conn()
-    # Use empty string for global (NULL breaks unique constraint in some DBs)
     conn.execute(
         text("""INSERT INTO settings (user_id, key, value, updated_at)
-           VALUES ('', 'onboarding_complete', 'true', CURRENT_TIMESTAMP)
+           VALUES (:user_id, 'onboarding_complete', 'true', CURRENT_TIMESTAMP)
            ON CONFLICT (user_id, key) DO UPDATE SET value = 'true', updated_at = CURRENT_TIMESTAMP"""),
+        {"user_id": user_id},
     )
     conn.commit()
     return {"ok": True}
 
 
 @router.post("/meals/add-to-pool")
-async def add_meal_to_pool(body: dict):
+async def add_meal_to_pool(body: dict, request: Request):
     """Create a recipe stub (name only) for onboarding. No ingredients."""
     conn = _conn()
     name = body.get("name", "").strip()
@@ -1668,10 +1714,11 @@ async def add_meal_to_pool(body: dict):
 
 
 @router.get("/grocery/active-trip")
-async def get_active_trip_info():
+async def get_active_trip_info(request: Request):
     """Return info about the active trip, or null if none."""
+    user_id = request.state.user_id
     conn = _conn()
-    trip = _get_active_trip(conn)
+    trip = _get_active_trip(conn, user_id)
     if not trip:
         return {"active_trip": None}
 
@@ -1700,16 +1747,18 @@ async def get_active_trip_info():
 
 
 @router.get("/meals/history")
-async def get_meal_history():
+async def get_meal_history(request: Request):
     """Get meal frequency stats from all history."""
+    user_id = request.state.user_id
     conn = _conn()
     rows = conn.execute(
         text("""SELECT recipe_id, recipe_name, COUNT(*) as cook_count,
                   MAX(slot_date) as last_made
            FROM meals
-           WHERE recipe_id IS NOT NULL
+           WHERE recipe_id IS NOT NULL AND user_id = :user_id
            GROUP BY recipe_id
-           ORDER BY cook_count DESC""")
+           ORDER BY cook_count DESC"""),
+        {"user_id": user_id},
     ).fetchall()
     return {
         "history": [
@@ -1728,15 +1777,17 @@ async def get_meal_history():
 
 
 @router.get("/learning/suggestions")
-async def get_learning_suggestions():
+async def get_learning_suggestions(request: Request):
     """Suggest regulars additions/removals based on trip patterns."""
     from souschef.regulars import list_regulars
 
+    user_id = request.state.user_id
     conn = _conn()
 
     # Get completed trips (last 5)
     trips = conn.execute(
-        text("SELECT id FROM grocery_trips WHERE active = 0 ORDER BY id DESC LIMIT 5")
+        text("SELECT id FROM grocery_trips WHERE active = 0 AND user_id = :user_id ORDER BY id DESC LIMIT 5"),
+        {"user_id": user_id},
     ).fetchall()
 
     if len(trips) < 3:
@@ -1745,7 +1796,7 @@ async def get_learning_suggestions():
     trip_ids = [t["id"] for t in trips]
 
     # Items that appear on 3+ consecutive trips but aren't regulars
-    regulars = list_regulars(conn, active_only=False)
+    regulars = list_regulars(conn, active_only=False, user_id=user_id)
     regular_names = {r.name.lower() for r in regulars}
 
     item_freq = {}
@@ -1762,8 +1813,8 @@ async def get_learning_suggestions():
         if count >= 3 and name not in regular_names:
             # Check not dismissed
             dismissed = conn.execute(
-                text("SELECT 1 FROM learning_dismissed WHERE name = :name"),
-                {"name": name},
+                text("SELECT 1 FROM learning_dismissed WHERE name = :name AND user_id = :user_id"),
+                {"name": name, "user_id": user_id},
             ).fetchone()
             if not dismissed:
                 add_suggestions.append({"name": name, "trip_count": count})
@@ -1787,8 +1838,8 @@ async def get_learning_suggestions():
                 unchecked_count += 1  # not even on the trip
         if unchecked_count >= 3:
             dismissed = conn.execute(
-                text("SELECT 1 FROM learning_dismissed WHERE name = :name"),
-                {"name": name_lower},
+                text("SELECT 1 FROM learning_dismissed WHERE name = :name AND user_id = :user_id"),
+                {"name": name_lower, "user_id": user_id},
             ).fetchone()
             if not dismissed:
                 remove_suggestions.append({"name": reg.name, "id": reg.id})
@@ -1800,12 +1851,13 @@ async def get_learning_suggestions():
 
 
 @router.post("/learning/dismiss/{name:path}")
-async def dismiss_learning(name: str):
+async def dismiss_learning(name: str, request: Request):
     """Dismiss a learning suggestion so it doesn't appear again."""
+    user_id = request.state.user_id
     conn = _conn()
     conn.execute(
-        text("INSERT INTO learning_dismissed (name) VALUES (:name) ON CONFLICT DO NOTHING"),
-        {"name": name.lower()},
+        text("INSERT INTO learning_dismissed (name, user_id) VALUES (:name, :user_id) ON CONFLICT DO NOTHING"),
+        {"name": name.lower(), "user_id": user_id},
     )
     conn.commit()
     return {"ok": True}
@@ -1815,20 +1867,22 @@ async def dismiss_learning(name: str):
 
 
 @router.get("/feedback/patterns")
-async def get_feedback_patterns():
+async def get_feedback_patterns(request: Request):
     """Detect shopping patterns from completed trips."""
     from souschef.feedback import detect_skipped_items, detect_extra_meal_links
 
+    user_id = request.state.user_id
     conn = _conn()
     return {
-        "skipped": detect_skipped_items(conn),
-        "extra_links": detect_extra_meal_links(conn),
+        "skipped": detect_skipped_items(conn, user_id),
+        "extra_links": detect_extra_meal_links(conn, user_id),
     }
 
 
 @router.post("/feedback/dismiss")
-async def dismiss_feedback(body: dict):
+async def dismiss_feedback(body: dict, request: Request):
     """Dismiss a feedback suggestion. Body: {item, meal, kind: 'skip'|'extra_link'}."""
+    user_id = request.state.user_id
     item = body.get("item", "").strip().lower()
     meal = body.get("meal", "").strip().lower()
     kind = body.get("kind", "skip")
@@ -1838,16 +1892,17 @@ async def dismiss_feedback(body: dict):
     key = f"{item}::{meal}"
     conn = _conn()
     conn.execute(
-        text("INSERT INTO learning_dismissed (name, kind) VALUES (:name, :kind) ON CONFLICT DO NOTHING"),
-        {"name": key, "kind": kind},
+        text("INSERT INTO learning_dismissed (name, kind, user_id) VALUES (:name, :kind, :user_id) ON CONFLICT DO NOTHING"),
+        {"name": key, "kind": kind, "user_id": user_id},
     )
     conn.commit()
     return {"ok": True}
 
 
 @router.post("/feedback/apply")
-async def apply_feedback(body: dict):
+async def apply_feedback(body: dict, request: Request):
     """Apply a feedback override. Body: {item, meal, action: 'skip'|'add'}."""
+    user_id = request.state.user_id
     item = body.get("item", "").strip().lower()
     meal = body.get("meal", "").strip()
     action = body.get("action", "skip")
@@ -1856,10 +1911,10 @@ async def apply_feedback(body: dict):
 
     conn = _conn()
     conn.execute(
-        text("""INSERT INTO meal_item_overrides (recipe_name, item_name, action)
-           VALUES (:meal, :item, :action)
-           ON CONFLICT (recipe_name, item_name) DO UPDATE SET action = :action"""),
-        {"meal": meal, "item": item, "action": action},
+        text("""INSERT INTO meal_item_overrides (recipe_name, item_name, action, user_id)
+           VALUES (:meal, :item, :action, :user_id)
+           ON CONFLICT (recipe_name, item_name, user_id) DO UPDATE SET action = :action"""),
+        {"meal": meal, "item": item, "action": action, "user_id": user_id},
     )
     conn.commit()
 
@@ -1867,24 +1922,26 @@ async def apply_feedback(body: dict):
     kind = "skip" if action == "skip" else "extra_link"
     key = f"{item}::{meal.lower()}"
     conn.execute(
-        text("INSERT INTO learning_dismissed (name, kind) VALUES (:name, :kind) ON CONFLICT DO NOTHING"),
-        {"name": key, "kind": kind},
+        text("INSERT INTO learning_dismissed (name, kind, user_id) VALUES (:name, :kind, :user_id) ON CONFLICT DO NOTHING"),
+        {"name": key, "kind": kind, "user_id": user_id},
     )
     conn.commit()
     return {"ok": True}
 
 
 @router.get("/feedback/overrides")
-async def get_feedback_overrides():
+async def get_feedback_overrides(request: Request):
     """Get all active meal item overrides."""
     from souschef.feedback import get_overrides
+    user_id = request.state.user_id
     conn = _conn()
-    return {"overrides": get_overrides(conn)}
+    return {"overrides": get_overrides(conn, user_id)}
 
 
 @router.delete("/feedback/overrides")
-async def remove_feedback_override(body: dict):
+async def remove_feedback_override(body: dict, request: Request):
     """Remove an override. Body: {item, meal}."""
+    user_id = request.state.user_id
     item = body.get("item", "").strip().lower()
     meal = body.get("meal", "").strip()
     if not item or not meal:
@@ -1892,8 +1949,8 @@ async def remove_feedback_override(body: dict):
 
     conn = _conn()
     conn.execute(
-        text("DELETE FROM meal_item_overrides WHERE LOWER(recipe_name) = LOWER(:meal) AND item_name = :item"),
-        {"meal": meal, "item": item},
+        text("DELETE FROM meal_item_overrides WHERE LOWER(recipe_name) = LOWER(:meal) AND item_name = :item AND user_id = :user_id"),
+        {"meal": meal, "item": item, "user_id": user_id},
     )
     conn.commit()
     return {"ok": True}

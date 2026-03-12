@@ -6,7 +6,8 @@ import GroceryPage from './components/GroceryPage'
 import OrderPage from './components/OrderPage'
 import ReceiptPage from './components/ReceiptPage'
 import PreferencesSheet from './components/PreferencesSheet'
-import OnboardingFlow from './components/OnboardingFlow'
+import OnboardingFlow, { WelcomeScreen } from './components/OnboardingFlow'
+import LoginPage from './components/LoginPage'
 import StatusBar from './components/StatusBar'
 
 function useIsWide(breakpoint = 1024) {
@@ -35,22 +36,52 @@ function formatDateRange(start, end) {
 function App() {
   const [page, setPage] = useState('plan')
   const [showPrefs, setShowPrefs] = useState(false)
+  const [authed, setAuthed] = useState(null)
   const [onboardingDone, setOnboardingDone] = useState(null)
+  const [welcomed, setWelcomed] = useState(() => localStorage.getItem('souschef_welcomed') === 'true')
   const isWide = useIsWide()
   const [mealData, setMealData] = useState(null)
 
   const handlePlanLoad = useCallback((data) => setMealData(data), [])
 
   useEffect(() => {
-    api.getOnboardingStatus()
-      .then(data => setOnboardingDone(data.completed))
-      .catch(() => setOnboardingDone(true))
+    api.getMe()
+      .then(() => {
+        setAuthed(true)
+        // Fast path: skip round trip if localStorage says onboarded
+        if (localStorage.getItem('souschef_onboarded') === 'true') {
+          setOnboardingDone(true)
+          return
+        }
+        // Authoritative check from DB
+        return api.getOnboardingStatus()
+          .then(data => {
+            setOnboardingDone(data.completed)
+            if (data.completed) localStorage.setItem('souschef_onboarded', 'true')
+          })
+      })
+      .catch(() => {
+        setAuthed(false)
+        setOnboardingDone(false)
+      })
   }, [])
 
   const dateRange = mealData ? formatDateRange(mealData.start_date, mealData.end_date) : null
 
-  if (onboardingDone === null) {
+  if (authed === null) {
     return <div className="loading" style={{ paddingTop: '40vh' }}>Setting the table...</div>
+  }
+
+  // Welcome → Login → Onboarding → App
+  if (!authed && !welcomed) {
+    return <WelcomeScreen onStart={() => {
+      localStorage.setItem('souschef_welcomed', 'true')
+      setWelcomed(true)
+    }} />
+  }
+
+  if (!authed) {
+    return <LoginPage />
   }
 
   if (!onboardingDone) {

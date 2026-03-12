@@ -229,6 +229,18 @@ export default function PreferencesSheet({ onClose }) {
           </div>
         </AccordionSection>
 
+        {/* Account */}
+        <AccordionSection title="Account">
+          <button className="prefs-logout" onClick={async () => {
+            await api.logout()
+            localStorage.removeItem('souschef_onboarded')
+            localStorage.removeItem('souschef_welcomed')
+            window.location.reload()
+          }}>
+            Sign out
+          </button>
+        </AccordionSection>
+
         {/* About */}
         <div className="prefs-about">
           <div className="brand-name">sous<em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>chef</em></div>

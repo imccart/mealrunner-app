@@ -318,7 +318,7 @@ def _get_product_prices(product_ids: list[str], location_id: str) -> dict[str, d
     return results
 
 
-def get_preferred_products(conn: DictConnection, search_term: str, limit: int = 3) -> list[KrogerProduct]:
+def get_preferred_products(conn: DictConnection, user_id: str, search_term: str, limit: int = 3) -> list[KrogerProduct]:
     """Get recent preferred products for a search term, ranked by recency then selection > receipt.
 
     Returns up to `limit` distinct products from the last 3 orders.
@@ -326,9 +326,9 @@ def get_preferred_products(conn: DictConnection, search_term: str, limit: int = 
     rows = conn.execute(
         text("""SELECT upc, product_description, size, source, last_picked, order_id
            FROM product_preferences
-           WHERE search_term = :search_term
+           WHERE user_id = :user_id AND search_term = :search_term
            ORDER BY last_picked DESC"""),
-        {"search_term": search_term.lower()},
+        {"user_id": user_id, "search_term": search_term.lower()},
     ).fetchall()
     if not rows:
         return []
@@ -341,7 +341,7 @@ def get_preferred_products(conn: DictConnection, search_term: str, limit: int = 
             seen_upcs.add(r["upc"])
             d = dict(r)
             # Look up rating from product_ratings
-            ratings = get_product_ratings(conn, d["upc"])
+            ratings = get_product_ratings(conn, d["upc"], user_id)
             d["rating"] = ratings["your_rating"]
             unique.append(d)
 
@@ -367,18 +367,18 @@ def get_preferred_products(conn: DictConnection, search_term: str, limit: int = 
     return results
 
 
-def get_preferred_product(conn: DictConnection, search_term: str) -> KrogerProduct | None:
+def get_preferred_product(conn: DictConnection, user_id: str, search_term: str) -> KrogerProduct | None:
     """Get the top preferred product for a search term. Convenience wrapper."""
-    prefs = get_preferred_products(conn, search_term, limit=1)
+    prefs = get_preferred_products(conn, user_id, search_term, limit=1)
     return prefs[0] if prefs else None
 
 
-def save_preference(conn: DictConnection, search_term: str, product: KrogerProduct,
+def save_preference(conn: DictConnection, user_id: str, search_term: str, product: KrogerProduct,
                     source: str = "picked", order_id: str = "") -> None:
     """Save or update a product preference for a search term."""
     conn.execute(
-        text("""INSERT INTO product_preferences (search_term, upc, product_description, size, source, order_id)
-           VALUES (:search_term, :upc, :product_description, :size, :source, :order_id)
+        text("""INSERT INTO product_preferences (user_id, search_term, upc, product_description, size, source, order_id)
+           VALUES (:user_id, :search_term, :upc, :product_description, :size, :source, :order_id)
            ON CONFLICT(search_term, upc) DO UPDATE SET
                product_description = excluded.product_description,
                size = excluded.size,
@@ -386,7 +386,7 @@ def save_preference(conn: DictConnection, search_term: str, product: KrogerProdu
                last_picked = CURRENT_TIMESTAMP,
                source = excluded.source,
                order_id = excluded.order_id"""),
-        {"search_term": search_term.lower(), "upc": product.upc,
+        {"user_id": user_id, "search_term": search_term.lower(), "upc": product.upc,
          "product_description": product.description, "size": product.size,
          "source": source, "order_id": order_id},
     )
@@ -445,25 +445,25 @@ def get_product_history(conn: DictConnection, search_term: str,
     """
     # Check if any receipt-confirmed products exist
     has_receipt = conn.execute(
-        text("SELECT 1 FROM product_preferences WHERE search_term = :search_term AND source = 'receipt' LIMIT 1"),
-        {"search_term": search_term.lower()},
+        text("SELECT 1 FROM product_preferences WHERE user_id = :user_id AND search_term = :search_term AND source = 'receipt' LIMIT 1"),
+        {"user_id": user_id, "search_term": search_term.lower()},
     ).fetchone()
 
     if has_receipt:
         rows = conn.execute(
             text("""SELECT p.upc, p.product_description, p.size, p.times_picked, p.last_picked, p.source
                FROM product_preferences p
-               WHERE p.search_term = :search_term AND p.source = 'receipt'
+               WHERE p.user_id = :user_id AND p.search_term = :search_term AND p.source = 'receipt'
                ORDER BY p.last_picked DESC"""),
-            {"search_term": search_term.lower()},
+            {"user_id": user_id, "search_term": search_term.lower()},
         ).fetchall()
     else:
         rows = conn.execute(
             text("""SELECT p.upc, p.product_description, p.size, p.times_picked, p.last_picked, p.source
                FROM product_preferences p
-               WHERE p.search_term = :search_term
+               WHERE p.user_id = :user_id AND p.search_term = :search_term
                ORDER BY p.last_picked DESC"""),
-            {"search_term": search_term.lower()},
+            {"user_id": user_id, "search_term": search_term.lower()},
         ).fetchall()
 
     results = []

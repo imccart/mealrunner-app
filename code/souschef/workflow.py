@@ -32,10 +32,11 @@ _RECONCILE_FILE = _CONFIG_DIR / "reconcile_result.json"
 # ── Meal Operations ───────────────────────────────────
 
 
-def list_weeks(conn: DictConnection) -> list[dict]:
+def list_weeks(conn: DictConnection, user_id: str) -> list[dict]:
     """List all weeks that have meals. Returns [{start_date, end_date, meal_count, accepted}, ...]."""
     rows = conn.execute(
-        text("SELECT slot_date FROM meals ORDER BY slot_date")
+        text("SELECT slot_date FROM meals WHERE user_id = :user_id ORDER BY slot_date"),
+        {"user_id": user_id},
     ).fetchall()
     if not rows:
         return []
@@ -52,7 +53,8 @@ def list_weeks(conn: DictConnection) -> list[dict]:
 
     # Get status for each meal
     all_meals = conn.execute(
-        text("SELECT slot_date, status FROM meals")
+        text("SELECT slot_date, status FROM meals WHERE user_id = :user_id"),
+        {"user_id": user_id},
     ).fetchall()
     status_map = {r["slot_date"]: r["status"] for r in all_meals}
 
@@ -72,22 +74,22 @@ def list_weeks(conn: DictConnection) -> list[dict]:
 
 
 def get_meals_for_week(
-    conn: DictConnection, week: str | None = None
+    conn: DictConnection, user_id: str, week: str | None = None
 ) -> MealWeek:
     """Load meals for a week. week is any date in that week (defaults to current)."""
-    return load_meal_week(conn, week)
+    return load_meal_week(conn, user_id, week)
 
 
-def get_rolling_meals(conn: DictConnection) -> MealWeek:
+def get_rolling_meals(conn: DictConnection, user_id: str) -> MealWeek:
     """Load meals for the rolling 7-day window starting today."""
-    return load_rolling_week(conn)
+    return load_rolling_week(conn, user_id)
 
 
 def get_meals(
-    conn: DictConnection, start_date: str, end_date: str
+    conn: DictConnection, user_id: str, start_date: str, end_date: str
 ) -> list[Meal]:
     """Load meals in a date range."""
-    return load_meals(conn, start_date, end_date)
+    return load_meals(conn, user_id, start_date, end_date)
 
 
 def parse_day(day_str: str) -> int | None:
@@ -104,9 +106,9 @@ def parse_day(day_str: str) -> int | None:
 # ── Legacy compatibility ──────────────────────────────
 
 
-def list_plans(conn: DictConnection) -> list[dict]:
+def list_plans(conn: DictConnection, user_id: str) -> list[dict]:
     """Legacy: list plans. Now returns weeks."""
-    weeks = list_weeks(conn)
+    weeks = list_weeks(conn, user_id)
     # Add synthetic 'id' for templates that still reference it
     for i, w in enumerate(weeks):
         w["id"] = i + 1
@@ -204,6 +206,7 @@ def remove_grocery_item(name: str) -> None:
 
 def reconstruct_grocery_list(
     conn: DictConnection,
+    user_id: str,
     meals: list[Meal],
     start_date: str = "",
     end_date: str = "",
@@ -227,7 +230,7 @@ def reconstruct_grocery_list(
     saved_meal_set = {n.lower() for n in sel.meal_items}
     gl.items = [item for item in gl.items if item.ingredient_name.lower() in saved_meal_set]
 
-    all_regulars = list_regulars(conn)
+    all_regulars = list_regulars(conn, user_id)
     regular_map = {r.name.lower(): r for r in all_regulars}
     selected_regulars = [regular_map[n.lower()] for n in sel.regulars if n.lower() in regular_map]
 
@@ -332,6 +335,7 @@ def clear_reconcile_result() -> None:
 
 def reconcile_receipt(
     conn: DictConnection,
+    user_id: str,
     receipt_items: list[dict],
     start_date: str = "",
     end_date: str = "",
@@ -355,7 +359,7 @@ def reconcile_receipt(
         upc = rec.get("upc", "")
         if upc:
             p = KrogerProduct(product_id="", upc=upc, description=rec["item"], brand="", size="")
-            save_preference(conn, m["grocery_name"], p, source="receipt")
+            save_preference(conn, user_id, m["grocery_name"], p, source="receipt")
             prefs_saved += 1
 
     save_reconcile_result([m["grocery_name"] for m in result["matched"]])
@@ -399,6 +403,7 @@ def parse_receipt(source_path: str) -> list[dict]:
 
 def export_to_sheets(
     conn: DictConnection,
+    user_id: str,
     start_date: str = "",
     end_date: str = "",
     plan_id: int | None = None,
@@ -410,7 +415,7 @@ def export_to_sheets(
 
     # Load meals for the date range
     if start_date and end_date:
-        meals = load_meals(conn, start_date, end_date)
+        meals = load_meals(conn, user_id, start_date, end_date)
     else:
         # Legacy: fall back to plan_id
         plan = get_plan(conn, plan_id)
@@ -418,10 +423,10 @@ def export_to_sheets(
             return None
         s, e = week_range(plan.week_of)
         start_date, end_date = s, e
-        meals = load_meals(conn, s, e)
+        meals = load_meals(conn, user_id, s, e)
 
     rebuilt = reconstruct_grocery_list(
-        conn, meals, start_date, end_date, plan_id=plan_id or 0
+        conn, user_id, meals, start_date, end_date, plan_id=plan_id or 0
     )
     if rebuilt is None:
         return None
@@ -454,11 +459,11 @@ def export_to_sheets(
 # ── Workflow Status ─────────────────────────────────────
 
 
-def get_workflow_status(conn: DictConnection) -> WorkflowStatus:
+def get_workflow_status(conn: DictConnection, user_id: str) -> WorkflowStatus:
     """Get the current state of the workflow for the rolling window."""
     from souschef.kroger import load_order
 
-    mw = load_rolling_week(conn)
+    mw = load_rolling_week(conn, user_id)
     if not mw.meals:
         return WorkflowStatus()
 

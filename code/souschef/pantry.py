@@ -8,12 +8,14 @@ from souschef.database import DictConnection
 from souschef.models import PantryItem
 
 
-def list_pantry(conn: DictConnection) -> list[PantryItem]:
+def list_pantry(conn: DictConnection, user_id: str) -> list[PantryItem]:
     rows = conn.execute(
         text("""SELECT p.*, i.name AS ingredient_name
            FROM pantry p
            JOIN ingredients i ON i.id = p.ingredient_id
-           ORDER BY i.name""")
+           WHERE p.user_id = :user_id
+           ORDER BY i.name"""),
+        {"user_id": user_id},
     ).fetchall()
     return [
         PantryItem(
@@ -29,7 +31,7 @@ def list_pantry(conn: DictConnection) -> list[PantryItem]:
 
 
 def add_pantry_item(
-    conn: DictConnection, ingredient_name: str, quantity: float, unit: str
+    conn: DictConnection, user_id: str, ingredient_name: str, quantity: float, unit: str
 ) -> PantryItem | None:
     ing = conn.execute(
         text("SELECT id FROM ingredients WHERE name = :name"), {"name": ingredient_name}
@@ -37,21 +39,30 @@ def add_pantry_item(
     if ing is None:
         return None
 
-    conn.execute(
-        text("""INSERT INTO pantry (ingredient_id, quantity, unit)
-           VALUES (:ingredient_id, :quantity, :unit)
-           ON CONFLICT(ingredient_id) DO UPDATE SET
-               quantity = quantity + excluded.quantity,
-               updated_at = CURRENT_TIMESTAMP"""),
-        {"ingredient_id": ing["id"], "quantity": quantity, "unit": unit},
-    )
+    existing = conn.execute(
+        text("SELECT id FROM pantry WHERE user_id = :user_id AND ingredient_id = :ingredient_id"),
+        {"user_id": user_id, "ingredient_id": ing["id"]},
+    ).fetchone()
+
+    if existing:
+        conn.execute(
+            text("""UPDATE pantry SET quantity = quantity + :quantity, updated_at = CURRENT_TIMESTAMP
+               WHERE id = :id"""),
+            {"quantity": quantity, "id": existing["id"]},
+        )
+    else:
+        conn.execute(
+            text("""INSERT INTO pantry (user_id, ingredient_id, quantity, unit)
+               VALUES (:user_id, :ingredient_id, :quantity, :unit)"""),
+            {"user_id": user_id, "ingredient_id": ing["id"], "quantity": quantity, "unit": unit},
+        )
     conn.commit()
 
     row = conn.execute(
         text("""SELECT p.*, i.name AS ingredient_name
            FROM pantry p JOIN ingredients i ON i.id = p.ingredient_id
-           WHERE p.ingredient_id = :ingredient_id"""),
-        {"ingredient_id": ing["id"]},
+           WHERE p.user_id = :user_id AND p.ingredient_id = :ingredient_id"""),
+        {"user_id": user_id, "ingredient_id": ing["id"]},
     ).fetchone()
 
     return PantryItem(
@@ -65,7 +76,7 @@ def add_pantry_item(
 
 
 def set_pantry_item(
-    conn: DictConnection, ingredient_name: str, quantity: float, unit: str
+    conn: DictConnection, user_id: str, ingredient_name: str, quantity: float, unit: str
 ) -> PantryItem | None:
     ing = conn.execute(
         text("SELECT id FROM ingredients WHERE name = :name"), {"name": ingredient_name}
@@ -75,28 +86,37 @@ def set_pantry_item(
 
     if quantity <= 0:
         conn.execute(
-            text("DELETE FROM pantry WHERE ingredient_id = :ingredient_id"),
-            {"ingredient_id": ing["id"]},
+            text("DELETE FROM pantry WHERE user_id = :user_id AND ingredient_id = :ingredient_id"),
+            {"user_id": user_id, "ingredient_id": ing["id"]},
         )
         conn.commit()
         return PantryItem(id=None, ingredient_id=ing["id"], quantity=0, unit=unit,
                           ingredient_name=ingredient_name)
 
-    conn.execute(
-        text("""INSERT INTO pantry (ingredient_id, quantity, unit)
-           VALUES (:ingredient_id, :quantity, :unit)
-           ON CONFLICT(ingredient_id) DO UPDATE SET
-               quantity = excluded.quantity,
-               updated_at = CURRENT_TIMESTAMP"""),
-        {"ingredient_id": ing["id"], "quantity": quantity, "unit": unit},
-    )
+    existing = conn.execute(
+        text("SELECT id FROM pantry WHERE user_id = :user_id AND ingredient_id = :ingredient_id"),
+        {"user_id": user_id, "ingredient_id": ing["id"]},
+    ).fetchone()
+
+    if existing:
+        conn.execute(
+            text("""UPDATE pantry SET quantity = :quantity, updated_at = CURRENT_TIMESTAMP
+               WHERE id = :id"""),
+            {"quantity": quantity, "id": existing["id"]},
+        )
+    else:
+        conn.execute(
+            text("""INSERT INTO pantry (user_id, ingredient_id, quantity, unit)
+               VALUES (:user_id, :ingredient_id, :quantity, :unit)"""),
+            {"user_id": user_id, "ingredient_id": ing["id"], "quantity": quantity, "unit": unit},
+        )
     conn.commit()
 
     row = conn.execute(
         text("""SELECT p.*, i.name AS ingredient_name
            FROM pantry p JOIN ingredients i ON i.id = p.ingredient_id
-           WHERE p.ingredient_id = :ingredient_id"""),
-        {"ingredient_id": ing["id"]},
+           WHERE p.user_id = :user_id AND p.ingredient_id = :ingredient_id"""),
+        {"user_id": user_id, "ingredient_id": ing["id"]},
     ).fetchone()
 
     return PantryItem(
@@ -109,15 +129,18 @@ def set_pantry_item(
     )
 
 
-def clear_pantry(conn: DictConnection) -> int:
-    cursor = conn.execute(text("DELETE FROM pantry"))
+def clear_pantry(conn: DictConnection, user_id: str) -> int:
+    cursor = conn.execute(
+        text("DELETE FROM pantry WHERE user_id = :user_id"),
+        {"user_id": user_id},
+    )
     conn.commit()
     return cursor.rowcount
 
 
-def get_pantry_quantity(conn: DictConnection, ingredient_id: int) -> float:
+def get_pantry_quantity(conn: DictConnection, user_id: str, ingredient_id: int) -> float:
     row = conn.execute(
-        text("SELECT quantity FROM pantry WHERE ingredient_id = :ingredient_id"),
-        {"ingredient_id": ingredient_id},
+        text("SELECT quantity FROM pantry WHERE user_id = :user_id AND ingredient_id = :ingredient_id"),
+        {"user_id": user_id, "ingredient_id": ingredient_id},
     ).fetchone()
     return row["quantity"] if row else 0.0

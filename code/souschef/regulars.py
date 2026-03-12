@@ -25,18 +25,19 @@ class Regular:
 
 
 def list_regulars(
-    conn: DictConnection, active_only: bool = True
+    conn: DictConnection, user_id: str, active_only: bool = True
 ) -> list[Regular]:
     """List regulars, resolving shopping_group from linked ingredient when available."""
     query = """
         SELECT r.*, COALESCE(i.aisle, r.shopping_group) AS resolved_group
         FROM regulars r
         LEFT JOIN ingredients i ON i.id = r.ingredient_id
+        WHERE r.user_id = :user_id
     """
     if active_only:
-        query += " WHERE r.active = 1"
+        query += " AND r.active = 1"
     query += " ORDER BY resolved_group, r.name"
-    rows = conn.execute(text(query)).fetchall()
+    rows = conn.execute(text(query), {"user_id": user_id}).fetchall()
     return [
         Regular(
             id=r["id"],
@@ -52,6 +53,7 @@ def list_regulars(
 
 def add_regular(
     conn: DictConnection,
+    user_id: str,
     name: str,
     shopping_group: str = "",
     store_pref: str = "either",
@@ -70,19 +72,35 @@ def add_regular(
     if not shopping_group:
         shopping_group = _infer_group(name)
 
-    conn.execute(
-        text("""INSERT INTO regulars (name, ingredient_id, shopping_group, store_pref)
-           VALUES (:name, :ingredient_id, :shopping_group, :store_pref)
-           ON CONFLICT(name) DO UPDATE SET
-               active = 1,
-               ingredient_id = COALESCE(excluded.ingredient_id, regulars.ingredient_id),
-               shopping_group = CASE WHEN excluded.shopping_group != '' THEN excluded.shopping_group ELSE regulars.shopping_group END,
-               store_pref = excluded.store_pref"""),
-        {"name": name, "ingredient_id": ingredient_id, "shopping_group": shopping_group, "store_pref": store_pref},
-    )
+    existing = conn.execute(
+        text("SELECT id FROM regulars WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)"),
+        {"user_id": user_id, "name": name},
+    ).fetchone()
+
+    if existing:
+        conn.execute(
+            text("""UPDATE regulars SET
+                active = 1,
+                ingredient_id = COALESCE(:ingredient_id, ingredient_id),
+                shopping_group = CASE WHEN :shopping_group != '' THEN :shopping_group ELSE shopping_group END,
+                store_pref = :store_pref
+                WHERE id = :id"""),
+            {"ingredient_id": ingredient_id, "shopping_group": shopping_group,
+             "store_pref": store_pref, "id": existing["id"]},
+        )
+    else:
+        conn.execute(
+            text("""INSERT INTO regulars (user_id, name, ingredient_id, shopping_group, store_pref)
+               VALUES (:user_id, :name, :ingredient_id, :shopping_group, :store_pref)"""),
+            {"user_id": user_id, "name": name, "ingredient_id": ingredient_id,
+             "shopping_group": shopping_group, "store_pref": store_pref},
+        )
     conn.commit()
 
-    row = conn.execute(text("SELECT * FROM regulars WHERE name = :name"), {"name": name}).fetchone()
+    row = conn.execute(
+        text("SELECT * FROM regulars WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)"),
+        {"user_id": user_id, "name": name},
+    ).fetchone()
     return Regular(
         id=row["id"],
         name=row["name"],
@@ -93,22 +111,29 @@ def add_regular(
     )
 
 
-def remove_regular(conn: DictConnection, name: str) -> bool:
+def remove_regular(conn: DictConnection, user_id: str, name: str) -> bool:
     """Soft-delete a regular (sets active=0)."""
     cursor = conn.execute(
-        text("UPDATE regulars SET active = 0 WHERE name = :name AND active = 1"), {"name": name}
+        text("UPDATE regulars SET active = 0 WHERE user_id = :user_id AND name = :name AND active = 1"),
+        {"user_id": user_id, "name": name},
     )
     conn.commit()
     return cursor.rowcount > 0
 
 
-def toggle_regular(conn: DictConnection, regular_id: int) -> Regular | None:
+def toggle_regular(conn: DictConnection, user_id: str, regular_id: int) -> Regular | None:
     """Toggle a regular's active state."""
-    row = conn.execute(text("SELECT * FROM regulars WHERE id = :id"), {"id": regular_id}).fetchone()
+    row = conn.execute(
+        text("SELECT * FROM regulars WHERE user_id = :user_id AND id = :id"),
+        {"user_id": user_id, "id": regular_id},
+    ).fetchone()
     if not row:
         return None
     new_active = 0 if row["active"] else 1
-    conn.execute(text("UPDATE regulars SET active = :active WHERE id = :id"), {"active": new_active, "id": regular_id})
+    conn.execute(
+        text("UPDATE regulars SET active = :active WHERE user_id = :user_id AND id = :id"),
+        {"active": new_active, "user_id": user_id, "id": regular_id},
+    )
     conn.commit()
     return Regular(
         id=row["id"],
@@ -121,10 +146,10 @@ def toggle_regular(conn: DictConnection, regular_id: int) -> Regular | None:
 
 
 def get_regulars_by_group(
-    conn: DictConnection, active_only: bool = True
+    conn: DictConnection, user_id: str, active_only: bool = True
 ) -> dict[str, list[Regular]]:
     """Return regulars grouped by shopping_group."""
-    items = list_regulars(conn, active_only=active_only)
+    items = list_regulars(conn, user_id, active_only=active_only)
     groups: dict[str, list[Regular]] = {}
     for item in items:
         groups.setdefault(item.shopping_group, []).append(item)

@@ -12,7 +12,7 @@ from sqlalchemy import text
 from souschef.database import DictConnection
 
 
-def detect_skipped_items(conn: DictConnection, min_trips: int = 3) -> list[dict]:
+def detect_skipped_items(conn: DictConnection, user_id: str, min_trips: int = 3) -> list[dict]:
     """Find meal ingredients the user consistently does not buy.
 
     Returns list of {"item", "meal", "times_listed"} dicts.
@@ -21,9 +21,9 @@ def detect_skipped_items(conn: DictConnection, min_trips: int = 3) -> list[dict]
         SELECT ti.name, ti.for_meals, ti.checked
         FROM trip_items ti
         JOIN grocery_trips gt ON gt.id = ti.trip_id
-        WHERE gt.active = 0 AND gt.completed_at IS NOT NULL
+        WHERE gt.user_id = :user_id AND gt.active = 0 AND gt.completed_at IS NOT NULL
           AND ti.source = 'meal' AND ti.for_meals != ''
-    """)).fetchall()
+    """), {"user_id": user_id}).fetchall()
 
     # Accumulate (item, meal) -> {listed, bought}
     pairs: dict[tuple[str, str], dict] = {}
@@ -39,7 +39,7 @@ def detect_skipped_items(conn: DictConnection, min_trips: int = 3) -> list[dict]
             pairs[key]["bought"] += r["checked"]
 
     # Filter: listed enough times and never bought
-    dismissed = _get_dismissed(conn, "skip")
+    dismissed = _get_dismissed(conn, user_id, "skip")
     results = []
     for (item, meal), d in pairs.items():
         if d["listed"] >= min_trips and d["bought"] == 0:
@@ -52,7 +52,7 @@ def detect_skipped_items(conn: DictConnection, min_trips: int = 3) -> list[dict]
     return results
 
 
-def detect_extra_meal_links(conn: DictConnection, min_trips: int = 3) -> list[dict]:
+def detect_extra_meal_links(conn: DictConnection, user_id: str, min_trips: int = 3) -> list[dict]:
     """Find extra items that always appear when a specific meal is planned.
 
     Returns list of {"item", "meal", "times_together", "meal_trips"} dicts.
@@ -61,15 +61,15 @@ def detect_extra_meal_links(conn: DictConnection, min_trips: int = 3) -> list[di
 
     trips = conn.execute(text("""
         SELECT id FROM grocery_trips
-        WHERE active = 0 AND completed_at IS NOT NULL
+        WHERE user_id = :user_id AND active = 0 AND completed_at IS NOT NULL
         ORDER BY id DESC LIMIT 20
-    """)).fetchall()
+    """), {"user_id": user_id}).fetchall()
 
     if not trips:
         return []
 
     # Exclude items already in regulars (those correlate with everything)
-    regular_names = {r.name.lower() for r in list_regulars(conn, active_only=False)}
+    regular_names = {r.name.lower() for r in list_regulars(conn, user_id, active_only=False)}
 
     trip_data = []
     for t in trips:
@@ -104,7 +104,7 @@ def detect_extra_meal_links(conn: DictConnection, min_trips: int = 3) -> list[di
                 key = (extra, meal)
                 pair_count[key] = pair_count.get(key, 0) + 1
 
-    dismissed = _get_dismissed(conn, "extra_link")
+    dismissed = _get_dismissed(conn, user_id, "extra_link")
     results = []
     for (extra, meal), count in pair_count.items():
         total = meal_count[meal]
@@ -119,33 +119,33 @@ def detect_extra_meal_links(conn: DictConnection, min_trips: int = 3) -> list[di
     return results
 
 
-def get_overrides(conn: DictConnection) -> list[dict]:
+def get_overrides(conn: DictConnection, user_id: str) -> list[dict]:
     """Get all active meal item overrides."""
     rows = conn.execute(text(
-        "SELECT recipe_name, item_name, action FROM meal_item_overrides ORDER BY recipe_name, item_name"
-    )).fetchall()
+        "SELECT recipe_name, item_name, action FROM meal_item_overrides WHERE user_id = :user_id ORDER BY recipe_name, item_name"
+    ), {"user_id": user_id}).fetchall()
     return [{"recipe_name": r["recipe_name"], "item_name": r["item_name"], "action": r["action"]} for r in rows]
 
 
-def get_skips_for_meal(conn: DictConnection, meal_name: str) -> set[str]:
+def get_skips_for_meal(conn: DictConnection, user_id: str, meal_name: str) -> set[str]:
     """Get item names to skip for a specific meal."""
     rows = conn.execute(text(
-        "SELECT item_name FROM meal_item_overrides WHERE LOWER(recipe_name) = LOWER(:meal) AND action = 'skip'"
-    ), {"meal": meal_name}).fetchall()
+        "SELECT item_name FROM meal_item_overrides WHERE user_id = :user_id AND LOWER(recipe_name) = LOWER(:meal) AND action = 'skip'"
+    ), {"user_id": user_id, "meal": meal_name}).fetchall()
     return {r["item_name"] for r in rows}
 
 
-def get_adds_for_meal(conn: DictConnection, meal_name: str) -> list[dict]:
+def get_adds_for_meal(conn: DictConnection, user_id: str, meal_name: str) -> list[dict]:
     """Get items to auto-add for a specific meal."""
     rows = conn.execute(text(
-        "SELECT item_name FROM meal_item_overrides WHERE LOWER(recipe_name) = LOWER(:meal) AND action = 'add'"
-    ), {"meal": meal_name}).fetchall()
+        "SELECT item_name FROM meal_item_overrides WHERE user_id = :user_id AND LOWER(recipe_name) = LOWER(:meal) AND action = 'add'"
+    ), {"user_id": user_id, "meal": meal_name}).fetchall()
     return [{"item_name": r["item_name"]} for r in rows]
 
 
-def _get_dismissed(conn: DictConnection, kind: str) -> set[str]:
+def _get_dismissed(conn: DictConnection, user_id: str, kind: str) -> set[str]:
     """Get dismissed feedback suggestion keys for a given kind."""
     rows = conn.execute(text(
-        "SELECT name FROM learning_dismissed WHERE kind = :kind"
-    ), {"kind": kind}).fetchall()
+        "SELECT name FROM learning_dismissed WHERE user_id = :user_id AND kind = :kind"
+    ), {"user_id": user_id, "kind": kind}).fetchall()
     return {r["name"] for r in rows}
