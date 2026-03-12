@@ -67,6 +67,42 @@ def is_postgres() -> bool:
     return engine.dialect.name == "postgresql"
 
 
+# ── Auth Tables ───────────────────────────────────────────
+
+users = Table(
+    "users", metadata,
+    Column("id", Text, primary_key=True),
+    Column("email", Text, unique=True, nullable=False),
+    Column("display_name", Text, nullable=False, server_default=text("''")),
+    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("last_login", Text),
+)
+
+magic_links = Table(
+    "magic_links", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("token", Text, unique=True, nullable=False),
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
+    Column("expires_at", Text, nullable=False),
+    Column("used_at", Text),
+    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
+sessions = Table(
+    "sessions", metadata,
+    Column("id", Text, primary_key=True),
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
+    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("expires_at", Text, nullable=False),
+)
+
+allowed_emails = Table(
+    "allowed_emails", metadata,
+    Column("email", Text, primary_key=True),
+    Column("added_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
+
 # ── Table Definitions ─────────────────────────────────────
 
 ingredients = Table(
@@ -111,7 +147,8 @@ recipe_ingredients = Table(
 pantry = Table(
     "pantry", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("ingredient_id", Integer, ForeignKey("ingredients.id"), unique=True, nullable=False),
+    Column("user_id", Text, nullable=False, server_default=text("'default'")),
+    Column("ingredient_id", Integer, ForeignKey("ingredients.id"), nullable=False),
     Column("quantity", Float, nullable=False),
     Column("unit", Text, nullable=False),
     Column("updated_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
@@ -171,6 +208,7 @@ grocery_list_items = Table(
 meals = Table(
     "meals", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, nullable=False, server_default=text("'default'")),
     Column("slot_date", Text, nullable=False),
     Column("recipe_id", Integer, ForeignKey("recipes.id")),
     Column("recipe_name", Text, nullable=False, server_default=text("''")),
@@ -200,6 +238,7 @@ grocery_run_items = Table(
 product_preferences = Table(
     "product_preferences", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, nullable=False, server_default=text("'default'")),
     Column("search_term", Text, nullable=False),
     Column("upc", Text, nullable=False),
     Column("product_description", Text, nullable=False),
@@ -227,7 +266,8 @@ product_ratings = Table(
 regulars = Table(
     "regulars", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("name", Text, unique=True, nullable=False),
+    Column("user_id", Text, nullable=False, server_default=text("'default'")),
+    Column("name", Text, nullable=False),
     Column("ingredient_id", Integer, ForeignKey("ingredients.id")),
     Column("shopping_group", Text, nullable=False, server_default=text("''")),
     Column("store_pref", Text, nullable=False, server_default=text("'either'")),
@@ -250,6 +290,7 @@ product_scores = Table(
 grocery_trips = Table(
     "grocery_trips", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, nullable=False, server_default=text("'default'")),
     Column("trip_type", Text, nullable=False, server_default=text("'plan'")),
     Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
     Column("completed_at", Text),
@@ -290,8 +331,32 @@ trip_items = Table(
 
 learning_dismissed = Table(
     "learning_dismissed", metadata,
-    Column("name", Text, primary_key=True),
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, nullable=False, server_default=text("'default'")),
+    Column("name", Text, nullable=False),
     Column("dismissed_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("kind", Text, nullable=False, server_default=text("'regular'")),
+)
+
+meal_item_overrides = Table(
+    "meal_item_overrides", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, nullable=False, server_default=text("'default'")),
+    Column("recipe_name", Text, nullable=False),
+    Column("item_name", Text, nullable=False),
+    Column("action", Text, nullable=False),
+    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    UniqueConstraint("user_id", "recipe_name", "item_name"),
+)
+
+settings = Table(
+    "settings", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text),
+    Column("key", Text, nullable=False),
+    Column("value", Text, nullable=False, server_default=text("''")),
+    Column("updated_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    UniqueConstraint("user_id", "key"),
 )
 
 

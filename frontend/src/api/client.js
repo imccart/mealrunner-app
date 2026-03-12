@@ -121,4 +121,20 @@ export const api = {
   // Learning
   getLearningSuggestions: () => request('/learning/suggestions'),
   dismissLearning: (name) => request(`/learning/dismiss/${encodeURIComponent(name)}`, { method: 'POST' }),
+
+  // Shopping feedback
+  getFeedbackPatterns: () => request('/feedback/patterns'),
+  dismissFeedback: (item, meal, kind) => request('/feedback/dismiss', {
+    method: 'POST',
+    body: JSON.stringify({ item, meal, kind }),
+  }),
+  applyFeedback: (item, meal, action) => request('/feedback/apply', {
+    method: 'POST',
+    body: JSON.stringify({ item, meal, action }),
+  }),
+  getFeedbackOverrides: () => request('/feedback/overrides'),
+  removeFeedbackOverride: (item, meal) => request('/feedback/overrides', {
+    method: 'DELETE',
+    body: JSON.stringify({ item, meal }),
+  }),
 }

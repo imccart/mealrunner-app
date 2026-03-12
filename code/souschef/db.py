@@ -47,6 +47,8 @@ def init_db(conn: DictConnection) -> None:
     _migrate_shopping_groups(conn)
     _migrate_regulars_default_inactive(conn)
     _migrate_grocery_to_trips(conn)
+    _migrate_onboarding_marker(conn)
+    _migrate_create_default_user(conn)
 
     conn.commit()
 
@@ -82,6 +84,14 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("trip_items", "receipt_price", "REAL" if is_sqlite() else "DOUBLE PRECISION"),
         ("trip_items", "receipt_upc", "TEXT NOT NULL DEFAULT ''"),
         ("trip_items", "receipt_status", "TEXT NOT NULL DEFAULT ''"),
+        ("learning_dismissed", "kind", "TEXT NOT NULL DEFAULT 'regular'"),
+        ("meals", "user_id", "TEXT NOT NULL DEFAULT 'default'"),
+        ("grocery_trips", "user_id", "TEXT NOT NULL DEFAULT 'default'"),
+        ("regulars", "user_id", "TEXT NOT NULL DEFAULT 'default'"),
+        ("pantry", "user_id", "TEXT NOT NULL DEFAULT 'default'"),
+        ("product_preferences", "user_id", "TEXT NOT NULL DEFAULT 'default'"),
+        ("learning_dismissed", "user_id", "TEXT NOT NULL DEFAULT 'default'"),
+        ("meal_item_overrides", "user_id", "TEXT NOT NULL DEFAULT 'default'"),
     ]
 
     for table_name, col_name, col_def in migrations:
@@ -384,6 +394,44 @@ def _migrate_grocery_to_trips(conn: DictConnection) -> None:
                VALUES (:trip_id, :name, 'Other', 'extra', :checked)
                ON CONFLICT DO NOTHING"""
         ), {"trip_id": trip_id, "name": name, "checked": is_checked})
+
+
+def _migrate_onboarding_marker(conn: DictConnection) -> None:
+    """One-time: move filesystem onboarding marker to settings table."""
+    row = conn.execute(text(
+        "SELECT 1 FROM settings WHERE key = 'onboarding_complete'"
+    )).fetchone()
+    if row:
+        return
+
+    marker = Path.home() / ".souschef" / "onboarding_complete"
+    if marker.exists():
+        # Will be updated to real user_id by _migrate_create_default_user
+        conn.execute(text(
+            """INSERT INTO settings (user_id, key, value, updated_at)
+               VALUES ('default', 'onboarding_complete', 'true', CURRENT_TIMESTAMP)
+               ON CONFLICT DO NOTHING"""
+        ))
+
+
+def _migrate_create_default_user(conn: DictConnection) -> None:
+    """One-time: create a default user and assign all existing data."""
+    row = conn.execute(text("SELECT 1 FROM users LIMIT 1")).fetchone()
+    if row:
+        return
+
+    # Create default user
+    conn.execute(text(
+        """INSERT INTO users (id, email, display_name, created_at)
+           VALUES ('default', 'owner@souschef.app', '', CURRENT_TIMESTAMP)"""
+    ))
+
+    # Add to whitelist
+    conn.execute(text(
+        """INSERT INTO allowed_emails (email)
+           VALUES ('owner@souschef.app')
+           ON CONFLICT DO NOTHING"""
+    ))
 
 
 # ── Seed Data ─────────────────────────────────────────────

@@ -16,7 +16,29 @@ const COMMON_PANTRY = [
 ]
 
 export default function OnboardingFlow({ onComplete }) {
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(-1)
+
+  // Welcome screen
+  if (step === -1) {
+    return (
+      <div className="welcome">
+        <div className="welcome-content">
+          <div className="welcome-mark">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+              <path d="M24 4C24 4 22 8 22 14C22 18 23 22 24 26C25 22 26 18 26 14C26 8 24 4 24 4Z" fill="currentColor" opacity="0.9"/>
+              <path d="M24 26C24 26 20 28 16 34C14 38 14 42 14 44" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+              <ellipse cx="24" cy="26" rx="3" ry="1.5" fill="currentColor" opacity="0.3"/>
+            </svg>
+          </div>
+          <div className="welcome-wordmark">sous<em>chef</em></div>
+          <div className="welcome-tagline">Meal planning that fits your life</div>
+          <button className="welcome-btn" onClick={() => setStep(0)}>
+            Get started
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   // Step 0: Store
   const [storeName, setStoreName] = useState('')

@@ -392,17 +392,31 @@ def _infer_item_group(conn, name: str) -> str:
 def _build_trip_from_meals(conn, trip_id: int, mw) -> None:
     """Populate trip_items from current meal grocery build + saved extras."""
     from souschef import workflow
+    from souschef.feedback import get_skips_for_meal, get_adds_for_meal
     from souschef.grocery import build_grocery_list, split_by_store
 
     grocery_meals = [m for m in mw.meals if m.on_grocery]
 
     if grocery_meals:
+        # Collect skip overrides for all meals on the plan
+        skip_pairs: set[tuple[str, str]] = set()
+        for meal in grocery_meals:
+            for item_name in get_skips_for_meal(conn, meal.recipe_name):
+                skip_pairs.add((item_name, meal.recipe_name))
+
         gl = build_grocery_list(conn, grocery_meals, mw.start_date, mw.end_date)
         by_store = split_by_store(gl)
         for items in by_store.values():
             for item in items:
+                # Check if ALL meals for this item have a skip override
+                item_meals = item.meals or []
+                if item_meals and all(
+                    (item.ingredient_name.lower(), m) in skip_pairs for m in item_meals
+                ):
+                    continue
+
                 group = item.aisle or "Other"
-                for_meals = ",".join(item.meals) if item.meals else ""
+                for_meals = ",".join(item_meals) if item_meals else ""
                 conn.execute(
                     text("""INSERT INTO trip_items
                        (trip_id, name, shopping_group, source, for_meals, meal_count)
@@ -410,7 +424,25 @@ def _build_trip_from_meals(conn, trip_id: int, mw) -> None:
                        ON CONFLICT DO NOTHING"""),
                     {"trip_id": trip_id, "name": item.ingredient_name.lower(),
                      "group": group, "for_meals": for_meals,
-                     "meal_count": len(item.meals)},
+                     "meal_count": len(item_meals)},
+                )
+
+        # Add auto-include overrides
+        seen_adds: set[str] = set()
+        for meal in grocery_meals:
+            for add in get_adds_for_meal(conn, meal.recipe_name):
+                name = add["item_name"]
+                if name in seen_adds:
+                    continue
+                seen_adds.add(name)
+                group = _infer_item_group(conn, name)
+                conn.execute(
+                    text("""INSERT INTO trip_items
+                       (trip_id, name, shopping_group, source, for_meals, meal_count)
+                       VALUES (:trip_id, :name, :group, 'meal', :for_meals, 1)
+                       ON CONFLICT DO NOTHING"""),
+                    {"trip_id": trip_id, "name": name, "group": group,
+                     "for_meals": meal.recipe_name},
                 )
 
     conn.commit()
@@ -1570,20 +1602,24 @@ async def remove_store(key: str):
 @router.get("/onboarding/status")
 async def onboarding_status():
     """Check whether onboarding has been completed."""
-    from pathlib import Path
-
-    marker = Path.home() / ".souschef" / "onboarding_complete"
-    return {"completed": marker.exists()}
+    conn = _conn()
+    row = conn.execute(
+        text("SELECT value FROM settings WHERE key = 'onboarding_complete' AND (user_id IS NULL OR user_id = '')"),
+    ).fetchone()
+    return {"completed": row is not None and row["value"] == "true"}
 
 
 @router.post("/onboarding/complete")
 async def onboarding_complete():
     """Mark onboarding as done."""
-    from pathlib import Path
-
-    marker = Path.home() / ".souschef" / "onboarding_complete"
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.touch()
+    conn = _conn()
+    # Use empty string for global (NULL breaks unique constraint in some DBs)
+    conn.execute(
+        text("""INSERT INTO settings (user_id, key, value, updated_at)
+           VALUES ('', 'onboarding_complete', 'true', CURRENT_TIMESTAMP)
+           ON CONFLICT (user_id, key) DO UPDATE SET value = 'true', updated_at = CURRENT_TIMESTAMP"""),
+    )
+    conn.commit()
     return {"ok": True}
 
 
@@ -1756,6 +1792,94 @@ async def dismiss_learning(name: str):
     conn.execute(
         text("INSERT INTO learning_dismissed (name) VALUES (:name) ON CONFLICT DO NOTHING"),
         {"name": name.lower()},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
+# ── Shopping Feedback ─────────────────────────────────────
+
+
+@router.get("/feedback/patterns")
+async def get_feedback_patterns():
+    """Detect shopping patterns from completed trips."""
+    from souschef.feedback import detect_skipped_items, detect_extra_meal_links
+
+    conn = _conn()
+    return {
+        "skipped": detect_skipped_items(conn),
+        "extra_links": detect_extra_meal_links(conn),
+    }
+
+
+@router.post("/feedback/dismiss")
+async def dismiss_feedback(body: dict):
+    """Dismiss a feedback suggestion. Body: {item, meal, kind: 'skip'|'extra_link'}."""
+    item = body.get("item", "").strip().lower()
+    meal = body.get("meal", "").strip().lower()
+    kind = body.get("kind", "skip")
+    if not item or not meal:
+        return {"ok": False, "error": "item and meal required"}
+
+    key = f"{item}::{meal}"
+    conn = _conn()
+    conn.execute(
+        text("INSERT INTO learning_dismissed (name, kind) VALUES (:name, :kind) ON CONFLICT DO NOTHING"),
+        {"name": key, "kind": kind},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
+@router.post("/feedback/apply")
+async def apply_feedback(body: dict):
+    """Apply a feedback override. Body: {item, meal, action: 'skip'|'add'}."""
+    item = body.get("item", "").strip().lower()
+    meal = body.get("meal", "").strip()
+    action = body.get("action", "skip")
+    if not item or not meal or action not in ("skip", "add"):
+        return {"ok": False, "error": "item, meal, and valid action required"}
+
+    conn = _conn()
+    conn.execute(
+        text("""INSERT INTO meal_item_overrides (recipe_name, item_name, action)
+           VALUES (:meal, :item, :action)
+           ON CONFLICT (recipe_name, item_name) DO UPDATE SET action = :action"""),
+        {"meal": meal, "item": item, "action": action},
+    )
+    conn.commit()
+
+    # Also dismiss so it doesn't keep showing up
+    kind = "skip" if action == "skip" else "extra_link"
+    key = f"{item}::{meal.lower()}"
+    conn.execute(
+        text("INSERT INTO learning_dismissed (name, kind) VALUES (:name, :kind) ON CONFLICT DO NOTHING"),
+        {"name": key, "kind": kind},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
+@router.get("/feedback/overrides")
+async def get_feedback_overrides():
+    """Get all active meal item overrides."""
+    from souschef.feedback import get_overrides
+    conn = _conn()
+    return {"overrides": get_overrides(conn)}
+
+
+@router.delete("/feedback/overrides")
+async def remove_feedback_override(body: dict):
+    """Remove an override. Body: {item, meal}."""
+    item = body.get("item", "").strip().lower()
+    meal = body.get("meal", "").strip()
+    if not item or not meal:
+        return {"ok": False, "error": "item and meal required"}
+
+    conn = _conn()
+    conn.execute(
+        text("DELETE FROM meal_item_overrides WHERE LOWER(recipe_name) = LOWER(:meal) AND item_name = :item"),
+        {"meal": meal, "item": item},
     )
     conn.commit()
     return {"ok": True}

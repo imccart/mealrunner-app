@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import os
+
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -15,20 +18,65 @@ from sqlalchemy import text
 
 from souschef.db import ensure_db
 from souschef.web.api import router as api_router
+from souschef.web.auth import (
+    _is_public,
+    get_user_id_from_request,
+    is_email_allowed,
+    find_or_create_user,
+    create_magic_link,
+    send_magic_link_email,
+    verify_magic_link,
+    create_session,
+    set_session_cookie,
+    clear_session_cookie,
+    delete_session,
+    get_user_from_session,
+    SESSION_COOKIE,
+    BASE_URL,
+)
+from souschef.database import get_connection
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _FRONTEND_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
-
-import os
 
 _CORS_ORIGINS = os.environ.get(
     "CORS_ORIGINS", "http://localhost:5173"
 ).split(",")
 
+
+# ── Auth Middleware ───────────────────────────────────────
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    """Global auth check. Rejects unauthenticated API requests with 401."""
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+
+        # Public paths don't need auth
+        if _is_public(path):
+            return await call_next(request)
+
+        # Non-API paths (legacy htmx routes) — let through
+        if not path.startswith("/api/"):
+            return await call_next(request)
+
+        # Check session
+        user_id = get_user_id_from_request(request)
+        if not user_id:
+            return JSONResponse({"error": "Not authenticated"}, status_code=401)
+
+        # Attach user_id to request state for endpoints to use
+        request.state.user_id = user_id
+        return await call_next(request)
+
+
 app = FastAPI(title="Souschef")
+app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_CORS_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -75,6 +123,90 @@ async def health():
         return {"status": "ok"}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
+
+
+# ── Auth Endpoints ───────────────────────────────────────
+
+@app.post("/api/auth/login")
+async def auth_login(body: dict):
+    """Send a magic link to the given email (if whitelisted)."""
+    email = body.get("email", "").strip().lower()
+    if not email:
+        return {"ok": False, "error": "Email required"}
+
+    conn = get_connection()
+    try:
+        if not is_email_allowed(conn, email):
+            # Don't reveal whether email exists
+            return {"ok": True, "message": "If that email is on our list, check your inbox."}
+
+        user_id = find_or_create_user(conn, email)
+        token = create_magic_link(conn, user_id)
+        send_magic_link_email(email, token)
+    finally:
+        conn.close()
+
+    return {"ok": True, "message": "If that email is on our list, check your inbox."}
+
+
+@app.get("/api/auth/verify")
+async def auth_verify(token: str):
+    """Verify a magic link token, create session, redirect to app."""
+    conn = get_connection()
+    try:
+        user_id = verify_magic_link(conn, token)
+        if not user_id:
+            return RedirectResponse(url="/app?auth=expired", status_code=302)
+
+        session_id = create_session(conn, user_id)
+    finally:
+        conn.close()
+
+    response = RedirectResponse(url="/app", status_code=302)
+    set_session_cookie(response, session_id)
+    return response
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request):
+    """Return current user info, or 401 if not authenticated."""
+    session_id = request.cookies.get(SESSION_COOKIE)
+    if not session_id:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+
+    conn = get_connection()
+    try:
+        user_id = get_user_from_session(conn, session_id)
+        if not user_id:
+            return JSONResponse({"error": "Session expired"}, status_code=401)
+
+        user = conn.execute(
+            text("SELECT id, email, display_name FROM users WHERE id = :id"),
+            {"id": user_id},
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not user:
+        return JSONResponse({"error": "User not found"}, status_code=401)
+
+    return {"id": user["id"], "email": user["email"], "display_name": user["display_name"]}
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request):
+    """Clear the session."""
+    session_id = request.cookies.get(SESSION_COOKIE)
+    if session_id:
+        conn = get_connection()
+        try:
+            delete_session(conn, session_id)
+        finally:
+            conn.close()
+
+    response = JSONResponse({"ok": True})
+    clear_session_cookie(response)
+    return response
 
 
 # ── Routes ────────────────────────────────────────────────
