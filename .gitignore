@@ -42,7 +42,6 @@ Thumbs.db
 
 # Frontend
 node_modules/
-frontend/dist/
 
 # Project
 scratch/
