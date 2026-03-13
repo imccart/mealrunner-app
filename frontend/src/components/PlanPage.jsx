@@ -394,7 +394,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
 
       {/* Floating feedback FAB */}
       <button className="feedback-fab" onClick={() => { setShowFeedback(true); setFeedbackSent(false); setFeedbackText('') }}>
-        Yes, Chef!
+        Feedback
       </button>
 
       {/* Feedback sheet */}
@@ -402,17 +402,15 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
         <div className="sheet-overlay" onClick={() => setShowFeedback(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" />
-            <div className="sheet-title feedback-title">Yes, Chef!</div>
-            <div className="sheet-sub">Tell us what you think</div>
+            <button className="sheet-close" onClick={() => setShowFeedback(false)}>{'\u00D7'}</button>
             {feedbackSent ? (
               <div className="feedback-thanks">
-                Thanks for the feedback!
-                <button className="btn primary" style={{ marginTop: 16 }} onClick={() => setShowFeedback(false)}>
-                  Done
-                </button>
+                <div className="feedback-title">Yes, Chef!</div>
               </div>
             ) : (
               <>
+                <div className="sheet-title feedback-title">Feedback</div>
+                <div className="sheet-sub">Tell us what you think</div>
                 <textarea
                   className="feedback-textarea"
                   placeholder="What's on your mind?"

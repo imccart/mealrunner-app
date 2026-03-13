@@ -1169,6 +1169,7 @@ main {
 }
 
 .sheet {
+  position: relative;
   background: white;
   border-radius: 24px 24px 0 0;
   padding: 12px 20px calc(32px + env(safe-area-inset-bottom));
@@ -1214,6 +1215,22 @@ main {
   border-radius: 2px;
   margin: 0 auto 16px;
 }
+
+.sheet-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: var(--text-light);
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.sheet-close:hover { color: var(--text); }
 
 .sheet-title {
   font-family: 'Playfair Display', serif;
