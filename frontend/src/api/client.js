@@ -50,7 +50,7 @@ export const api = {
 
   // Order
   getOrder: () => request('/order'),
-  searchProducts: (itemName) => request(`/order/search/${encodeURIComponent(itemName)}`),
+  searchProducts: (itemName, fulfillment) => request(`/order/search/${encodeURIComponent(itemName)}${fulfillment ? `?fulfillment=${fulfillment}` : ''}`),
   selectProduct: (itemName, product) => request('/order/select', {
     method: 'POST',
     body: JSON.stringify({ item_name: itemName, product }),

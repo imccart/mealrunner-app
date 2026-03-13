@@ -136,16 +136,17 @@ def _extract_image_url(item: dict) -> str:
     return ""
 
 
-def _parse_search_response(data: dict) -> list[KrogerProduct]:
+def _parse_search_response(data: dict, fulfillment: str = "curbside") -> list[KrogerProduct]:
     """Parse Kroger search API response into KrogerProduct list."""
     products = []
     for item in data.get("data", []):
         sub = item.get("items", [{}])[0] if item.get("items") else {}
         price_info = sub.get("price", {})
-        fulfillment = sub.get("fulfillment", {})
+        ff = sub.get("fulfillment", {})
         # Deduplicate categories
         raw_cats = item.get("categories", [])
         cats = list(dict.fromkeys(raw_cats))  # preserve order, remove dupes
+        in_stock = ff.get(fulfillment, False) if fulfillment == "delivery" else (ff.get("curbside", False) or ff.get("inStore", False))
         products.append(KrogerProduct(
             product_id=item.get("productId", ""),
             upc=item.get("upc", ""),
@@ -154,8 +155,8 @@ def _parse_search_response(data: dict) -> list[KrogerProduct]:
             size=sub.get("size", ""),
             price=price_info.get("regular"),
             promo_price=price_info.get("promo"),
-            in_stock=fulfillment.get("curbside", False) or fulfillment.get("inStore", False),
-            curbside=fulfillment.get("curbside", False),
+            in_stock=in_stock,
+            curbside=ff.get("curbside", False),
             categories=cats,
             image_url=_extract_image_url(item),
         ))
@@ -164,11 +165,13 @@ def _parse_search_response(data: dict) -> list[KrogerProduct]:
 
 def search_products_fast(term: str, limit: int = 5, start: int = 1,
                          require_category: str | None = None,
-                         exclude_keywords: list[str] | None = None) -> list[KrogerProduct]:
+                         exclude_keywords: list[str] | None = None,
+                         fulfillment: str = "curbside") -> list[KrogerProduct]:
     """Fast catalog search — returns products with whatever prices the search API gives.
     No backfill, no retries. Use fill_prices() on a subset for reliable pricing.
     If require_category is set, only returns products whose Kroger categories include it.
-    If exclude_keywords is set, drops products whose description contains any of them."""
+    If exclude_keywords is set, drops products whose description contains any of them.
+    fulfillment: 'curbside' (pickup) or 'delivery'."""
     location_id = get_location_id()
     resp = requests.get(
         f"{BASE_URL}/products",
@@ -176,7 +179,7 @@ def search_products_fast(term: str, limit: int = 5, start: int = 1,
             "filter.term": term,
             "filter.locationId": location_id,
             "filter.limit": limit,
-            "filter.fulfillment": "curbside",
+            "filter.fulfillment": fulfillment,
             "filter.start": start,
         },
         headers=_headers(),
@@ -196,9 +199,10 @@ def search_products_fast(term: str, limit: int = 5, start: int = 1,
                 continue
             sub = item.get("items", [{}])[0] if item.get("items") else {}
             price_info = sub.get("price", {})
-            fulfillment = sub.get("fulfillment", {})
+            ff = sub.get("fulfillment", {})
             raw_cats = item.get("categories", [])
             cats_dedup = list(dict.fromkeys(raw_cats))
+            in_stock = ff.get(fulfillment, False) if fulfillment == "delivery" else (ff.get("curbside", False) or ff.get("inStore", False))
             products.append(KrogerProduct(
                 product_id=item.get("productId", ""),
                 upc=item.get("upc", ""),
@@ -207,13 +211,13 @@ def search_products_fast(term: str, limit: int = 5, start: int = 1,
                 size=sub.get("size", ""),
                 price=price_info.get("regular"),
                 promo_price=price_info.get("promo"),
-                in_stock=fulfillment.get("curbside", False) or fulfillment.get("inStore", False),
-                curbside=fulfillment.get("curbside", False),
+                in_stock=in_stock,
+                curbside=ff.get("curbside", False),
                 image_url=_extract_image_url(item),
                 categories=cats_dedup,
             ))
         return products
-    return _parse_search_response(resp.json())
+    return _parse_search_response(resp.json(), fulfillment)
 
 
 def fill_prices(products: list[KrogerProduct]) -> None:

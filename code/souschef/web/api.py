@@ -951,8 +951,9 @@ _SEARCH_CACHE_TTL = 300  # 5 minutes
 _SEARCH_CACHE_MAX = 50
 
 @router.get("/order/search/{item_name:path}")
-async def search_order_products(item_name: str, request: Request):
-    """Search Kroger products for a grocery item. Returns products + preferences."""
+async def search_order_products(item_name: str, request: Request, fulfillment: str = "curbside"):
+    """Search Kroger products for a grocery item. Returns products + preferences.
+    fulfillment: 'curbside' (pickup) or 'delivery'."""
     import time as _time
     from concurrent.futures import ThreadPoolExecutor
     from souschef.kroger import (
@@ -963,7 +964,8 @@ async def search_order_products(item_name: str, request: Request):
     user_id = request.state.user_id
 
     # Return cached response if fresh
-    cache_key = item_name.lower().strip()
+    ff = fulfillment if fulfillment in ("curbside", "delivery") else "curbside"
+    cache_key = f"{item_name.lower().strip()}:{ff}"
     now = _time.time()
     if cache_key in _search_cache:
         ts, resp = _search_cache[cache_key]
@@ -994,7 +996,7 @@ async def search_order_products(item_name: str, request: Request):
 
     # Search Kroger
     try:
-        products = search_products_fast(search_term, limit=12)
+        products = search_products_fast(search_term, limit=12, fulfillment=ff)
     except Exception as e:
         import traceback
         traceback.print_exc()

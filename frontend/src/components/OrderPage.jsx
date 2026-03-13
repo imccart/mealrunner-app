@@ -53,6 +53,7 @@ export default function OrderPage() {
   const [submitResult, setSubmitResult] = useState(null)
   const [krogerAccounts, setKrogerAccounts] = useState(null)
   const [selectedAccount, setSelectedAccount] = useState(null)
+  const [fulfillment, setFulfillment] = useState(() => localStorage.getItem('souschef_fulfillment') || 'curbside')
   const [communityBrand, setCommunityBrand] = useState(null)
   const [communityValue, setCommunityValue] = useState('')
   const [communityConfirm, setCommunityConfirm] = useState(false)
@@ -82,7 +83,7 @@ export default function OrderPage() {
     const term = mod ? `${mod} ${itemName}` : itemName
     setSearching(true)
     setProducts(null)
-    api.searchProducts(term).then(data => {
+    api.searchProducts(term, fulfillment).then(data => {
       setProducts(data)
       setSearching(false)
     }).catch(err => {
@@ -91,11 +92,11 @@ export default function OrderPage() {
     })
   }
 
-  // Auto-search when active item changes (reset modifier)
+  // Auto-search when active item or fulfillment changes (reset modifier)
   useEffect(() => {
     setModifier('')
     doSearch(activeItem, '')
-  }, [activeItem])
+  }, [activeItem, fulfillment])
 
   const handleSelect = async (product) => {
     try {
@@ -400,6 +401,18 @@ export default function OrderPage() {
             ? `${order.pending.length} item${order.pending.length !== 1 ? 's' : ''} to pick`
             : 'All items selected'}
         </div>
+      </div>
+
+      {/* Fulfillment toggle */}
+      <div className="fulfillment-toggle">
+        <button
+          className={`fulfillment-btn${fulfillment === 'curbside' ? ' active' : ''}`}
+          onClick={() => { setFulfillment('curbside'); localStorage.setItem('souschef_fulfillment', 'curbside') }}
+        >Pickup</button>
+        <button
+          className={`fulfillment-btn${fulfillment === 'delivery' ? ' active' : ''}`}
+          onClick={() => { setFulfillment('delivery'); localStorage.setItem('souschef_fulfillment', 'delivery') }}
+        >Delivery</button>
       </div>
 
       {/* Mobile: horizontal queue strip */}

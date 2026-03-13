@@ -104,8 +104,7 @@ export default function PreferencesSheet({ onClose }) {
   const [addRegularText, setAddRegularText] = useState('')
   const [addPantryText, setAddPantryText] = useState('')
   const [addStoreName, setAddStoreName] = useState('')
-  const [addStoreMode, setAddStoreMode] = useState('in-person')
-  const [addStoreApi, setAddStoreApi] = useState('none')
+  const [addStoreKroger, setAddStoreKroger] = useState(false)
   const [addRecipeText, setAddRecipeText] = useState('')
   const [members, setMembers] = useState(null)
   const [householdEmail, setHouseholdEmail] = useState('')
@@ -175,11 +174,11 @@ export default function PreferencesSheet({ onClose }) {
       if (stores && stores.some(s => s.key === key)) {
         key = name.slice(0, 2).toLowerCase()
       }
-      const storeApi = addStoreMode !== 'in-person' ? 'kroger' : 'none'
-      const result = await api.addStore(name, key, addStoreMode, storeApi)
+      const storeApi = addStoreKroger ? 'kroger' : 'none'
+      const result = await api.addStore(name, key, 'in-person', storeApi)
       if (result.ok) {
         setAddStoreName('')
-        setAddStoreApi('none')
+        setAddStoreKroger(false)
         const data = await api.getStores()
         setStores(data.stores)
       }
@@ -257,7 +256,7 @@ export default function PreferencesSheet({ onClose }) {
     try {
       const result = await api.connectKroger()
       if (result.url) {
-        window.open(result.url, '_blank')
+        window.location.href = result.url
       }
     } catch {
       // Kroger credentials not configured on server
@@ -332,7 +331,6 @@ export default function PreferencesSheet({ onClose }) {
                 <div key={s.key} className="prefs-store-entry">
                   <div className="prefs-list-item">
                     <span className="prefs-list-name">{s.name}</span>
-                    <span className="prefs-list-meta">{s.mode}</span>
                     <button className="prefs-remove" onClick={() => handleRemoveStore(s.key)}>{'\u00D7'}</button>
                   </div>
                   {s.api && s.api !== 'none' && (
@@ -364,18 +362,17 @@ export default function PreferencesSheet({ onClose }) {
               value={addStoreName}
               onChange={(e) => setAddStoreName(e.target.value)}
             />
-            <select
-              className="prefs-add-select"
-              value={addStoreMode}
-              onChange={(e) => setAddStoreMode(e.target.value)}
-            >
-              <option value="in-person">In-person</option>
-              <option value="pickup">Pickup</option>
-              <option value="delivery">Delivery</option>
-            </select>
             <button className="btn primary" type="submit">+</button>
           </form>
-          <div className="prefs-note">Order integrations available for Kroger. More stores coming soon.</div>
+          <label className="prefs-kroger-check">
+            <input
+              type="checkbox"
+              checked={addStoreKroger}
+              onChange={(e) => setAddStoreKroger(e.target.checked)}
+            />
+            <span>Kroger account</span>
+          </label>
+          <div className="prefs-note">Check the box if this store uses Kroger for online ordering.</div>
         </AccordionSection>
 
         {/* Kitchen — Meals, Regulars, Pantry */}

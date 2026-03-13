@@ -2218,6 +2218,38 @@ main {
 .order-desktop-layout { display: none; }
 
 /* Show mobile elements by default */
+.fulfillment-toggle {
+  display: flex;
+  gap: 0;
+  margin: 0 16px 12px;
+  border: 1.5px solid var(--tan);
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 220px;
+}
+
+.fulfillment-btn {
+  flex: 1;
+  padding: 7px 0;
+  font-size: 13px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  border: none;
+  background: white;
+  color: var(--brown);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.fulfillment-btn.active {
+  background: var(--accent);
+  color: white;
+}
+
+.fulfillment-btn:not(.active):hover {
+  background: var(--warm-white);
+}
+
 .order-mobile-header,
 .order-mobile-content,
 .order-mobile-footer { display: block; }
@@ -2877,6 +2909,16 @@ main {
   color: var(--warm-gray);
   margin-top: 8px;
   font-style: italic;
+}
+
+.prefs-kroger-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--brown);
+  margin-top: 8px;
+  cursor: pointer;
 }
 
 .prefs-add-input {
