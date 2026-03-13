@@ -135,6 +135,12 @@ export const api = {
   login: (email) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email }) }),
   logout: () => request('/auth/logout', { method: 'POST' }),
 
+  // Account
+  updateAccount: (data) => request('/account/update', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+
   // Onboarding
   getOnboardingStatus: () => request('/onboarding/status'),
   completeOnboarding: () => request('/onboarding/complete', { method: 'POST' }),

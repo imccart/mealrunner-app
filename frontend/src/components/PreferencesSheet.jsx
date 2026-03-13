@@ -104,7 +104,14 @@ export default function PreferencesSheet({ onClose }) {
   const [householdEmail, setHouseholdEmail] = useState('')
   const [betaEmail, setBetaEmail] = useState('')
   const [inviteStatus, setInviteStatus] = useState(null)
+  const [userEmail, setUserEmail] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [nameSaved, setNameSaved] = useState(false)
   useEffect(() => {
+    api.getMe().then(data => {
+      setUserEmail(data.email || '')
+      setDisplayName(data.display_name || '')
+    }).catch(() => {})
     api.getRegulars().then(data => setRegulars(data.regulars))
     api.getPantry().then(data => setPantry(data.items))
     api.getStores().then(data => setStores(data.stores))
@@ -229,13 +236,49 @@ export default function PreferencesSheet({ onClose }) {
     }
   }
 
+  const handleSaveName = async () => {
+    await api.updateAccount({ display_name: displayName })
+    setNameSaved(true)
+    setTimeout(() => setNameSaved(false), 2000)
+  }
+
   return (
     <Sheet onClose={onClose} className="prefs-sheet">
         <div className="sheet-title">Preferences</div>
         <div className="sheet-sub">Configurable any time</div>
 
+        {/* Account */}
+        <AccordionSection title="Account" defaultOpen>
+          <div className="prefs-account-field">
+            <label className="prefs-field-label">Name</label>
+            <div className="prefs-add-row">
+              <input
+                className="prefs-add-input"
+                type="text"
+                placeholder="Your name"
+                value={displayName}
+                onChange={(e) => { setDisplayName(e.target.value); setNameSaved(false) }}
+                onBlur={() => displayName.trim() && handleSaveName()}
+              />
+              {nameSaved && <span className="prefs-saved">{'\u2713'}</span>}
+            </div>
+          </div>
+          <div className="prefs-account-field">
+            <label className="prefs-field-label">Email</label>
+            <div className="prefs-field-value">{userEmail}</div>
+          </div>
+          <button className="prefs-logout" onClick={async () => {
+            await api.logout()
+            localStorage.removeItem('souschef_onboarded')
+            localStorage.removeItem('souschef_welcomed')
+            window.location.reload()
+          }}>
+            Sign out
+          </button>
+        </AccordionSection>
+
         {/* Stores */}
-        <AccordionSection title="Stores" count={stores?.length || 0} defaultOpen>
+        <AccordionSection title="Stores" count={stores?.length || 0}>
           {stores && stores.length > 0 && (
             <div className="prefs-list">
               {stores.map(s => (
@@ -268,131 +311,125 @@ export default function PreferencesSheet({ onClose }) {
           </form>
         </AccordionSection>
 
-        {/* Recipes */}
-        <AccordionSection title="Meals" count={recipes?.length || 0}>
-          <div className="prefs-section-hint">
-            Your meal rotation. Add meals you make regularly.
-          </div>
-          {recipes && recipes.length > 0 && (
-            <div className="prefs-list">
-              {recipes.map(r => (
-                <RecipeItem key={r.id} recipe={r} onRemove={handleRemoveRecipe} allIngredients={allIngredients} />
-              ))}
+        {/* Kitchen — Meals, Regulars, Pantry */}
+        <AccordionSection title="Kitchen">
+          <AccordionSection title="Meals" count={recipes?.length || 0}>
+            <div className="prefs-section-hint">
+              Your meal rotation. Add meals you make regularly.
             </div>
-          )}
-          <form onSubmit={handleAddRecipe} className="prefs-add-row">
-            <input
-              className="prefs-add-input"
-              type="text"
-              placeholder="Add a meal..."
-              value={addRecipeText}
-              onChange={(e) => setAddRecipeText(e.target.value)}
-            />
-            <button className="btn primary" type="submit">+</button>
-          </form>
-        </AccordionSection>
+            {recipes && recipes.length > 0 && (
+              <div className="prefs-list">
+                {recipes.map(r => (
+                  <RecipeItem key={r.id} recipe={r} onRemove={handleRemoveRecipe} allIngredients={allIngredients} />
+                ))}
+              </div>
+            )}
+            <form onSubmit={handleAddRecipe} className="prefs-add-row">
+              <input
+                className="prefs-add-input"
+                type="text"
+                placeholder="Add a meal..."
+                value={addRecipeText}
+                onChange={(e) => setAddRecipeText(e.target.value)}
+              />
+              <button className="btn primary" type="submit">+</button>
+            </form>
+          </AccordionSection>
 
-        {/* Regulars */}
-        <AccordionSection
-          title="Regulars"
-          count={regulars?.length || 0}
-        >
-          <div className="prefs-section-hint">
-            Items you consider buying every trip
-          </div>
-          {regulars && regulars.length > 0 && (
-            <div className="prefs-list">
-              {Object.keys(regularGroups).sort().map(group => (
-                <div key={group}>
-                  <div className="prefs-list-group">{group}</div>
-                  {regularGroups[group].map(r => (
-                    <div key={r.id} className="prefs-list-item">
-                      <span className="prefs-list-name">{r.name}</span>
-                      <button className="prefs-move" title="Move to Pantry" onClick={() => handleMoveToPantry(r.name)}>{'\u2192 pantry'}</button>
-                      <button className="prefs-remove" onClick={() => handleRemoveRegular(r.name)}>{'\u00D7'}</button>
-                    </div>
-                  ))}
-                </div>
-              ))}
+          <AccordionSection title="Regulars" count={regulars?.length || 0}>
+            <div className="prefs-section-hint">
+              Items you consider buying every trip
             </div>
-          )}
-          <div className="prefs-add-row">
-            <AutocompleteInput
-              value={addRegularText}
-              onChange={setAddRegularText}
-              onSubmit={async (name) => {
-                if (!name.trim()) return
-                await api.addRegular(name.trim())
-                setAddRegularText('')
-                const data = await api.getRegulars()
-                setRegulars(data.regulars)
-              }}
-              candidates={allIngredients || []}
-              exclude={new Set((regulars || []).map(r => r.name.toLowerCase()))}
-              placeholder="Add a regular..."
-              inputClassName="prefs-add-input"
-            />
-            <button className="btn primary" onClick={() => {
-              if (addRegularText.trim()) {
-                const name = addRegularText.trim()
-                api.addRegular(name).then(() => {
+            {regulars && regulars.length > 0 && (
+              <div className="prefs-list">
+                {Object.keys(regularGroups).sort().map(group => (
+                  <div key={group}>
+                    <div className="prefs-list-group">{group}</div>
+                    {regularGroups[group].map(r => (
+                      <div key={r.id} className="prefs-list-item">
+                        <span className="prefs-list-name">{r.name}</span>
+                        <button className="prefs-move" title="Move to Pantry" onClick={() => handleMoveToPantry(r.name)}>{'\u2192 pantry'}</button>
+                        <button className="prefs-remove" onClick={() => handleRemoveRegular(r.name)}>{'\u00D7'}</button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="prefs-add-row">
+              <AutocompleteInput
+                value={addRegularText}
+                onChange={setAddRegularText}
+                onSubmit={async (name) => {
+                  if (!name.trim()) return
+                  await api.addRegular(name.trim())
                   setAddRegularText('')
-                  api.getRegulars().then(data => setRegulars(data.regulars))
-                })
-              }
-            }}>+</button>
-          </div>
-        </AccordionSection>
-
-        {/* Pantry */}
-        <AccordionSection
-          title="Pantry"
-          count={pantry?.length || 0}
-        >
-          <div className="prefs-section-hint">
-            Stuff you usually have — only buy when you're running low
-          </div>
-          {pantry && pantry.length > 0 && (
-            <div className="prefs-list">
-              {pantry.map(p => (
-                <div key={p.id} className="prefs-list-item">
-                  <span className="prefs-list-name">{p.name}</span>
-                  <button className="prefs-move" title="Move to Regulars" onClick={() => handleMoveToRegulars(p.name, p.id)}>{'\u2192 regular'}</button>
-                  <button className="prefs-remove" onClick={() => handleRemovePantry(p.id)}>{'\u00D7'}</button>
-                </div>
-              ))}
+                  const data = await api.getRegulars()
+                  setRegulars(data.regulars)
+                }}
+                candidates={allIngredients || []}
+                exclude={new Set((regulars || []).map(r => r.name.toLowerCase()))}
+                placeholder="Add a regular..."
+                inputClassName="prefs-add-input"
+              />
+              <button className="btn primary" onClick={() => {
+                if (addRegularText.trim()) {
+                  const name = addRegularText.trim()
+                  api.addRegular(name).then(() => {
+                    setAddRegularText('')
+                    api.getRegulars().then(data => setRegulars(data.regulars))
+                  })
+                }
+              }}>+</button>
             </div>
-          )}
-          <div className="prefs-add-row">
-            <AutocompleteInput
-              value={addPantryText}
-              onChange={setAddPantryText}
-              onSubmit={async (name) => {
-                if (!name.trim()) return
-                await api.addPantryItem(name.trim())
-                setAddPantryText('')
-                const data = await api.getPantry()
-                setPantry(data.items)
-              }}
-              candidates={allIngredients || []}
-              exclude={new Set((pantry || []).map(p => p.name.toLowerCase()))}
-              placeholder="Add a pantry item..."
-              inputClassName="prefs-add-input"
-            />
-            <button className="btn primary" onClick={() => {
-              if (addPantryText.trim()) {
-                const name = addPantryText.trim()
-                api.addPantryItem(name).then(() => {
+          </AccordionSection>
+
+          <AccordionSection title="Pantry" count={pantry?.length || 0}>
+            <div className="prefs-section-hint">
+              Stuff you usually have — only buy when you're running low
+            </div>
+            {pantry && pantry.length > 0 && (
+              <div className="prefs-list">
+                {pantry.map(p => (
+                  <div key={p.id} className="prefs-list-item">
+                    <span className="prefs-list-name">{p.name}</span>
+                    <button className="prefs-move" title="Move to Regulars" onClick={() => handleMoveToRegulars(p.name, p.id)}>{'\u2192 regular'}</button>
+                    <button className="prefs-remove" onClick={() => handleRemovePantry(p.id)}>{'\u00D7'}</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="prefs-add-row">
+              <AutocompleteInput
+                value={addPantryText}
+                onChange={setAddPantryText}
+                onSubmit={async (name) => {
+                  if (!name.trim()) return
+                  await api.addPantryItem(name.trim())
                   setAddPantryText('')
-                  api.getPantry().then(data => setPantry(data.items))
-                })
-              }
-            }}>+</button>
-          </div>
+                  const data = await api.getPantry()
+                  setPantry(data.items)
+                }}
+                candidates={allIngredients || []}
+                exclude={new Set((pantry || []).map(p => p.name.toLowerCase()))}
+                placeholder="Add a pantry item..."
+                inputClassName="prefs-add-input"
+              />
+              <button className="btn primary" onClick={() => {
+                if (addPantryText.trim()) {
+                  const name = addPantryText.trim()
+                  api.addPantryItem(name).then(() => {
+                    setAddPantryText('')
+                    api.getPantry().then(data => setPantry(data.items))
+                  })
+                }
+              }}>+</button>
+            </div>
+          </AccordionSection>
         </AccordionSection>
 
-        {/* Transparency */}
-        <AccordionSection title="Transparency">
+        {/* Product Details */}
+        <AccordionSection title="Product Details">
           <div className="prefs-list">
             <div className="prefs-list-item">
               <span className="prefs-list-name">NOVA processing scores</span>
@@ -401,20 +438,6 @@ export default function PreferencesSheet({ onClose }) {
             <div className="prefs-list-item">
               <span className="prefs-list-name">Brand ownership</span>
               <span className="prefs-list-meta">Coming soon</span>
-            </div>
-          </div>
-        </AccordionSection>
-
-        {/* Integrations */}
-        <AccordionSection title="Integrations">
-          <div className="prefs-list">
-            <div className="prefs-list-item">
-              <span className="prefs-list-name">Kroger</span>
-              <span className="prefs-list-meta">Configure via CLI</span>
-            </div>
-            <div className="prefs-list-item">
-              <span className="prefs-list-name">Google Sheets</span>
-              <span className="prefs-list-meta">Configure via CLI</span>
             </div>
           </div>
         </AccordionSection>
@@ -434,7 +457,7 @@ export default function PreferencesSheet({ onClose }) {
             </div>
           )}
           <div className="prefs-section-hint">
-            Invite someone to share your meal plan, grocery list, and pantry.
+            Invite someone to share meals and grocery lists.
           </div>
           <form onSubmit={handleHouseholdInvite} className="prefs-add-row">
             <input
@@ -466,18 +489,6 @@ export default function PreferencesSheet({ onClose }) {
               {inviteStatus.msg}
             </div>
           )}
-        </AccordionSection>
-
-        {/* Account */}
-        <AccordionSection title="Account">
-          <button className="prefs-logout" onClick={async () => {
-            await api.logout()
-            localStorage.removeItem('souschef_onboarded')
-            localStorage.removeItem('souschef_welcomed')
-            window.location.reload()
-          }}>
-            Sign out
-          </button>
         </AccordionSection>
 
         {/* About */}

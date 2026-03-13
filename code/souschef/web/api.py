@@ -2329,6 +2329,31 @@ async def decline_invite(request: Request):
     return {"ok": True}
 
 
+# ── Account ──────────────────────────────────────────────
+
+
+@router.post("/account/update")
+async def update_account(body: dict, request: Request):
+    """Update current user's profile (display_name)."""
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    conn = _conn()
+
+    display_name = body.get("display_name")
+    if display_name is not None:
+        display_name = display_name.strip() or None
+        conn.execute(
+            text("UPDATE users SET display_name = :name WHERE id = :id"),
+            {"name": display_name, "id": real_user_id},
+        )
+        conn.commit()
+
+    user = conn.execute(
+        text("SELECT id, email, display_name FROM users WHERE id = :id"),
+        {"id": real_user_id},
+    ).fetchone()
+    return {"ok": True, "email": user["email"], "display_name": user["display_name"]}
+
+
 # ── Feedback ──────────────────────────────────────────────
 
 
