@@ -56,7 +56,10 @@ export const api = {
     body: JSON.stringify({ item_name: itemName, product }),
   }),
   deselectProduct: (itemName) => request(`/order/deselect/${encodeURIComponent(itemName)}`, { method: 'POST' }),
-  submitOrder: () => request('/order/submit', { method: 'POST' }),
+  submitOrder: (krogerUserId) => request('/order/submit', {
+    method: 'POST',
+    body: JSON.stringify(krogerUserId ? { kroger_user_id: krogerUserId } : {}),
+  }),
 
   // Grocery
   getGrocery: () => request('/grocery'),
@@ -134,6 +137,7 @@ export const api = {
   getKrogerStatus: () => request('/kroger/status'),
   connectKroger: () => request('/kroger/connect'),
   disconnectKroger: () => request('/kroger/disconnect', { method: 'POST' }),
+  getKrogerHouseholdAccounts: () => request('/kroger/household-accounts'),
 
   // Auth
   getMe: () => request('/auth/me'),
@@ -166,6 +170,12 @@ export const api = {
   inviteToBeta: (email) => request('/beta/invite', {
     method: 'POST',
     body: JSON.stringify({ email }),
+  }),
+
+  // Community data
+  submitCommunityData: (dataType, subject, suggestedValue) => request('/community-data', {
+    method: 'POST',
+    body: JSON.stringify({ data_type: dataType, subject, suggested_value: suggestedValue }),
   }),
 
   // Feedback

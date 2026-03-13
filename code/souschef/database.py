@@ -405,6 +405,17 @@ user_kroger_tokens = Table(
     Column("updated_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
 )
 
+community_data = Table(
+    "community_data", metadata,
+    Column("id", Text, primary_key=True),
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
+    Column("household_id", Text, nullable=False, server_default=text("''")),
+    Column("data_type", Text, nullable=False),
+    Column("subject", Text, nullable=False),
+    Column("suggested_value", Text, nullable=False),
+    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
 settings = Table(
     "settings", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),

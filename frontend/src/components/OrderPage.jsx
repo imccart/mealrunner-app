@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
+import Sheet from './Sheet'
 
 function NovaBadge({ nova }) {
   if (!nova) return null
@@ -24,6 +25,19 @@ function ProductInsights({ nova, nutriscore }) {
   )
 }
 
+function ParentCoBadge({ brand, parentCompany, onTapUnknown }) {
+  if (!parentCompany) return null
+  const unknown = parentCompany === "We're not sure"
+  return (
+    <div
+      className={`parent-co${unknown ? ' unknown' : ''}`}
+      onClick={unknown ? (e) => { e.stopPropagation(); onTapUnknown(brand) } : undefined}
+    >
+      Parent Co.: {parentCompany}{unknown && ' \u00B7 ?'}
+    </div>
+  )
+}
+
 function formatPrice(price) {
   if (price == null) return ''
   return `$${price.toFixed(2)}`
@@ -37,6 +51,21 @@ export default function OrderPage() {
   const [searching, setSearching] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitResult, setSubmitResult] = useState(null)
+  const [krogerAccounts, setKrogerAccounts] = useState(null)
+  const [selectedAccount, setSelectedAccount] = useState(null)
+  const [communityBrand, setCommunityBrand] = useState(null)
+  const [communityValue, setCommunityValue] = useState('')
+  const [communityConfirm, setCommunityConfirm] = useState(false)
+
+  useEffect(() => {
+    api.getKrogerHouseholdAccounts().then(data => {
+      setKrogerAccounts(data.accounts || [])
+      // Auto-select: prefer "you", otherwise first available
+      const yours = (data.accounts || []).find(a => a.is_you)
+      if (yours) setSelectedAccount(yours.user_id)
+      else if (data.accounts?.length > 0) setSelectedAccount(data.accounts[0].user_id)
+    }).catch(() => setKrogerAccounts([]))
+  }, [])
 
   useEffect(() => {
     api.getOrder().then(data => {
@@ -87,7 +116,7 @@ export default function OrderPage() {
 
   const handleSubmit = async () => {
     setSubmitting(true)
-    const result = await api.submitOrder()
+    const result = await api.submitOrder(selectedAccount || undefined)
     setSubmitResult(result)
     setSubmitting(false)
   }
@@ -252,6 +281,7 @@ export default function OrderPage() {
                       {!p.in_stock && <div className="out-of-stock-label">Unavailable</div>}
                     </div>
                     <ProductInsights nova={p.nova} nutriscore={p.nutriscore} />
+                    <ParentCoBadge brand={p.brand} parentCompany={p.parent_company} onTapUnknown={(b) => setCommunityBrand(b)} />
                   </button>
                 ))}
               </div>
@@ -308,19 +338,41 @@ export default function OrderPage() {
       <div className="order-summary-footer">
         {order.selected.length > 0 && (
           <>
-            {submitResult?.ok ? (
-              <div className="submit-success">Added to Kroger cart {'\u2713'}</div>
+            {krogerAccounts && krogerAccounts.length === 0 ? (
+              <div className="submit-hint">Link a store account in Preferences to submit orders</div>
             ) : (
-              <button
-                className="order-finalize-btn"
-                onClick={handleSubmit}
-                disabled={submitting}
-              >
-                {submitting ? 'Submitting...' : `Finalize on Kroger ${'\u2192'}`}
-              </button>
-            )}
-            {submitResult && !submitResult.ok && (
-              <div className="submit-error">{submitResult.error}</div>
+              <>
+                {krogerAccounts && krogerAccounts.length > 1 && (
+                  <div className="account-picker">
+                    <label className="account-picker-label">Submit as</label>
+                    <select
+                      className="account-picker-select"
+                      value={selectedAccount || ''}
+                      onChange={e => setSelectedAccount(e.target.value)}
+                    >
+                      {krogerAccounts.map(a => (
+                        <option key={a.user_id} value={a.user_id}>
+                          {a.display_name}{a.is_you ? ' (you)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {submitResult?.ok ? (
+                  <div className="submit-success">Added to Kroger cart {'\u2713'}</div>
+                ) : (
+                  <button
+                    className="order-finalize-btn"
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                  >
+                    {submitting ? 'Submitting...' : `Finalize on Kroger ${'\u2192'}`}
+                  </button>
+                )}
+                {submitResult && !submitResult.ok && (
+                  <div className="submit-error">{submitResult.error}</div>
+                )}
+              </>
             )}
           </>
         )}
@@ -379,21 +431,73 @@ export default function OrderPage() {
               <span> {'\u00B7'} {formatPrice(order.total_price)}</span>
             )}
           </div>
-          {submitResult?.ok ? (
-            <div className="submit-success">Added to Kroger cart {'\u2713'}</div>
+          {krogerAccounts && krogerAccounts.length === 0 ? (
+            <div className="submit-hint">Link a store account in Preferences</div>
           ) : (
-            <button
-              className="build-list-btn"
-              onClick={handleSubmit}
-              disabled={submitting}
-            >
-              {submitting ? 'Submitting...' : `Finalize on Kroger ${'\u2192'}`}
-            </button>
-          )}
-          {submitResult && !submitResult.ok && (
-            <div className="submit-error">{submitResult.error}</div>
+            <>
+              {krogerAccounts && krogerAccounts.length > 1 && (
+                <div className="account-picker account-picker-mobile">
+                  <select
+                    className="account-picker-select"
+                    value={selectedAccount || ''}
+                    onChange={e => setSelectedAccount(e.target.value)}
+                  >
+                    {krogerAccounts.map(a => (
+                      <option key={a.user_id} value={a.user_id}>
+                        {a.display_name}{a.is_you ? ' (you)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {submitResult?.ok ? (
+                <div className="submit-success">Added to Kroger cart {'\u2713'}</div>
+              ) : (
+                <button
+                  className="build-list-btn"
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                >
+                  {submitting ? 'Submitting...' : `Finalize on Kroger ${'\u2192'}`}
+                </button>
+              )}
+              {submitResult && !submitResult.ok && (
+                <div className="submit-error">{submitResult.error}</div>
+              )}
+            </>
           )}
         </div>
+      )}
+      {communityBrand && !communityConfirm && (
+        <Sheet onClose={() => { setCommunityBrand(null); setCommunityValue('') }}>
+          <div className="sheet-title">Who makes this?</div>
+          <div className="sheet-sub">Help us fill in the gaps.</div>
+          <div className="community-form">
+            <div className="community-brand">Brand: <strong>{communityBrand}</strong></div>
+            <input
+              className="community-input"
+              type="text"
+              placeholder="e.g. General Mills"
+              value={communityValue}
+              onChange={(e) => setCommunityValue(e.target.value)}
+              autoFocus
+            />
+            <button
+              className="btn primary"
+              disabled={!communityValue.trim()}
+              onClick={async () => {
+                await api.submitCommunityData('brand_ownership', communityBrand, communityValue.trim())
+                setCommunityBrand(null)
+                setCommunityValue('')
+                setCommunityConfirm(true)
+                setTimeout(() => setCommunityConfirm(false), 2000)
+              }}
+            >Submit</button>
+          </div>
+        </Sheet>
+      )}
+      {communityConfirm && (
+        <div className="community-toast">Yes, Chef!</div>
       )}
     </>
   )

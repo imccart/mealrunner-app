@@ -464,9 +464,12 @@ def seed_from_yaml(conn: DictConnection, data_dir: str | None = None) -> None:
 
     ingredients_file = Path(data_dir) / "seed_ingredients.yaml"
     recipes_file = Path(data_dir) / "seed_recipes.yaml"
+    ingredient_db_file = Path(data_dir) / "seed_ingredient_database.yaml"
 
     if ingredients_file.exists():
         _seed_ingredients(conn, ingredients_file)
+    if ingredient_db_file.exists():
+        _seed_ingredient_database(conn, ingredient_db_file)
     if recipes_file.exists():
         _seed_recipes(conn, recipes_file)
 
@@ -490,6 +493,28 @@ def _seed_ingredients(conn: DictConnection, path: Path) -> None:
             "unit": ing.get("default_unit", "count"),
             "store": ing.get("store_pref", "either"),
             "staple": int(ing.get("is_pantry_staple", False)),
+            "root": ing.get("root", ""),
+        })
+
+
+def _seed_ingredient_database(conn: DictConnection, path: Path) -> None:
+    """Seed the canonical ingredient database (~600 common grocery items).
+
+    Inserts ingredients that don't already exist (ON CONFLICT DO NOTHING by name).
+    This runs after _seed_ingredients so family-specific entries take precedence.
+    """
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    for ing in data.get("ingredients", []):
+        conn.execute(text(
+            """INSERT INTO ingredients (name, aisle, is_pantry_staple, root)
+               VALUES (:name, :aisle, :staple, :root)
+               ON CONFLICT (name) DO NOTHING"""
+        ), {
+            "name": ing["name"],
+            "aisle": ing.get("aisle", "Other"),
+            "staple": int(ing.get("is_pantry_staple", 0)),
             "root": ing.get("root", ""),
         })
 

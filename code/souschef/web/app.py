@@ -448,6 +448,44 @@ async def kroger_disconnect(request: Request):
     return {"ok": True}
 
 
+@app.get("/api/kroger/household-accounts")
+async def kroger_household_accounts(request: Request):
+    """Return household members who have linked Kroger accounts."""
+    real_user_id = request.state.real_user_id
+    conn = get_connection()
+    try:
+        # Find the user's household
+        hh_row = conn.execute(
+            text("SELECT household_id FROM household_members WHERE user_id = :uid"),
+            {"uid": real_user_id},
+        ).fetchone()
+        if not hh_row:
+            return {"accounts": []}
+
+        # Get all household members who have Kroger tokens
+        rows = conn.execute(
+            text("""SELECT hm.user_id, u.display_name, u.email
+                FROM household_members hm
+                JOIN users u ON u.id = hm.user_id
+                JOIN user_kroger_tokens ukt ON ukt.user_id = hm.user_id
+                WHERE hm.household_id = :hh_id
+                ORDER BY hm.role ASC, hm.joined_at ASC"""),
+            {"hh_id": hh_row["household_id"]},
+        ).fetchall()
+    finally:
+        conn.close()
+
+    accounts = []
+    for r in rows:
+        name = r["display_name"] or r["email"].split("@")[0]
+        accounts.append({
+            "user_id": r["user_id"],
+            "display_name": name,
+            "is_you": r["user_id"] == real_user_id,
+        })
+    return {"accounts": accounts}
+
+
 # ── Routes ────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)

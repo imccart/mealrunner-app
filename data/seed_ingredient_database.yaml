@@ -1,0 +1,2147 @@
+# Canonical ingredient database — ~600 common US grocery items
+# Each entry maps to a shopping group (aisle field) for grocery list organization.
+# Names are lowercase, how a family would say them.
+# root is only set when the display name differs from the Kroger search keyword.
+# is_pantry_staple: 1 = typically always in the pantry, 0 = bought as needed.
+
+ingredients:
+
+  # ============================================================
+  # PRODUCE (~100 items)
+  # ============================================================
+
+  # -- Fresh Fruits --
+  - name: apple
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: banana
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: orange
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: lemon
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: lime
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: grapes
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: strawberries
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: blueberries
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: raspberries
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: blackberries
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: watermelon
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: cantaloupe
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: honeydew
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: pineapple
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: mango
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: peach
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: pear
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: plum
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: nectarine
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: cherries
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: kiwi
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: avocado
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: grapefruit
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: clementines
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: pomegranate
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: coconut
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: dried cranberries
+    aisle: Produce
+    is_pantry_staple: 0
+    root: cranberries
+
+  # -- Fresh Vegetables --
+  - name: yellow onion
+    aisle: Produce
+    is_pantry_staple: 1
+  - name: red onion
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: white onion
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: green onion
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: garlic
+    aisle: Produce
+    is_pantry_staple: 1
+  - name: potato
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: sweet potato
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: russet potato
+    aisle: Produce
+    is_pantry_staple: 0
+    root: potato
+  - name: red potato
+    aisle: Produce
+    is_pantry_staple: 0
+    root: potato
+  - name: carrot
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: celery
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: bell pepper
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: jalapeno
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: serrano pepper
+    aisle: Produce
+    is_pantry_staple: 0
+    root: pepper
+  - name: poblano pepper
+    aisle: Produce
+    is_pantry_staple: 0
+    root: pepper
+  - name: broccoli
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: cauliflower
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: brussels sprouts
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: cabbage
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: lettuce
+    aisle: Produce
+    is_pantry_staple: 1
+  - name: romaine lettuce
+    aisle: Produce
+    is_pantry_staple: 0
+    root: lettuce
+  - name: spinach
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: kale
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: arugula
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: mixed salad greens
+    aisle: Produce
+    is_pantry_staple: 0
+    root: salad greens
+  - name: cucumber
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: zucchini
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: yellow squash
+    aisle: Produce
+    is_pantry_staple: 0
+    root: squash
+  - name: butternut squash
+    aisle: Produce
+    is_pantry_staple: 0
+    root: squash
+  - name: acorn squash
+    aisle: Produce
+    is_pantry_staple: 0
+    root: squash
+  - name: tomato
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: cherry tomatoes
+    aisle: Produce
+    is_pantry_staple: 0
+    root: tomatoes
+  - name: roma tomato
+    aisle: Produce
+    is_pantry_staple: 0
+    root: tomatoes
+  - name: corn on the cob
+    aisle: Produce
+    is_pantry_staple: 0
+    root: corn
+  - name: mushrooms
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: asparagus
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: green beans
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: snap peas
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: eggplant
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: artichoke
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: beets
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: turnip
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: radish
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: ginger
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: shallot
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: leek
+    aisle: Produce
+    is_pantry_staple: 0
+
+  # -- Fresh Herbs --
+  - name: cilantro
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: parsley
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: fresh basil
+    aisle: Produce
+    is_pantry_staple: 0
+    root: basil
+  - name: fresh dill
+    aisle: Produce
+    is_pantry_staple: 0
+    root: dill
+  - name: fresh rosemary
+    aisle: Produce
+    is_pantry_staple: 0
+    root: rosemary
+  - name: fresh thyme
+    aisle: Produce
+    is_pantry_staple: 0
+    root: thyme
+  - name: fresh mint
+    aisle: Produce
+    is_pantry_staple: 0
+    root: mint
+  - name: chives
+    aisle: Produce
+    is_pantry_staple: 0
+
+  # ============================================================
+  # MEAT (~60 items)
+  # ============================================================
+
+  # -- Chicken --
+  - name: chicken breast
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: chicken thighs
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: chicken wings
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: chicken drumsticks
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: whole chicken
+    aisle: Meat
+    is_pantry_staple: 0
+    root: chicken
+  - name: rotisserie chicken
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: ground chicken
+    aisle: Meat
+    is_pantry_staple: 0
+
+  # -- Beef --
+  - name: ground beef
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: steak
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: ribeye steak
+    aisle: Meat
+    is_pantry_staple: 0
+    root: steak
+  - name: sirloin steak
+    aisle: Meat
+    is_pantry_staple: 0
+    root: steak
+  - name: chuck roast
+    aisle: Meat
+    is_pantry_staple: 0
+    root: roast
+  - name: beef stew meat
+    aisle: Meat
+    is_pantry_staple: 0
+    root: stew meat
+  - name: beef short ribs
+    aisle: Meat
+    is_pantry_staple: 0
+    root: short ribs
+  - name: flank steak
+    aisle: Meat
+    is_pantry_staple: 0
+    root: steak
+  - name: ground turkey
+    aisle: Meat
+    is_pantry_staple: 0
+
+  # -- Pork --
+  - name: pork chops
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: pork shoulder
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: pork tenderloin
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: pork loin
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: baby back ribs
+    aisle: Meat
+    is_pantry_staple: 0
+    root: ribs
+  - name: spare ribs
+    aisle: Meat
+    is_pantry_staple: 0
+    root: ribs
+  - name: ground pork
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: ham
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: bacon
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: breakfast sausage
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: breakfast meat
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: beef sausage
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: italian sausage
+    aisle: Meat
+    is_pantry_staple: 0
+    root: sausage
+  - name: bratwurst
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: hot dogs
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: kielbasa
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: pepperoni
+    aisle: Meat
+    is_pantry_staple: 0
+
+  # -- Seafood --
+  - name: salmon fillet
+    aisle: Meat
+    is_pantry_staple: 0
+    root: salmon
+  - name: shrimp
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: tilapia
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: cod
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: tuna steak
+    aisle: Meat
+    is_pantry_staple: 0
+    root: tuna
+  - name: catfish
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: crab meat
+    aisle: Meat
+    is_pantry_staple: 0
+    root: crab
+  - name: scallops
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: mahi mahi
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: frozen shrimp
+    aisle: Meat
+    is_pantry_staple: 0
+    root: shrimp
+
+  # -- Deli --
+  - name: deli turkey
+    aisle: Meat
+    is_pantry_staple: 0
+    root: turkey
+  - name: deli ham
+    aisle: Meat
+    is_pantry_staple: 0
+    root: ham
+  - name: salami
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: prosciutto
+    aisle: Meat
+    is_pantry_staple: 0
+
+  # -- Other Protein --
+  - name: tofu
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: tempeh
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: turkey breast
+    aisle: Meat
+    is_pantry_staple: 0
+    root: turkey
+  - name: lamb chops
+    aisle: Meat
+    is_pantry_staple: 0
+    root: lamb
+  - name: ground lamb
+    aisle: Meat
+    is_pantry_staple: 0
+    root: lamb
+
+  # ============================================================
+  # DAIRY & EGGS (~50 items)
+  # ============================================================
+
+  - name: milk
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: whole milk
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: milk
+  - name: 2% milk
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: milk
+  - name: skim milk
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: milk
+  - name: almond milk
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: oat milk
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: half and half
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: heavy cream
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: whipping cream
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: cream
+  - name: buttermilk
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: eggs
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: butter
+    aisle: Dairy & Eggs
+    is_pantry_staple: 1
+  - name: salted butter
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: butter
+  - name: unsalted butter
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: butter
+  - name: margarine
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: sour cream
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: cream cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: cottage cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: ricotta cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: ricotta
+  - name: shredded cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: shredded cheddar
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: cheddar
+  - name: shredded mozzarella
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: mozzarella
+  - name: shredded mexican cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: mexican cheese
+  - name: sliced cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: cheese
+  - name: parmesan cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: parmesan
+  - name: cheddar cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: cheddar
+  - name: mozzarella cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: mozzarella
+  - name: swiss cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: swiss
+  - name: provolone cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: provolone
+  - name: pepper jack cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: pepper jack
+  - name: feta cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: feta
+  - name: goat cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: brie
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: string cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: yogurt
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: greek yogurt
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: yogurt
+  - name: vanilla yogurt
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: yogurt
+  - name: whipped cream
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: cool whip
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: egg whites
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: eggs
+  - name: chocolate milk
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: coffee creamer
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: soy milk
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: velveeta
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: blue cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: colby jack cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: colby jack
+  - name: mascarpone
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+  - name: crumbled feta
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: feta
+  - name: queso fresco
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+
+  # ============================================================
+  # BREAD & BAKERY (~50 items)
+  # ============================================================
+
+  - name: sliced bread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: white bread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: bread
+  - name: wheat bread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: bread
+  - name: sourdough bread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: bread
+  - name: french bread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: bread
+  - name: italian bread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: bread
+  - name: rye bread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: bread
+  - name: hamburger buns
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: hot dog buns
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: dinner rolls
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: hoagie rolls
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: rolls
+  - name: slider buns
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: buns
+  - name: flour tortillas
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: corn tortillas
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: pita bread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: pita
+  - name: naan bread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: naan
+  - name: english muffins
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: bagels
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: croissants
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: biscuits
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: cornbread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: cornbread mix
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: cornbread
+  - name: crescent rolls
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: pizza dough
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: pie crust
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: phyllo dough
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: puff pastry
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: garlic bread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: texas toast
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: breadsticks
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: ciabatta
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: brioche buns
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: buns
+  - name: flatbread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: taco shells
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: wonton wrappers
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: egg roll wrappers
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: croutons
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: stuffing mix
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: stuffing
+  - name: cake
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: muffins
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: donuts
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: cookies
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+  - name: sandwich bread
+    aisle: Bread & Bakery
+    is_pantry_staple: 0
+    root: bread
+
+  # ============================================================
+  # PASTA & GRAINS (~45 items)
+  # ============================================================
+
+  - name: spaghetti
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: fettuccine
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: penne
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: rigatoni
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: rotini
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: elbow macaroni
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: angel hair pasta
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: pasta
+  - name: linguine
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: farfalle
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: orzo
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: lasagna noodles
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: lasagna
+  - name: egg noodles
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: ramen noodles
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: ramen
+  - name: rice noodles
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: boxed mac and cheese
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: mac and cheese
+  - name: rice
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: white rice
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: rice
+  - name: brown rice
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: rice
+  - name: jasmine rice
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: rice
+  - name: basmati rice
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: rice
+  - name: instant rice
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: rice
+  - name: quinoa
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: couscous
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: barley
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: bulgur
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: grits
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: polenta
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: breadcrumbs
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: panko breadcrumbs
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: breadcrumbs
+  - name: stuffing
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: rice-a-roni
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: hamburger helper
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: macaroni
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: shells pasta
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: pasta
+  - name: tortellini
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: ravioli
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: gnocchi
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+  - name: wild rice
+    aisle: Pasta & Grains
+    is_pantry_staple: 0
+    root: rice
+
+  # ============================================================
+  # SPICES & BAKING (~60 items)
+  # ============================================================
+
+  # -- Common Spices --
+  - name: salt
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: black pepper
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: garlic powder
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: onion powder
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: paprika
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: smoked paprika
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+    root: paprika
+  - name: chili powder
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: cumin
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: oregano
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: italian seasoning
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: cayenne pepper
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: crushed red pepper
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+    root: red pepper flakes
+  - name: cinnamon
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: nutmeg
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: thyme
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: rosemary
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: basil
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: bay leaves
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: dill
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: turmeric
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: coriander
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: ginger powder
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+    root: ginger
+  - name: allspice
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: cloves
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: sage
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: taco seasoning
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: ranch seasoning
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: old bay seasoning
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+    root: old bay
+  - name: seasoned salt
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+    root: salt
+  - name: lemon pepper
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: celery salt
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+
+  # -- Baking Staples --
+  - name: flour
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: all-purpose flour
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+    root: flour
+  - name: self-rising flour
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+    root: flour
+  - name: whole wheat flour
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+    root: flour
+  - name: sugar
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: brown sugar
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: powdered sugar
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: baking powder
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: baking soda
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: vanilla extract
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+    root: vanilla
+  - name: almond extract
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: cocoa powder
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+    root: cocoa
+  - name: cornstarch
+    aisle: Spices & Baking
+    is_pantry_staple: 1
+  - name: cornmeal
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: cream of tartar
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: yeast
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: chocolate chips
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: sweetened condensed milk
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: evaporated milk
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: cake mix
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: brownie mix
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: frosting
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: gelatin
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: food coloring
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: sprinkles
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: shortening
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: coconut flakes
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+    root: coconut
+  - name: pecans
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: walnuts
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+  - name: sliced almonds
+    aisle: Spices & Baking
+    is_pantry_staple: 0
+    root: almonds
+
+  # ============================================================
+  # CONDIMENTS & SAUCES (~50 items)
+  # ============================================================
+
+  # -- Oils & Vinegars --
+  - name: olive oil
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+  - name: vegetable oil
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+  - name: canola oil
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+  - name: coconut oil
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: sesame oil
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: avocado oil
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: cooking spray
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+  - name: white vinegar
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+    root: vinegar
+  - name: apple cider vinegar
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+    root: vinegar
+  - name: balsamic vinegar
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+    root: vinegar
+  - name: red wine vinegar
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+    root: vinegar
+  - name: rice vinegar
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+    root: vinegar
+
+  # -- Sauces --
+  - name: ketchup
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+  - name: mustard
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+  - name: yellow mustard
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+    root: mustard
+  - name: dijon mustard
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+    root: mustard
+  - name: mayonnaise
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+  - name: soy sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+  - name: worcestershire sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+  - name: hot sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: bbq sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: marinara sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: salsa
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: pasta sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: alfredo sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: pesto
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: teriyaki sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: stir fry sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: buffalo sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: enchilada sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: hoisin sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: fish sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: sriracha
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+
+  # -- Dressings & Spreads --
+  - name: ranch dressing
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+    root: ranch
+  - name: italian dressing
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+    root: dressing
+  - name: caesar dressing
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+    root: dressing
+  - name: honey
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+  - name: maple syrup
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: jam
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: jelly
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: peanut butter
+    aisle: Condiments & Sauces
+    is_pantry_staple: 1
+  - name: nutella
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: relish
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: pickles
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: olives
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: capers
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: steak sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: tartar sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: gravy
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+
+  # ============================================================
+  # CANNED GOODS (~40 items)
+  # ============================================================
+
+  # -- Beans --
+  - name: black beans
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: kidney beans
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: pinto beans
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: refried beans
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: chickpeas
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: great northern beans
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: beans
+  - name: navy beans
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: beans
+  - name: cannellini beans
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: beans
+  - name: baked beans
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: chili beans
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: beans
+  - name: lentils
+    aisle: Canned Goods
+    is_pantry_staple: 0
+
+  # -- Tomato Products --
+  - name: canned diced tomatoes
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: diced tomatoes
+  - name: crushed tomatoes
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: whole peeled tomatoes
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: tomatoes
+  - name: tomato paste
+    aisle: Canned Goods
+    is_pantry_staple: 1
+  - name: tomato sauce
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: stewed tomatoes
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: tomatoes
+  - name: rotel
+    aisle: Canned Goods
+    is_pantry_staple: 0
+
+  # -- Soups & Broths --
+  - name: chicken broth
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: beef broth
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: vegetable broth
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: tomato soup
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: chicken noodle soup
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: soup
+  - name: cream of mushroom soup
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: soup
+  - name: cream of chicken soup
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: soup
+
+  # -- Other Canned --
+  - name: canned tuna
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: tuna
+  - name: canned chicken
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: chicken
+  - name: canned salmon
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: salmon
+  - name: canned corn
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: corn
+  - name: canned green beans
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: green beans
+  - name: canned peas
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: peas
+  - name: canned mushrooms
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: mushrooms
+  - name: canned pineapple
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: pineapple
+  - name: canned peaches
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: peaches
+  - name: canned mandarin oranges
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: mandarin oranges
+  - name: coconut milk
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: artichoke hearts
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: green chiles
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: chipotle peppers
+    aisle: Canned Goods
+    is_pantry_staple: 0
+
+  # ============================================================
+  # FROZEN (~40 items)
+  # ============================================================
+
+  # -- Frozen Vegetables --
+  - name: frozen corn
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: corn
+  - name: frozen peas
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: peas
+  - name: frozen green beans
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: green beans
+  - name: frozen broccoli
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: broccoli
+  - name: frozen spinach
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: spinach
+  - name: frozen mixed veggies
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: mixed vegetables
+  - name: frozen stir fry vegetables
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: stir fry vegetables
+  - name: edamame
+    aisle: Frozen
+    is_pantry_staple: 0
+  - name: frozen edamame
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: edamame
+
+  # -- Frozen Potatoes --
+  - name: frozen french fries
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: french fries
+  - name: frozen tater tots
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: tater tots
+  - name: frozen hash browns
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: hash browns
+
+  # -- Frozen Meals & Proteins --
+  - name: frozen pizza
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: pizza
+  - name: frozen lasagna
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: lasagna
+  - name: frozen chicken nuggets
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: chicken nuggets
+  - name: frozen chicken tenders
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: chicken tenders
+  - name: frozen meatballs
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: meatballs
+  - name: frozen fish sticks
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: fish sticks
+  - name: frozen burritos
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: burritos
+  - name: frozen pot pies
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: pot pies
+  - name: frozen waffles
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: waffles
+  - name: frozen pancakes
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: pancakes
+  - name: frozen breakfast sandwiches
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: breakfast sandwiches
+  - name: corn dogs
+    aisle: Frozen
+    is_pantry_staple: 0
+  - name: hot pockets
+    aisle: Frozen
+    is_pantry_staple: 0
+  - name: pizza rolls
+    aisle: Frozen
+    is_pantry_staple: 0
+  - name: egg rolls
+    aisle: Frozen
+    is_pantry_staple: 0
+  - name: frozen mac and cheese
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: mac and cheese
+
+  # -- Frozen Fruit & Dessert --
+  - name: frozen strawberries
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: strawberries
+  - name: frozen blueberries
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: blueberries
+  - name: frozen mixed berries
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: berries
+  - name: frozen fruit
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: fruit
+  - name: ice cream
+    aisle: Frozen
+    is_pantry_staple: 0
+  - name: popsicles
+    aisle: Frozen
+    is_pantry_staple: 0
+  - name: frozen pie
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: pie
+  - name: frozen garlic bread
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: garlic bread
+  - name: frozen dinner rolls
+    aisle: Frozen
+    is_pantry_staple: 0
+    root: dinner rolls
+  - name: whipped topping
+    aisle: Frozen
+    is_pantry_staple: 0
+
+  # ============================================================
+  # BREAKFAST & BEVERAGES (~40 items)
+  # ============================================================
+
+  # -- Breakfast --
+  - name: cereal
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: oatmeal
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: instant oatmeal
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+    root: oatmeal
+  - name: granola
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: granola bars
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: pancake mix
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: waffle mix
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: pop-tarts
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: muffin mix
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: breakfast bars
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+
+  # -- Coffee & Tea --
+  - name: coffee
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 1
+  - name: ground coffee
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 1
+    root: coffee
+  - name: coffee k-cups
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+    root: coffee
+  - name: instant coffee
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+    root: coffee
+  - name: tea
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 1
+  - name: green tea
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+    root: tea
+  - name: herbal tea
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+    root: tea
+  - name: hot chocolate mix
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+
+  # -- Juice & Drinks --
+  - name: orange juice
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+    root: juice
+  - name: apple juice
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+    root: juice
+  - name: grape juice
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+    root: juice
+  - name: cranberry juice
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+    root: juice
+  - name: lemonade
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: sports drink
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: sparkling water
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: bottled water
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+    root: water
+  - name: soda
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: la croix
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: coconut water
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: apple cider
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: juice boxes
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+    root: juice
+  - name: drink mix
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: protein powder
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+  - name: energy drink
+    aisle: Breakfast & Beverages
+    is_pantry_staple: 0
+
+  # ============================================================
+  # SNACKS & OTHER (~50 items)
+  # ============================================================
+
+  # -- Chips & Crackers --
+  - name: tortilla chips
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: potato chips
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: chips
+  - name: pita chips
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: chips
+  - name: veggie chips
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: chips
+  - name: crackers
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: goldfish crackers
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: crackers
+  - name: graham crackers
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: crackers
+  - name: ritz crackers
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: crackers
+  - name: cheez-its
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: pretzels
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: cheese puffs
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: popcorn
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: microwave popcorn
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: popcorn
+  - name: rice cakes
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: animal crackers
+    aisle: Snacks
+    is_pantry_staple: 0
+
+  # -- Nuts & Trail Mix --
+  - name: almonds
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: cashews
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: peanuts
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: mixed nuts
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: trail mix
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: sunflower seeds
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: pistachios
+    aisle: Snacks
+    is_pantry_staple: 0
+
+  # -- Cookies & Candy --
+  - name: oreos
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: chocolate chip cookies
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: cookies
+  - name: fruit snacks
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: gummy bears
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: chocolate bar
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: chocolate
+  - name: candy
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: marshmallows
+    aisle: Snacks
+    is_pantry_staple: 0
+
+  # -- Dried Fruit & Bars --
+  - name: raisins
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: dried apricots
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: apricots
+  - name: dried mango
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: mango
+  - name: applesauce
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: fruit cups
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: pudding cups
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: pudding
+  - name: jello
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: beef jerky
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: cheese sticks
+    aisle: Snacks
+    is_pantry_staple: 0
+
+  # -- Dips & Spreads --
+  - name: hummus
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: guacamole
+    aisle: Snacks
+    is_pantry_staple: 0
+  - name: queso dip
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: queso
+  - name: french onion dip
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: dip
+  - name: salsa con queso
+    aisle: Snacks
+    is_pantry_staple: 0
+    root: queso
+
+  # -- Household Basics (non-food but commonly on grocery list) --
+  - name: paper towels
+    aisle: Other
+    is_pantry_staple: 0
+  - name: toilet paper
+    aisle: Other
+    is_pantry_staple: 0
+  - name: napkins
+    aisle: Other
+    is_pantry_staple: 0
+  - name: aluminum foil
+    aisle: Other
+    is_pantry_staple: 0
+  - name: plastic wrap
+    aisle: Other
+    is_pantry_staple: 0
+  - name: trash bags
+    aisle: Other
+    is_pantry_staple: 0
+  - name: dish soap
+    aisle: Other
+    is_pantry_staple: 0
+  - name: sponges
+    aisle: Other
+    is_pantry_staple: 0
+  - name: ziploc bags
+    aisle: Other
+    is_pantry_staple: 0
+  - name: parchment paper
+    aisle: Other
+    is_pantry_staple: 0
+  - name: paper plates
+    aisle: Other
+    is_pantry_staple: 0
+  - name: plastic cups
+    aisle: Other
+    is_pantry_staple: 0
+  - name: sandwich bags
+    aisle: Other
+    is_pantry_staple: 0
+  - name: laundry detergent
+    aisle: Other
+    is_pantry_staple: 0
+  - name: hand soap
+    aisle: Other
+    is_pantry_staple: 0
+
+  # ============================================================
+  # ADDITIONAL PRODUCE
+  # ============================================================
+  - name: green pepper
+    aisle: Produce
+    is_pantry_staple: 0
+    root: pepper
+  - name: red pepper
+    aisle: Produce
+    is_pantry_staple: 0
+    root: pepper
+  - name: orange pepper
+    aisle: Produce
+    is_pantry_staple: 0
+    root: pepper
+  - name: baby carrots
+    aisle: Produce
+    is_pantry_staple: 0
+    root: carrots
+  - name: baby spinach
+    aisle: Produce
+    is_pantry_staple: 0
+    root: spinach
+  - name: spring mix
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: coleslaw mix
+    aisle: Produce
+    is_pantry_staple: 0
+    root: coleslaw
+  - name: bok choy
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: fennel
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: okra
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: parsnip
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: rutabaga
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: jicama
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: plantain
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: habanero pepper
+    aisle: Produce
+    is_pantry_staple: 0
+    root: pepper
+  - name: green cabbage
+    aisle: Produce
+    is_pantry_staple: 0
+    root: cabbage
+  - name: red cabbage
+    aisle: Produce
+    is_pantry_staple: 0
+    root: cabbage
+  - name: endive
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: watercress
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: lemongrass
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: thai basil
+    aisle: Produce
+    is_pantry_staple: 0
+    root: basil
+  - name: green apple
+    aisle: Produce
+    is_pantry_staple: 0
+    root: apple
+  - name: fuji apple
+    aisle: Produce
+    is_pantry_staple: 0
+    root: apple
+  - name: tangerine
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: apricot
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: fig
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: papaya
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: passion fruit
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: persimmon
+    aisle: Produce
+    is_pantry_staple: 0
+  - name: dragon fruit
+    aisle: Produce
+    is_pantry_staple: 0
+
+  # ============================================================
+  # ADDITIONAL MEAT & SEAFOOD
+  # ============================================================
+  - name: chicken tenders
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: bone-in chicken breast
+    aisle: Meat
+    is_pantry_staple: 0
+    root: chicken
+  - name: smoked sausage
+    aisle: Meat
+    is_pantry_staple: 0
+    root: sausage
+  - name: andouille sausage
+    aisle: Meat
+    is_pantry_staple: 0
+    root: sausage
+  - name: chorizo
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: corned beef
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: veal
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: bison
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: lobster tail
+    aisle: Meat
+    is_pantry_staple: 0
+    root: lobster
+  - name: clams
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: mussels
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: swordfish
+    aisle: Meat
+    is_pantry_staple: 0
+  - name: trout
+    aisle: Meat
+    is_pantry_staple: 0
+
+  # ============================================================
+  # ADDITIONAL DAIRY
+  # ============================================================
+  - name: gruyere cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: gruyere
+  - name: havarti cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: havarti
+  - name: muenster cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: muenster
+  - name: gouda cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: gouda
+  - name: asiago cheese
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+    root: asiago
+  - name: kefir
+    aisle: Dairy & Eggs
+    is_pantry_staple: 0
+
+  # ============================================================
+  # ADDITIONAL CANNED GOODS
+  # ============================================================
+  - name: canned black olives
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: olives
+  - name: water chestnuts
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: bamboo shoots
+    aisle: Canned Goods
+    is_pantry_staple: 0
+  - name: canned jalapenos
+    aisle: Canned Goods
+    is_pantry_staple: 0
+    root: jalapenos
+  - name: sun-dried tomatoes
+    aisle: Canned Goods
+    is_pantry_staple: 0
+
+  # ============================================================
+  # ADDITIONAL CONDIMENTS
+  # ============================================================
+  - name: chutney
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: tahini
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: miso paste
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: anchovy paste
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0
+  - name: cocktail sauce
+    aisle: Condiments & Sauces
+    is_pantry_staple: 0

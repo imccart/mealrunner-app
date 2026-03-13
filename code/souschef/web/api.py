@@ -1058,6 +1058,8 @@ async def search_order_products(item_name: str, request: Request):
         )
     conn.commit()
 
+    from souschef.brands import get_parent_company
+
     result = []
     for p in products:
         result.append({
@@ -1074,6 +1076,7 @@ async def search_order_products(item_name: str, request: Request):
             "nutriscore": p.nutriscore,
             "image": p.image_url,
             "rating": p.rating,
+            "parent_company": get_parent_company(p.brand),
         })
 
     response = {
@@ -1157,7 +1160,13 @@ async def deselect_product(item_name: str, request: Request):
 
 @router.post("/order/submit")
 async def submit_order(request: Request):
-    """Submit all selected products to Kroger cart."""
+    """Submit all selected products to Kroger cart.
+
+    Accepts optional JSON body: { "kroger_user_id": "<user_id>" }
+    If provided, verifies the user is in the same household and uses their token.
+    If not provided, tries the current user first, then falls back to any
+    household member with a linked account.
+    """
     from souschef.kroger import add_to_cart, get_user_token_from_db
     from souschef import workflow
 
@@ -1176,10 +1185,54 @@ async def submit_order(request: Request):
     if not rows:
         return {"ok": False, "error": "No products selected"}
 
-    # Use DB-stored user token if available
-    token = get_user_token_from_db(conn, real_user_id)
-    if not token:
-        return {"ok": False, "error": "Kroger account not linked. Connect in Preferences."}
+    # Determine which Kroger account to use
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    kroger_user_id = body.get("kroger_user_id")
+    token = None
+
+    if kroger_user_id:
+        # Verify the requested user is in the same household
+        hh_row = conn.execute(
+            text("SELECT household_id FROM household_members WHERE user_id = :uid"),
+            {"uid": real_user_id},
+        ).fetchone()
+        if hh_row:
+            member = conn.execute(
+                text("""SELECT user_id FROM household_members
+                    WHERE household_id = :hh_id AND user_id = :target_uid"""),
+                {"hh_id": hh_row["household_id"], "target_uid": kroger_user_id},
+            ).fetchone()
+            if member:
+                token = get_user_token_from_db(conn, kroger_user_id)
+        if not token:
+            return {"ok": False, "error": "Selected account is not available."}
+    else:
+        # Try current user first
+        token = get_user_token_from_db(conn, real_user_id)
+        if not token:
+            # Fall back to any household member's token
+            hh_row = conn.execute(
+                text("SELECT household_id FROM household_members WHERE user_id = :uid"),
+                {"uid": real_user_id},
+            ).fetchone()
+            if hh_row:
+                hh_tokens = conn.execute(
+                    text("""SELECT hm.user_id FROM household_members hm
+                        JOIN user_kroger_tokens ukt ON ukt.user_id = hm.user_id
+                        WHERE hm.household_id = :hh_id
+                        ORDER BY hm.role ASC LIMIT 1"""),
+                    {"hh_id": hh_row["household_id"]},
+                ).fetchone()
+                if hh_tokens:
+                    token = get_user_token_from_db(conn, hh_tokens["user_id"])
+
+        if not token:
+            return {"ok": False, "error": "No linked store account. Connect in Preferences."}
 
     items = [{"upc": r["product_upc"]} for r in rows]
     try:
@@ -2143,6 +2196,39 @@ async def remove_feedback_override(body: dict, request: Request):
     conn.execute(
         text("DELETE FROM meal_item_overrides WHERE LOWER(recipe_name) = LOWER(:meal) AND item_name = :item AND user_id = :user_id"),
         {"meal": meal, "item": item, "user_id": user_id},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
+# ── Community Data ────────────────────────────────────────
+
+
+@router.post("/community-data")
+async def submit_community_data(body: dict, request: Request):
+    """Submit user-contributed data (brand ownership, etc.)."""
+    import uuid
+    data_type = body.get("data_type", "").strip()
+    subject = body.get("subject", "").strip()
+    suggested_value = body.get("suggested_value", "").strip()
+    if not data_type or not subject or not suggested_value:
+        return {"ok": False, "error": "All fields required"}
+
+    real_user_id = request.state.real_user_id
+    conn = _conn()
+
+    # Look up household_id
+    hh = conn.execute(
+        text("SELECT household_id FROM household_members WHERE user_id = :uid"),
+        {"uid": real_user_id},
+    ).fetchone()
+    household_id = hh["household_id"] if hh else ""
+
+    conn.execute(
+        text("""INSERT INTO community_data (id, user_id, household_id, data_type, subject, suggested_value)
+           VALUES (:id, :uid, :hh, :dt, :subj, :val)"""),
+        {"id": str(uuid.uuid4()), "uid": real_user_id, "hh": household_id,
+         "dt": data_type, "subj": subject, "val": suggested_value},
     )
     conn.commit()
     return {"ok": True}

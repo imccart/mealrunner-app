@@ -1921,6 +1921,59 @@ main {
   gap: 4px;
 }
 
+.parent-co {
+  font-size: 11px;
+  color: var(--brown);
+  padding: 2px 8px;
+  margin-top: 4px;
+}
+.parent-co.unknown {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.community-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+}
+.community-brand {
+  font-size: 14px;
+  color: var(--dark);
+}
+.community-input {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  padding: 10px 12px;
+  border: 1px solid var(--tan);
+  border-radius: 8px;
+  background: var(--warm-white);
+  outline: none;
+}
+.community-input:focus { border-color: var(--accent); }
+.community-toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--dark);
+  color: white;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 16px;
+  padding: 10px 24px;
+  border-radius: 20px;
+  z-index: 9999;
+  animation: toastFade 2s ease-out forwards;
+}
+@keyframes toastFade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .nova-badge, .nutri-badge {
   font-size: 10px;
   font-weight: 500;
@@ -1969,6 +2022,47 @@ main {
   color: var(--accent);
   margin-top: 8px;
   text-align: center;
+}
+
+.submit-hint {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  padding: 8px 0;
+}
+
+.account-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.account-picker-label {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.account-picker-select {
+  flex: 1;
+  font-size: 14px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--dark);
+  font-family: var(--font-body);
+}
+
+.account-picker-mobile {
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.account-picker-mobile .account-picker-select {
+  flex: 0 1 auto;
+  max-width: 200px;
 }
 
 /* Desktop 3-column order layout */
