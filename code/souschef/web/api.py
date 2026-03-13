@@ -524,6 +524,13 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
 
     grocery_meals = [m for m in mw.meals if m.on_grocery]
 
+    # Load user group overrides so they take priority over ingredient defaults
+    override_rows = conn.execute(
+        text("SELECT LOWER(item_name) AS item_name, shopping_group FROM user_item_groups WHERE user_id = :user_id"),
+        {"user_id": user_id},
+    ).fetchall()
+    user_overrides = {r["item_name"]: r["shopping_group"] for r in override_rows}
+
     # Build fresh meal items
     fresh_meal_items: dict[str, dict] = {}
     if grocery_meals:
@@ -531,10 +538,11 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
         by_store = split_by_store(gl)
         for items in by_store.values():
             for item in items:
-                group = item.aisle or "Other"
+                name_lower = item.ingredient_name.lower()
+                group = user_overrides.get(name_lower, item.aisle or "Other")
                 for_meals = ",".join(item.meals) if item.meals else ""
-                fresh_meal_items[item.ingredient_name.lower()] = {
-                    "name": item.ingredient_name.lower(),
+                fresh_meal_items[name_lower] = {
+                    "name": name_lower,
                     "shopping_group": group,
                     "for_meals": for_meals,
                     "meal_count": len(item.meals),
