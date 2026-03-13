@@ -689,7 +689,7 @@ async def get_carryover(request: Request):
 
 @router.post("/grocery/build")
 async def build_my_list(request: Request, body: dict = None):
-    """Create a new grocery trip. Deactivates old trip, creates new one with meal ingredients + carryover."""
+    """Build/update the grocery trip. Merges new items into existing trip, preserving checked state."""
     from souschef import workflow
     from souschef.planner import set_all_grocery
 
@@ -708,29 +708,39 @@ async def build_my_list(request: Request, body: dict = None):
         # Refresh mw to pick up the on_grocery changes
         mw = workflow.get_rolling_meals(conn, user_id)
 
-    # Deactivate current active trip
-    old_trip = _get_active_trip(conn, user_id)
-    if old_trip:
-        conn.execute(
-            text("UPDATE grocery_trips SET active = 0, completed_at = CURRENT_TIMESTAMP WHERE id = :id"),
-            {"id": old_trip["id"]},
+    # Merge into existing trip or create new one
+    existing_trip = _get_active_trip(conn, user_id)
+    if existing_trip:
+        trip_id = existing_trip["id"]
+        # Refresh meal items — adds new, removes aged-out, preserves checked state
+        _refresh_trip_meal_items(conn, trip_id, mw, user_id)
+    else:
+        cursor = conn.execute(
+            text("""INSERT INTO grocery_trips (trip_type, start_date, end_date, active, user_id)
+               VALUES ('plan', :start_date, :end_date, 1, :user_id)
+               RETURNING id"""),
+            {"start_date": mw.start_date, "end_date": mw.end_date, "user_id": user_id},
         )
         conn.commit()
+        trip_id = cursor.fetchone()["id"]
+        _build_trip_from_meals(conn, trip_id, mw, user_id)
 
-    # Create new trip
-    cursor = conn.execute(
-        text("""INSERT INTO grocery_trips (trip_type, start_date, end_date, active, user_id)
-           VALUES ('plan', :start_date, :end_date, 1, :user_id)
-           RETURNING id"""),
-        {"start_date": mw.start_date, "end_date": mw.end_date, "user_id": user_id},
-    )
-    conn.commit()
-    trip_id = cursor.fetchone()["id"]
+    # Handle carryover: remove unchecked non-meal items the user deselected
+    if existing_trip:
+        carryover_keep = {n.lower() for n in carryover_items}
+        unchecked = conn.execute(
+            text("""SELECT id, name, source FROM trip_items
+               WHERE trip_id = :trip_id AND checked = 0 AND ordered = 0"""),
+            {"trip_id": trip_id},
+        ).fetchall()
+        for row in unchecked:
+            if row["source"] != 'meal' and row["name"].lower() not in carryover_keep:
+                conn.execute(
+                    text("DELETE FROM trip_items WHERE id = :id"),
+                    {"id": row["id"]},
+                )
 
-    # Build meal items
-    _build_trip_from_meals(conn, trip_id, mw, user_id)
-
-    # Add carryover items
+    # Add carryover items (no-op if they already exist on the trip)
     for name in carryover_items:
         name_lower = name.lower()
         group = _infer_item_group(conn, name_lower, user_id)
