@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../api/client'
-import useSwipeDismiss from '../hooks/useSwipeDismiss'
+import Sheet from './Sheet'
 import MealPickerSheet from './MealPickerSheet'
 import BuildListFlow from './BuildListFlow'
 import SwapPrompt from './SwapPrompt'
@@ -38,7 +38,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const [showFeedback, setShowFeedback] = useState(false)
   const [feedbackText, setFeedbackText] = useState('')
   const [feedbackSent, setFeedbackSent] = useState(false)
-  const actionSwipe = useSwipeDismiss(() => setActionDate(null))
 
   // Touch drag refs
   const touchTimer = useRef(null)
@@ -198,10 +197,10 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   }
 
   const handleStartNewPlan = async () => {
+    if (!window.confirm('This clears all your meals and your grocery list. Are you sure?')) return
     setErasing(true)
-    // Wait for erase animation to finish before loading new data
     setTimeout(async () => {
-      const result = await api.suggestMeals()
+      const result = await api.freshStart()
       setData(result)
       setErasing(false)
     }, 700)
@@ -330,9 +329,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
 
       {/* Action bottom sheet for tapped meal */}
       {actionDate && actionMeal && (
-        <div className="sheet-overlay" onClick={() => setActionDate(null)}>
-          <div className="sheet" {...actionSwipe} onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
+        <Sheet onClose={() => setActionDate(null)}>
             <div className="sheet-title">{actionDayName}</div>
             <div className="sheet-sub">{actionMeal.recipe_name}{actionMeal.side ? ` + ${actionMeal.side}` : ''}</div>
             <div className="sheet-options">
@@ -367,8 +364,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                 </div>
               </button>
             </div>
-          </div>
-        </div>
+        </Sheet>
       )}
 
       {/* Floating Build My List FAB */}
@@ -381,33 +377,25 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
       {/* Plan footer */}
       <div className="plan-footer">
         <button className="fresh-start-btn" onClick={handleStartNewPlan}>
-          <svg className="fresh-start-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="1" y="9" width="10" height="5" rx="1" transform="rotate(-30 1 9)" />
-            <line x1="12" y1="3" x2="14" y2="1" />
-            <line x1="4" y1="14" x2="14" y2="14" />
-          </svg>
-          Fresh Start
+          {'\u{1F9F9}'} Fresh Start
         </button>
       </div>
 
       {/* Floating feedback FAB */}
       <button className="feedback-fab" onClick={() => { setShowFeedback(true); setFeedbackSent(false); setFeedbackText('') }}>
-        Feedback
+        Talk to the manager
       </button>
 
       {/* Feedback sheet */}
       {showFeedback && (
-        <div className="sheet-overlay" onClick={() => setShowFeedback(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <button className="sheet-close" onClick={() => setShowFeedback(false)}>{'\u00D7'}</button>
+        <Sheet onClose={() => setShowFeedback(false)}>
             {feedbackSent ? (
               <div className="feedback-thanks">
                 <div className="feedback-title">Yes, Chef!</div>
               </div>
             ) : (
               <>
-                <div className="sheet-title feedback-title">Feedback</div>
+                <div className="sheet-title feedback-title">I'd like to speak to the manager</div>
                 <div className="sheet-sub">Tell us what you think</div>
                 <textarea
                   className="feedback-textarea"
@@ -430,8 +418,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                 </button>
               </>
             )}
-          </div>
-        </div>
+        </Sheet>
       )}
 
       {/* Meal picker sheet */}

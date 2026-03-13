@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
-import useSwipeDismiss from '../hooks/useSwipeDismiss'
+import Sheet from './Sheet'
 
 function AccordionSection({ title, count, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -20,20 +20,21 @@ export default function PreferencesSheet({ onClose }) {
   const [regulars, setRegulars] = useState(null)
   const [pantry, setPantry] = useState(null)
   const [stores, setStores] = useState(null)
+  const [recipes, setRecipes] = useState(null)
   const [addRegularText, setAddRegularText] = useState('')
   const [addPantryText, setAddPantryText] = useState('')
   const [addStoreName, setAddStoreName] = useState('')
   const [addStoreMode, setAddStoreMode] = useState('in-person')
+  const [addRecipeText, setAddRecipeText] = useState('')
   const [members, setMembers] = useState(null)
   const [householdEmail, setHouseholdEmail] = useState('')
   const [betaEmail, setBetaEmail] = useState('')
   const [inviteStatus, setInviteStatus] = useState(null)
-  const swipeHandlers = useSwipeDismiss(onClose)
-
   useEffect(() => {
     api.getRegulars().then(data => setRegulars(data.regulars))
     api.getPantry().then(data => setPantry(data.items))
     api.getStores().then(data => setStores(data.stores))
+    api.getRecipes().then(data => setRecipes(data.recipes))
     api.getHouseholdMembers().then(data => setMembers(data.members)).catch(() => {})
   }, [])
 
@@ -106,6 +107,25 @@ export default function PreferencesSheet({ onClose }) {
     setStores(data.stores)
   }
 
+  const handleAddRecipe = async (e) => {
+    e.preventDefault()
+    if (!addRecipeText.trim()) return
+    await api.addRecipe(addRecipeText.trim())
+    setAddRecipeText('')
+    const data = await api.getRecipes()
+    setRecipes(data.recipes)
+  }
+
+  const handleRemoveRecipe = async (id) => {
+    const result = await api.deleteRecipe(id)
+    if (!result.ok) {
+      alert(result.error || 'Cannot remove this recipe')
+      return
+    }
+    const data = await api.getRecipes()
+    setRecipes(data.recipes)
+  }
+
   const handleHouseholdInvite = async (e) => {
     e.preventDefault()
     if (!householdEmail.trim()) return
@@ -153,9 +173,7 @@ export default function PreferencesSheet({ onClose }) {
   }
 
   return (
-    <div className="sheet-overlay" onClick={onClose}>
-      <div className="sheet prefs-sheet" {...swipeHandlers} onClick={(e) => e.stopPropagation()}>
-        <div className="sheet-handle" />
+    <Sheet onClose={onClose} className="prefs-sheet">
         <div className="sheet-title">Preferences</div>
         <div className="sheet-sub">Configurable any time</div>
 
@@ -189,6 +207,34 @@ export default function PreferencesSheet({ onClose }) {
               <option value="pickup">Pickup</option>
               <option value="delivery">Delivery</option>
             </select>
+            <button className="btn primary" type="submit">+</button>
+          </form>
+        </AccordionSection>
+
+        {/* Recipes */}
+        <AccordionSection title="Meals" count={recipes?.length || 0}>
+          <div className="prefs-section-hint">
+            Your meal rotation. Add meals you make regularly.
+          </div>
+          {recipes && recipes.length > 0 && (
+            <div className="prefs-list">
+              {recipes.map(r => (
+                <div key={r.id} className="prefs-list-item">
+                  <span className="prefs-list-name">{r.name}</span>
+                  {r.cuisine && <span className="prefs-list-meta">{r.cuisine}</span>}
+                  <button className="prefs-remove" onClick={() => handleRemoveRecipe(r.id)}>{'\u00D7'}</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <form onSubmit={handleAddRecipe} className="prefs-add-row">
+            <input
+              className="prefs-add-input"
+              type="text"
+              placeholder="Add a meal..."
+              value={addRecipeText}
+              onChange={(e) => setAddRecipeText(e.target.value)}
+            />
             <button className="btn primary" type="submit">+</button>
           </form>
         </AccordionSection>
@@ -354,7 +400,6 @@ export default function PreferencesSheet({ onClose }) {
           <div className="brand-name">sous<em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>chef</em></div>
           <div style={{ marginTop: '4px' }}>by Aletheia</div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   )
 }

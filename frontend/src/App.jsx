@@ -101,7 +101,6 @@ function App() {
                   </div>
                   <div className="date-subtitle">Your next 10 days</div>
                 </div>
-                <div className="section-label">Meals</div>
               </>
             )}
             <div className="two-col">

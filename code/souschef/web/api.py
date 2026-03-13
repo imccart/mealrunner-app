@@ -305,6 +305,33 @@ async def suggest_meals(request: Request):
     return await get_meals(request)
 
 
+@router.post("/meals/fresh-start")
+async def fresh_start(request: Request):
+    """Clear all meals in the rolling window and deactivate the active grocery trip."""
+    from souschef import workflow
+
+    user_id = request.state.user_id
+    conn = _conn()
+    mw = workflow.get_rolling_meals(conn, user_id)
+
+    # Delete all meals in the rolling window
+    conn.execute(
+        text("DELETE FROM meals WHERE slot_date >= :start AND slot_date <= :end AND user_id = :user_id"),
+        {"start": mw.start_date, "end": mw.end_date, "user_id": user_id},
+    )
+
+    # Deactivate the active grocery trip
+    trip = _get_active_trip(conn, user_id)
+    if trip:
+        conn.execute(
+            text("UPDATE grocery_trips SET active = 0 WHERE id = :id"),
+            {"id": trip["id"]},
+        )
+
+    conn.commit()
+    return await get_meals(request)
+
+
 @router.post("/meals/all-to-grocery")
 async def all_to_grocery(request: Request):
     from souschef.planner import set_all_grocery
@@ -1542,6 +1569,52 @@ async def get_recipes(request: Request):
     conn = _conn()
     recipes = list_recipes(conn)
     return {"recipes": [_recipe_dict(r) for r in recipes]}
+
+
+@router.post("/recipes")
+async def add_recipe(body: dict, request: Request):
+    """Add a new recipe (name only, stub)."""
+    conn = _conn()
+    name = body.get("name", "").strip()
+    if not name:
+        return {"ok": False}
+
+    existing = conn.execute(
+        text("SELECT id FROM recipes WHERE LOWER(name) = :name"),
+        {"name": name.lower()},
+    ).fetchone()
+    if existing:
+        return {"ok": True, "id": existing["id"], "exists": True}
+
+    cursor = conn.execute(
+        text("""INSERT INTO recipes (name, cuisine, effort, cleanup, outdoor, kid_friendly, premade,
+           prep_minutes, cook_minutes, servings)
+           VALUES (:name, '', 'medium', 'medium', 0, 1, 0, 0, 0, 4)
+           RETURNING id"""),
+        {"name": name},
+    )
+    conn.commit()
+    return {"ok": True, "id": cursor.fetchone()["id"]}
+
+
+@router.delete("/recipes/{recipe_id}")
+async def delete_recipe(recipe_id: int, request: Request):
+    """Remove a recipe. Won't delete if it's currently on the meal plan."""
+    conn = _conn()
+    user_id = request.state.user_id
+
+    # Check if recipe is currently assigned to a meal in the rolling window
+    in_use = conn.execute(
+        text("SELECT COUNT(*) as cnt FROM meals WHERE recipe_id = :id AND user_id = :user_id"),
+        {"id": recipe_id, "user_id": user_id},
+    ).fetchone()
+    if in_use["cnt"] > 0:
+        return {"ok": False, "error": "Recipe is on your meal plan"}
+
+    conn.execute(text("DELETE FROM recipe_ingredients WHERE recipe_id = :id"), {"id": recipe_id})
+    conn.execute(text("DELETE FROM recipes WHERE id = :id"), {"id": recipe_id})
+    conn.commit()
+    return {"ok": True}
 
 
 # ── Pantry ──────────────────────────────────────────────

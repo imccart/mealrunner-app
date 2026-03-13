@@ -30,6 +30,7 @@ export const api = {
     body: JSON.stringify({ recipe_id: recipeId }),
   }),
   suggestMeals: () => request('/meals/suggest', { method: 'POST' }),
+  freshStart: () => request('/meals/fresh-start', { method: 'POST' }),
   allToGrocery: () => request('/meals/all-to-grocery', { method: 'POST' }),
   swapDays: (dateA, dateB) => request('/meals/swap-days', {
     method: 'POST',
@@ -97,6 +98,11 @@ export const api = {
 
   // Recipes
   getRecipes: () => request('/recipes'),
+  addRecipe: (name) => request('/recipes', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  }),
+  deleteRecipe: (id) => request(`/recipes/${id}`, { method: 'DELETE' }),
 
   // Pantry
   getPantry: () => request('/pantry'),
