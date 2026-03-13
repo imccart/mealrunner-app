@@ -82,6 +82,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 
 app = FastAPI(title="Souschef")
+
+# Ensure DB tables exist before any request hits the middleware
+# (middleware queries household_members which must exist first)
+ensure_db()
+
 app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
