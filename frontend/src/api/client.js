@@ -130,6 +130,11 @@ export const api = {
   }),
   removeStore: (key) => request(`/stores/${encodeURIComponent(key)}`, { method: 'DELETE' }),
 
+  // Kroger
+  getKrogerStatus: () => request('/kroger/status'),
+  connectKroger: () => request('/kroger/connect'),
+  disconnectKroger: () => request('/kroger/disconnect', { method: 'POST' }),
+
   // Auth
   getMe: () => request('/auth/me'),
   login: (email) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email }) }),

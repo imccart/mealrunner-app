@@ -1158,10 +1158,11 @@ async def deselect_product(item_name: str, request: Request):
 @router.post("/order/submit")
 async def submit_order(request: Request):
     """Submit all selected products to Kroger cart."""
-    from souschef.kroger import add_to_cart
+    from souschef.kroger import add_to_cart, get_user_token_from_db
     from souschef import workflow
 
     user_id = request.state.user_id
+    real_user_id = request.state.real_user_id
     conn = _conn()
     mw = workflow.get_rolling_meals(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
@@ -1175,9 +1176,14 @@ async def submit_order(request: Request):
     if not rows:
         return {"ok": False, "error": "No products selected"}
 
+    # Use DB-stored user token if available
+    token = get_user_token_from_db(conn, real_user_id)
+    if not token:
+        return {"ok": False, "error": "Kroger account not linked. Connect in Preferences."}
+
     items = [{"upc": r["product_upc"]} for r in rows]
     try:
-        add_to_cart(items)
+        add_to_cart(items, token=token)
         return {"ok": True, "count": len(items)}
     except Exception as e:
         return {"ok": False, "error": str(e)}

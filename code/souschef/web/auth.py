@@ -26,6 +26,7 @@ PUBLIC_PATHS = {
     "/api/auth/login",
     "/api/auth/verify",
     "/api/auth/me",
+    "/api/kroger/callback",
 }
 
 PUBLIC_PREFIXES = (

@@ -321,6 +321,133 @@ async def auth_logout(request: Request):
     return response
 
 
+# ── Kroger OAuth ──────────────────────────────────────────
+
+@app.get("/api/kroger/status")
+async def kroger_status(request: Request):
+    """Check if the current user has a linked Kroger account."""
+    user_id = request.state.real_user_id
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            text("SELECT expires_at FROM user_kroger_tokens WHERE user_id = :uid"),
+            {"uid": user_id},
+        ).fetchone()
+    finally:
+        conn.close()
+    return {"connected": bool(row)}
+
+
+@app.get("/api/kroger/connect")
+async def kroger_connect(request: Request):
+    """Start Kroger OAuth flow. Returns auth URL for frontend to open."""
+    import secrets as _secrets
+    from souschef.kroger import get_kroger_auth_url
+
+    user_id = request.state.real_user_id
+    state = _secrets.token_urlsafe(32)
+
+    # Store state → user_id mapping in session-like table (reuse settings)
+    conn = get_connection()
+    try:
+        conn.execute(
+            text("""INSERT INTO settings (user_id, key, value)
+                VALUES (:uid, :key, :val)
+                ON CONFLICT (user_id, key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP"""),
+            {"uid": user_id, "key": "kroger_oauth_state", "val": state},
+        )
+        conn.commit()
+    except Exception:
+        return JSONResponse({"error": "Kroger not configured"}, status_code=503)
+    finally:
+        conn.close()
+
+    redirect_uri = f"{BASE_URL}/api/kroger/callback"
+    try:
+        auth_url = get_kroger_auth_url(redirect_uri, state)
+    except FileNotFoundError:
+        return JSONResponse({"error": "Kroger not configured"}, status_code=503)
+    return {"url": auth_url}
+
+
+@app.get("/api/kroger/callback")
+async def kroger_callback(code: str = "", state: str = "", error: str = ""):
+    """Handle Kroger OAuth callback — exchange code for tokens, store in DB."""
+    if error or not code:
+        return RedirectResponse(url="/app?kroger=error", status_code=302)
+
+    from souschef.kroger import exchange_code_for_token
+    from datetime import datetime, timedelta, timezone
+
+    conn = get_connection()
+    try:
+        # Look up which user initiated this flow via state
+        row = conn.execute(
+            text("SELECT user_id FROM settings WHERE key = 'kroger_oauth_state' AND value = :state"),
+            {"state": state},
+        ).fetchone()
+        if not row:
+            return RedirectResponse(url="/app?kroger=error", status_code=302)
+
+        user_id = row["user_id"]
+
+        # Clean up state
+        conn.execute(
+            text("DELETE FROM settings WHERE user_id = :uid AND key = 'kroger_oauth_state'"),
+            {"uid": user_id},
+        )
+
+        # Exchange code for tokens
+        redirect_uri = f"{BASE_URL}/api/kroger/callback"
+        token_data = exchange_code_for_token(code, redirect_uri)
+
+        expires_in = token_data.get("expires_in", 1800)
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in - 60)).isoformat()
+
+        # Store tokens
+        conn.execute(
+            text("""INSERT INTO user_kroger_tokens (user_id, access_token, refresh_token, expires_at, scope)
+                VALUES (:uid, :at, :rt, :exp, :scope)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    access_token = excluded.access_token,
+                    refresh_token = excluded.refresh_token,
+                    expires_at = excluded.expires_at,
+                    scope = excluded.scope,
+                    updated_at = CURRENT_TIMESTAMP"""),
+            {
+                "uid": user_id,
+                "at": token_data["access_token"],
+                "rt": token_data.get("refresh_token", ""),
+                "exp": expires_at,
+                "scope": token_data.get("scope", ""),
+            },
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"[kroger] OAuth callback error: {e}")
+        return RedirectResponse(url="/app?kroger=error", status_code=302)
+    finally:
+        conn.close()
+
+    return RedirectResponse(url="/app?kroger=connected", status_code=302)
+
+
+@app.post("/api/kroger/disconnect")
+async def kroger_disconnect(request: Request):
+    """Remove Kroger connection for the current user."""
+    user_id = request.state.real_user_id
+    conn = get_connection()
+    try:
+        conn.execute(
+            text("DELETE FROM user_kroger_tokens WHERE user_id = :uid"),
+            {"uid": user_id},
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True}
+
+
 # ── Routes ────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)

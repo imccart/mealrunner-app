@@ -589,9 +589,14 @@ def _authorize_user(creds: dict) -> str:
     return token_data["access_token"]
 
 
-def add_to_cart(items: list[dict]) -> bool:
-    """Add items to the user's Kroger cart. Each item needs a 'upc' key."""
-    token = _get_user_token()
+def add_to_cart(items: list[dict], token: str | None = None) -> bool:
+    """Add items to the user's Kroger cart. Each item needs a 'upc' key.
+
+    If token is provided, uses it directly. Otherwise falls back to
+    file-based user token (CLI flow).
+    """
+    if token is None:
+        token = _get_user_token()
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
@@ -606,3 +611,105 @@ def add_to_cart(items: list[dict]) -> bool:
     )
     resp.raise_for_status()
     return True
+
+
+# ── DB-backed User OAuth (for web) ────────────────────────
+
+
+def get_kroger_auth_url(redirect_uri: str, state: str) -> str:
+    """Build the Kroger OAuth authorization URL."""
+    creds = _load_credentials()
+    return (
+        f"{BASE_URL}/connect/oauth2/authorize"
+        f"?scope=cart.basic%3Awrite"
+        f"&response_type=code"
+        f"&client_id={creds['client_id']}"
+        f"&redirect_uri={redirect_uri}"
+        f"&state={state}"
+    )
+
+
+def exchange_code_for_token(code: str, redirect_uri: str) -> dict:
+    """Exchange an OAuth authorization code for tokens. Returns token data dict."""
+    creds = _load_credentials()
+    resp = requests.post(
+        f"{BASE_URL}/connect/oauth2/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+        },
+        auth=(creds["client_id"], creds["client_secret"]),
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def refresh_kroger_token(refresh_token: str) -> dict:
+    """Refresh a Kroger OAuth token. Returns new token data dict."""
+    creds = _load_credentials()
+    resp = requests.post(
+        f"{BASE_URL}/connect/oauth2/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        },
+        auth=(creds["client_id"], creds["client_secret"]),
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_user_token_from_db(conn: DictConnection, user_id: str) -> str | None:
+    """Get a valid Kroger user token from DB, refreshing if needed.
+
+    Returns the access token string, or None if not connected.
+    """
+    row = conn.execute(
+        text("SELECT access_token, refresh_token, expires_at FROM user_kroger_tokens WHERE user_id = :uid"),
+        {"uid": user_id},
+    ).fetchone()
+    if not row:
+        return None
+
+    # Check if still valid (expires_at is ISO timestamp)
+    from datetime import datetime, timezone
+    try:
+        expires = datetime.fromisoformat(row["expires_at"])
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        if now < expires:
+            return row["access_token"]
+    except (ValueError, TypeError):
+        pass
+
+    # Try refresh
+    try:
+        new_data = refresh_kroger_token(row["refresh_token"])
+        expires_in = new_data.get("expires_in", 1800)
+        from datetime import timedelta
+        new_expires = datetime.now(timezone.utc) + timedelta(seconds=expires_in - 60)
+        conn.execute(
+            text("""UPDATE user_kroger_tokens
+                SET access_token = :at, refresh_token = :rt, expires_at = :exp, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = :uid"""),
+            {
+                "at": new_data["access_token"],
+                "rt": new_data.get("refresh_token", row["refresh_token"]),
+                "exp": new_expires.isoformat(),
+                "uid": user_id,
+            },
+        )
+        conn.commit()
+        return new_data["access_token"]
+    except Exception:
+        # Refresh failed — token is invalid, remove it
+        conn.execute(
+            text("DELETE FROM user_kroger_tokens WHERE user_id = :uid"),
+            {"uid": user_id},
+        )
+        conn.commit()
+        return None

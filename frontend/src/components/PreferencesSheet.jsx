@@ -99,14 +99,17 @@ export default function PreferencesSheet({ onClose }) {
   const [addPantryText, setAddPantryText] = useState('')
   const [addStoreName, setAddStoreName] = useState('')
   const [addStoreMode, setAddStoreMode] = useState('in-person')
+  const [addStoreApi, setAddStoreApi] = useState('none')
   const [addRecipeText, setAddRecipeText] = useState('')
   const [members, setMembers] = useState(null)
   const [householdEmail, setHouseholdEmail] = useState('')
   const [betaEmail, setBetaEmail] = useState('')
   const [inviteStatus, setInviteStatus] = useState(null)
+  const [betaInviteStatus, setBetaInviteStatus] = useState(null)
   const [userEmail, setUserEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [nameSaved, setNameSaved] = useState(false)
+  const [krogerConnected, setKrogerConnected] = useState(null)
   useEffect(() => {
     api.getMe().then(data => {
       setUserEmail(data.email || '')
@@ -118,6 +121,7 @@ export default function PreferencesSheet({ onClose }) {
     api.getRecipes().then(data => setRecipes(data.recipes))
     api.getGrocerySuggestions().then(data => setAllIngredients(data.suggestions)).catch(() => {})
     api.getHouseholdMembers().then(data => setMembers(data.members)).catch(() => {})
+    api.getKrogerStatus().then(data => setKrogerConnected(data.connected)).catch(() => {})
   }, [])
 
   const handleRemoveRegular = async (name) => {
@@ -157,9 +161,10 @@ export default function PreferencesSheet({ onClose }) {
     if (stores && stores.some(s => s.key === key)) {
       key = name.slice(0, 2).toLowerCase()
     }
-    const result = await api.addStore(name, key, addStoreMode)
+    const result = await api.addStore(name, key, addStoreMode, addStoreApi)
     if (result.ok) {
       setAddStoreName('')
+      setAddStoreApi('none')
       const data = await api.getStores()
       setStores(data.stores)
     }
@@ -212,18 +217,34 @@ export default function PreferencesSheet({ onClose }) {
   const handleBetaInvite = async (e) => {
     e.preventDefault()
     if (!betaEmail.trim()) return
-    setInviteStatus(null)
+    setBetaInviteStatus(null)
     try {
       const result = await api.inviteToBeta(betaEmail.trim())
       if (result.ok) {
         setBetaEmail('')
-        setInviteStatus({ type: 'success', msg: 'Invite sent!' })
+        setBetaInviteStatus({ type: 'success', msg: 'Invite sent!' })
       } else {
-        setInviteStatus({ type: 'error', msg: result.error || 'Failed to send' })
+        setBetaInviteStatus({ type: 'error', msg: result.error || 'Failed to send' })
       }
     } catch {
-      setInviteStatus({ type: 'error', msg: 'Something went wrong' })
+      setBetaInviteStatus({ type: 'error', msg: 'Something went wrong' })
     }
+  }
+
+  const handleConnectKroger = async () => {
+    try {
+      const result = await api.connectKroger()
+      if (result.url) {
+        window.open(result.url, '_blank')
+      }
+    } catch {
+      // Kroger credentials not configured on server
+    }
+  }
+
+  const handleDisconnectKroger = async () => {
+    await api.disconnectKroger()
+    setKrogerConnected(false)
   }
 
   // Group regulars by shopping_group
@@ -282,10 +303,29 @@ export default function PreferencesSheet({ onClose }) {
           {stores && stores.length > 0 && (
             <div className="prefs-list">
               {stores.map(s => (
-                <div key={s.key} className="prefs-list-item">
-                  <span className="prefs-list-name">{s.name}</span>
-                  <span className="prefs-list-meta">{s.mode}</span>
-                  <button className="prefs-remove" onClick={() => handleRemoveStore(s.key)}>{'\u00D7'}</button>
+                <div key={s.key} className="prefs-store-entry">
+                  <div className="prefs-list-item">
+                    <span className="prefs-list-name">{s.name}</span>
+                    <span className="prefs-list-meta">{s.mode}</span>
+                    <button className="prefs-remove" onClick={() => handleRemoveStore(s.key)}>{'\u00D7'}</button>
+                  </div>
+                  {s.api && s.api !== 'none' && (
+                    <div className="prefs-store-integration">
+                      {krogerConnected === null ? (
+                        <span className="prefs-list-meta">Checking...</span>
+                      ) : krogerConnected ? (
+                        <div className="prefs-integration-row">
+                          <span className="prefs-connected">Account linked</span>
+                          <button className="prefs-disconnect" onClick={handleDisconnectKroger}>Disconnect</button>
+                        </div>
+                      ) : (
+                        <div className="prefs-integration-row">
+                          <span className="prefs-list-meta">Link your account to add to cart</span>
+                          <button className="btn primary btn-sm" onClick={handleConnectKroger}>Link</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -306,6 +346,14 @@ export default function PreferencesSheet({ onClose }) {
               <option value="in-person">In-person</option>
               <option value="pickup">Pickup</option>
               <option value="delivery">Delivery</option>
+            </select>
+            <select
+              className="prefs-add-select"
+              value={addStoreApi}
+              onChange={(e) => setAddStoreApi(e.target.value)}
+            >
+              <option value="none">No integration</option>
+              <option value="kroger">Kroger</option>
             </select>
             <button className="btn primary" type="submit">+</button>
           </form>
@@ -469,8 +517,16 @@ export default function PreferencesSheet({ onClose }) {
             />
             <button className="btn primary" type="submit">Invite</button>
           </form>
+          {inviteStatus && (
+            <div className={`prefs-invite-status ${inviteStatus.type}`}>
+              {inviteStatus.msg}
+            </div>
+          )}
+        </AccordionSection>
 
-          <div className="prefs-section-hint" style={{ marginTop: 16 }}>
+        {/* Invite a Friend */}
+        <AccordionSection title="Invite a Friend">
+          <div className="prefs-section-hint">
             Know someone who'd like souschef? Give them their own account.
           </div>
           <form onSubmit={handleBetaInvite} className="prefs-add-row">
@@ -483,10 +539,9 @@ export default function PreferencesSheet({ onClose }) {
             />
             <button className="btn primary" type="submit">Send</button>
           </form>
-
-          {inviteStatus && (
-            <div className={`prefs-invite-status ${inviteStatus.type}`}>
-              {inviteStatus.msg}
+          {betaInviteStatus && (
+            <div className={`prefs-invite-status ${betaInviteStatus.type}`}>
+              {betaInviteStatus.msg}
             </div>
           )}
         </AccordionSection>

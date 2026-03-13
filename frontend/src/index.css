@@ -2451,6 +2451,38 @@ main {
 .prefs-invite-status.success { background: var(--green-light); color: var(--green); }
 .prefs-invite-status.error { background: #FFF0F0; color: #C44; }
 
+.prefs-store-entry {
+  border-bottom: 1px solid var(--tan);
+}
+.prefs-store-entry:last-child { border-bottom: none; }
+.prefs-store-integration {
+  padding: 4px 12px 8px 12px;
+}
+.prefs-integration-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.prefs-connected {
+  font-size: 13px;
+  color: var(--green);
+  font-weight: 500;
+  flex: 1;
+}
+.prefs-disconnect {
+  background: none;
+  border: none;
+  color: var(--brown);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  text-decoration: underline;
+}
+.btn-sm {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
 /* ── Welcome ──────────────────────────── */
 
 .welcome {

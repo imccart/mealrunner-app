@@ -393,6 +393,18 @@ user_item_groups = Table(
     UniqueConstraint("user_id", "item_name"),
 )
 
+user_kroger_tokens = Table(
+    "user_kroger_tokens", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, ForeignKey("users.id"), unique=True, nullable=False),
+    Column("access_token", Text, nullable=False),
+    Column("refresh_token", Text, nullable=False),
+    Column("expires_at", Text, nullable=False),
+    Column("scope", Text, nullable=False, server_default=text("''")),
+    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("updated_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
 settings = Table(
     "settings", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
