@@ -91,8 +91,6 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ name, status }),
   }),
-  closeReceipt: () => request('/receipt/close', { method: 'POST' }),
-  closeNoReceipt: () => request('/receipt/close-no-receipt', { method: 'POST' }),
 
   // Regulars
   getRegulars: () => request('/regulars'),

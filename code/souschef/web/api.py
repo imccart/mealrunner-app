@@ -1376,13 +1376,18 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         {"trip_id": trip["id"]},
     ).fetchall()
 
-    # Choose diff method based on whether we have UPC data
-    has_upcs = any(r["product_upc"] for r in rows)
-    if has_upcs:
-        submitted = [{"upc": r["product_upc"], "product": r["product_name"], "item": r["name"]} for r in rows]
-        diff = diff_order(submitted, receipt_items)
+    # Split items: ordered items (have UPCs) use diff_order, checked items use diff_grocery_list
+    upc_rows = [r for r in rows if r["product_upc"]]
+    name_rows = [r for r in rows if not r["product_upc"]]
+    receipt_remaining = list(receipt_items)
+    total_matched = 0
+    total_not_fulfilled = 0
 
-        # Apply matches
+    # Pass 1: match ordered items by UPC
+    if upc_rows:
+        submitted = [{"upc": r["product_upc"], "product": r["product_name"], "item": r["name"]} for r in upc_rows]
+        diff = diff_order(submitted, receipt_remaining)
+
         for m in diff["matched"]:
             r = m["receipt"]
             conn.execute(
@@ -1394,21 +1399,25 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                  "receipt_upc": r.get("upc", ""),
                  "trip_id": trip["id"], "name": m["submitted"]["item"]},
             )
+        total_matched += len(diff["matched"])
 
-        # Mark removed items as not fulfilled
         for r in diff["removed"]:
             conn.execute(
                 text("""UPDATE trip_items SET receipt_status = 'not_fulfilled'
                    WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
                 {"trip_id": trip["id"], "name": r.get("item", r.get("product", ""))},
             )
+        total_not_fulfilled += len(diff["removed"])
 
-        extra_items = diff.get("added", [])
-    else:
-        grocery_names = [r["name"] for r in rows]
-        diff = diff_grocery_list(grocery_names, receipt_items)
+        # Remaining receipt items for pass 2
+        receipt_remaining = diff.get("added", [])
 
-        for m in diff["matched"]:
+    # Pass 2: match checked items by name
+    if name_rows and receipt_remaining:
+        grocery_names = [r["name"] for r in name_rows]
+        diff2 = diff_grocery_list(grocery_names, receipt_remaining)
+
+        for m in diff2["matched"]:
             r = m["receipt"]
             conn.execute(
                 text("""UPDATE trip_items SET
@@ -1419,24 +1428,32 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                  "receipt_upc": r.get("upc", ""),
                  "trip_id": trip["id"], "name": m["grocery_name"]},
             )
+        total_matched += len(diff2["matched"])
 
-        # Items checked/ordered but not on receipt
-        matched_names = {m["grocery_name"].lower() for m in diff["matched"]}
-        for r in rows:
+        # Name-only items not on receipt
+        matched_names = {m["grocery_name"].lower() for m in diff2["matched"]}
+        for r in name_rows:
             if r["name"].lower() not in matched_names:
                 conn.execute(
                     text("UPDATE trip_items SET receipt_status = 'not_fulfilled' WHERE id = :id"),
                     {"id": r["id"]},
                 )
-
-        extra_items = diff.get("unmatched", [])
+                total_not_fulfilled += 1
+    elif name_rows:
+        # No receipt items left — all name-only items are not fulfilled
+        for r in name_rows:
+            conn.execute(
+                text("UPDATE trip_items SET receipt_status = 'not_fulfilled' WHERE id = :id"),
+                {"id": r["id"]},
+            )
+            total_not_fulfilled += 1
 
     conn.commit()
 
     return {
         "ok": True,
-        "matched": len(diff.get("matched", [])),
-        "not_fulfilled": len(diff.get("removed", [])) if has_upcs else sum(1 for r in rows if r["name"].lower() not in {m["grocery_name"].lower() for m in diff.get("matched", [])}),
+        "matched": total_matched,
+        "not_fulfilled": total_not_fulfilled,
         "extra_items": extra_items,
     }
 
@@ -1523,64 +1540,6 @@ async def resolve_receipt_item(body: dict, request: Request):
             {"status": status, "trip_id": trip["id"], "name": name},
         )
     conn.commit()
-    return {"ok": True}
-
-
-@router.post("/receipt/close")
-async def close_receipt(request: Request):
-    """Finalize the receipt — update preferences, return unfulfilled to list."""
-    from souschef.kroger import save_preference, KrogerProduct
-
-    user_id = request.state.user_id
-    conn = _conn()
-    trip = _get_active_trip(conn, user_id)
-    if not trip:
-        return {"ok": False, "error": "No active trip"}
-
-    # Update preferences from receipt data (confirmed purchases)
-    matched = conn.execute(
-        text("""SELECT * FROM trip_items WHERE trip_id = :trip_id AND receipt_status = 'matched'
-           AND receipt_upc != ''"""),
-        {"trip_id": trip["id"]},
-    ).fetchall()
-
-    for r in matched:
-        kp = KrogerProduct(
-            product_id="", upc=r["receipt_upc"],
-            description=r["receipt_item"], brand="",
-            size=r["product_size"] if "product_size" in r.keys() and r["product_size"] else "",
-        )
-        kp.price = r["receipt_price"]
-        try:
-            save_preference(conn, user_id, r["name"], kp, source="receipt")
-        except Exception:
-            pass
-
-    # Mark trip complete
-    conn.execute(
-        text("UPDATE grocery_trips SET active = 0, completed_at = CURRENT_TIMESTAMP WHERE id = :id"),
-        {"id": trip["id"]},
-    )
-    conn.commit()
-
-    return {"ok": True}
-
-
-@router.post("/receipt/close-no-receipt")
-async def close_no_receipt(request: Request):
-    """Close trip without receipt — just mark complete with whatever state exists."""
-    user_id = request.state.user_id
-    conn = _conn()
-    trip = _get_active_trip(conn, user_id)
-    if not trip:
-        return {"ok": False, "error": "No active trip"}
-
-    conn.execute(
-        text("UPDATE grocery_trips SET active = 0, completed_at = CURRENT_TIMESTAMP WHERE id = :id"),
-        {"id": trip["id"]},
-    )
-    conn.commit()
-
     return {"ok": True}
 
 
