@@ -161,57 +161,6 @@ pantry = Table(
     Column("updated_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
 )
 
-# Legacy tables — kept for migration support
-meal_plans = Table(
-    "meal_plans", metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("week_of", Text, nullable=False),
-    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
-)
-
-meal_plan_slots = Table(
-    "meal_plan_slots", metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("plan_id", Integer, ForeignKey("meal_plans.id"), nullable=False),
-    Column("day_of_week", Integer, nullable=False),
-    Column("recipe_id", Integer, ForeignKey("recipes.id")),
-    Column("status", Text, nullable=False, server_default=text("'suggested'")),
-    Column("locked", Integer, nullable=False, server_default=text("0")),
-    Column("side", Text, nullable=False, server_default=text("''")),
-)
-
-grocery_lists = Table(
-    "grocery_lists", metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("plan_id", Integer, ForeignKey("meal_plans.id"), nullable=False),
-    Column("start_date", Text, nullable=False, server_default=text("''")),
-    Column("end_date", Text, nullable=False, server_default=text("''")),
-    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
-)
-
-essentials = Table(
-    "essentials", metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("name", Text, unique=True, nullable=False),
-    Column("shopping_group", Text, nullable=False, server_default=text("''")),
-    Column("store_pref", Text, nullable=False, server_default=text("'either'")),
-    Column("active", Integer, nullable=False, server_default=text("1")),
-    Column("search_term", Text, nullable=False, server_default=text("''")),
-)
-
-grocery_list_items = Table(
-    "grocery_list_items", metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("list_id", Integer, ForeignKey("grocery_lists.id"), nullable=False),
-    Column("ingredient_id", Integer, ForeignKey("ingredients.id"), nullable=False),
-    Column("total_quantity", Float, nullable=False),
-    Column("unit", Text, nullable=False),
-    Column("store", Text, nullable=False, server_default=text("'either'")),
-    Column("aisle", Text, nullable=False, server_default=text("''")),
-    Column("from_pantry", Float, nullable=False, server_default=text("0")),
-    Column("checked", Integer, nullable=False, server_default=text("0")),
-)
-
 meals = Table(
     "meals", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),

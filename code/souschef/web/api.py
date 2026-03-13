@@ -1077,9 +1077,18 @@ async def search_order_products(item_name: str, request: Request):
     conn.commit()
 
     from souschef.brands import get_parent_company
+    from souschef.kroger import get_product_ratings
+
+    # Look up user ratings for search result products
+    product_ratings = {}
+    for p in products:
+        if p.upc:
+            r = get_product_ratings(conn, p.upc, user_id)
+            product_ratings[p.upc] = r["your_rating"]
 
     result = []
     for p in products:
+        rating = product_ratings.get(p.upc, 0)
         result.append({
             "upc": p.upc,
             "product_id": p.product_id,
@@ -1093,9 +1102,12 @@ async def search_order_products(item_name: str, request: Request):
             "nova": p.nova_group,
             "nutriscore": p.nutriscore,
             "image": p.image_url,
-            "rating": p.rating,
+            "rating": rating,
             "parent_company": get_parent_company(p.brand),
         })
+
+    # Sort: thumbs-up first, neutral middle, thumbs-down last (preserve relative order within tiers)
+    result.sort(key=lambda r: -r["rating"])
 
     response = {
         "item_name": item_name,
@@ -1290,6 +1302,7 @@ async def get_receipt(request: Request):
         {"trip_id": trip["id"]},
     ).fetchall()
 
+    # Collect UPCs that will need ratings (matched/substituted items)
     items = []
     has_ordered = False
     has_checked = False
@@ -1305,7 +1318,10 @@ async def get_receipt(request: Request):
             "ordered": bool(r["ordered"]),
             "product_upc": r["product_upc"],
             "product_name": r["product_name"],
+            "product_brand": r["product_brand"],
+            "product_size": r["product_size"],
             "product_price": r["product_price"],
+            "product_image": r["product_image"],
             "receipt_item": r["receipt_item"],
             "receipt_price": r["receipt_price"],
             "receipt_upc": r["receipt_upc"],
@@ -1317,6 +1333,16 @@ async def get_receipt(request: Request):
     substituted = [i for i in items if i["receipt_status"] == "substituted"]
     not_fulfilled = [i for i in items if i["receipt_status"] == "not_fulfilled"]
     unresolved = [i for i in items if (i["checked"] or i["ordered"]) and not i["receipt_status"]]
+
+    # Fetch ratings for reconciled items (matched + substituted)
+    from souschef.kroger import get_product_ratings
+    for item in matched + substituted:
+        upc = item.get("receipt_upc") or item.get("product_upc") or ""
+        if upc:
+            ratings = get_product_ratings(conn, upc, user_id)
+            item["rating"] = ratings["your_rating"]
+        else:
+            item["rating"] = 0
 
     return {
         "has_trip": True,
@@ -1562,6 +1588,22 @@ async def resolve_receipt_item(body: dict, request: Request):
         )
     conn.commit()
     return {"ok": True}
+
+
+@router.post("/product/rate")
+async def rate_product_endpoint(body: dict, request: Request):
+    """Rate a product: {upc, rating (1=up, -1=down, 0=clear), product_description?}"""
+    from souschef.kroger import rate_product
+
+    user_id = request.state.user_id
+    upc = body.get("upc", "").strip()
+    rating = body.get("rating")
+    if not upc or rating not in (1, -1, 0):
+        return {"ok": False, "error": "upc and rating (1, -1, or 0) required"}
+
+    conn = _conn()
+    rate_product(conn, upc, rating, body.get("product_description", ""), user_id)
+    return {"ok": True, "upc": upc, "rating": rating}
 
 
 # ── Regulars ─────────────────────────────────────────────

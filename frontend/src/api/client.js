@@ -91,6 +91,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ name, status }),
   }),
+  rateProduct: (upc, rating, productDescription) => request('/product/rate', {
+    method: 'POST',
+    body: JSON.stringify({ upc, rating, product_description: productDescription || '' }),
+  }),
 
   // Regulars
   getRegulars: () => request('/regulars'),

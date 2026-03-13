@@ -9,6 +9,7 @@ import PreferencesSheet from './components/PreferencesSheet'
 import OnboardingFlow, { WelcomeScreen } from './components/OnboardingFlow'
 import LoginPage from './components/LoginPage'
 import HouseholdInvitePrompt from './components/HouseholdInvitePrompt'
+import { CrashTest } from './components/ErrorBoundary'
 
 function useIsWide(breakpoint = 1024) {
   const [wide, setWide] = useState(window.innerWidth >= breakpoint)
@@ -77,6 +78,11 @@ function App() {
   }, [])
 
   const dateRange = mealData ? formatDateRange(mealData.start_date, mealData.end_date) : null
+
+  // Test route: getsouschef.app/app#oops
+  if (window.location.hash === '#oops') {
+    return <CrashTest />
+  }
 
   if (authed === null) {
     return <div className="loading" style={{ paddingTop: '40vh' }}>Setting the table...</div>

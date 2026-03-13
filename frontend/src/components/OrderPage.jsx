@@ -233,7 +233,8 @@ export default function OrderPage() {
                     <div className="product-name">{pref.name}</div>
                     <div className="product-meta">{pref.size}</div>
                   </div>
-                  {pref.rating === 1 && <span className="pref-star">{'\u2605'}</span>}
+                  {pref.rating === 1 && <span className="pref-star">{'\u{1F44D}'}</span>}
+                  {pref.rating === -1 && <span className="pref-down">{'\u{1F44E}'}</span>}
                 </button>
               ))}
             </div>
@@ -289,6 +290,8 @@ export default function OrderPage() {
                     </div>
                     <ProductInsights nova={p.nova} nutriscore={p.nutriscore} />
                     <ParentCoBadge brand={p.brand} parentCompany={p.parent_company} onTapUnknown={(b) => setCommunityBrand(b)} />
+                    {p.rating === 1 && <span className="pref-star">{'\u{1F44D}'}</span>}
+                    {p.rating === -1 && <span className="pref-down">{'\u{1F44E}'}</span>}
                   </button>
                 ))}
               </div>

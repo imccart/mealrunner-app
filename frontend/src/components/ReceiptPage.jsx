@@ -71,6 +71,16 @@ export default function ReceiptPage() {
     } catch { /* ignore — item stays in current state */ }
   }
 
+  const handleRate = async (item, rating) => {
+    const upc = item.receipt_upc || item.product_upc
+    if (!upc) return
+    const desc = item.receipt_item || item.product_name || item.name
+    try {
+      await api.rateProduct(upc, rating, desc)
+      loadReceipt()
+    } catch { /* ignore */ }
+  }
+
   if (loadError) return <div className="loading">Something went wrong loading receipts. Try refreshing.</div>
   if (!receipt) return <div className="loading">Checking the tab...</div>
 
@@ -187,16 +197,38 @@ export default function ReceiptPage() {
           </div>
           {!collapsedSections.matched && receipt.matched.map(item => (
             <div key={item.name} className="receipt-item matched">
-              <div className="receipt-item-check">{'\u2713'}</div>
+              {item.product_image && (
+                <img className="receipt-product-img" src={item.product_image} alt="" />
+              )}
+              {!item.product_image && <div className="receipt-item-check">{'\u2713'}</div>}
               <div className="receipt-item-info">
-                <div className="receipt-item-name">{item.name}</div>
-                {item.receipt_item && item.receipt_item !== item.name && (
-                  <div className="receipt-item-detail">{item.receipt_item}</div>
+                <div className="receipt-item-name">
+                  {item.receipt_item || item.product_name || item.name}
+                </div>
+                {(item.receipt_item || item.product_name) && (
+                  <div className="receipt-item-detail">{item.name}</div>
                 )}
-                {item.receipt_price != null && (
-                  <div className="receipt-item-price">{formatPrice(item.receipt_price)}</div>
-                )}
+                <div className="receipt-item-meta">
+                  {item.product_brand && <span>{item.product_brand}</span>}
+                  {item.product_brand && item.product_size && <span> · </span>}
+                  {item.product_size && <span>{item.product_size}</span>}
+                  {item.receipt_price != null && <span> · {formatPrice(item.receipt_price)}</span>}
+                </div>
               </div>
+              {(item.receipt_upc || item.product_upc) && (
+                <div className="receipt-rating">
+                  <button
+                    className={`receipt-rate-btn up${item.rating === 1 ? ' active' : ''}`}
+                    onClick={() => handleRate(item, item.rating === 1 ? 0 : 1)}
+                    title="Thumbs up"
+                  >{'\u{1F44D}'}</button>
+                  <button
+                    className={`receipt-rate-btn down${item.rating === -1 ? ' active' : ''}`}
+                    onClick={() => handleRate(item, item.rating === -1 ? 0 : -1)}
+                    title="Thumbs down"
+                  >{'\u{1F44E}'}</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -213,6 +245,9 @@ export default function ReceiptPage() {
           </div>
           {!collapsedSections.substituted && receipt.substituted.map(item => (
             <div key={item.name} className="receipt-item substituted">
+              {item.product_image && (
+                <img className="receipt-product-img" src={item.product_image} alt="" />
+              )}
               <div className="receipt-item-info">
                 <div className="receipt-item-name">{item.name}</div>
                 {item.receipt_item && (
@@ -222,6 +257,20 @@ export default function ReceiptPage() {
                   </div>
                 )}
               </div>
+              {(item.receipt_upc || item.product_upc) && (
+                <div className="receipt-rating">
+                  <button
+                    className={`receipt-rate-btn up${item.rating === 1 ? ' active' : ''}`}
+                    onClick={() => handleRate(item, item.rating === 1 ? 0 : 1)}
+                    title="Thumbs up"
+                  >{'\u{1F44D}'}</button>
+                  <button
+                    className={`receipt-rate-btn down${item.rating === -1 ? ' active' : ''}`}
+                    onClick={() => handleRate(item, item.rating === -1 ? 0 : -1)}
+                    title="Thumbs down"
+                  >{'\u{1F44E}'}</button>
+                </div>
+              )}
               <div className="receipt-item-actions">
                 <button
                   className="receipt-resolve-btn accept"
