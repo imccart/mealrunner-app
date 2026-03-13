@@ -103,6 +103,12 @@ export const api = {
     body: JSON.stringify({ name }),
   }),
   deleteRecipe: (id) => request(`/recipes/${id}`, { method: 'DELETE' }),
+  getRecipeIngredients: (id) => request(`/recipes/${id}/ingredients`),
+  addRecipeIngredient: (id, name) => request(`/recipes/${id}/ingredients`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  }),
+  removeRecipeIngredient: (recipeId, riId) => request(`/recipes/${recipeId}/ingredients/${riId}`, { method: 'DELETE' }),
 
   // Pantry
   getPantry: () => request('/pantry'),

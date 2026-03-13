@@ -1617,6 +1617,78 @@ async def delete_recipe(recipe_id: int, request: Request):
     return {"ok": True}
 
 
+@router.get("/recipes/{recipe_id}/ingredients")
+async def get_recipe_ingredients(recipe_id: int, request: Request):
+    """List ingredients for a recipe."""
+    conn = _conn()
+    rows = conn.execute(
+        text("""SELECT ri.id, i.name, i.aisle
+           FROM recipe_ingredients ri
+           JOIN ingredients i ON i.id = ri.ingredient_id
+           WHERE ri.recipe_id = :recipe_id
+           ORDER BY i.name"""),
+        {"recipe_id": recipe_id},
+    ).fetchall()
+    return {"ingredients": [{"id": r["id"], "name": r["name"], "aisle": r["aisle"]} for r in rows]}
+
+
+@router.post("/recipes/{recipe_id}/ingredients")
+async def add_recipe_ingredient(recipe_id: int, body: dict, request: Request):
+    """Add an ingredient to a recipe by name. Creates ingredient if it doesn't exist."""
+    conn = _conn()
+    name = body.get("name", "").strip()
+    if not name:
+        return {"ok": False}
+
+    # Find or create ingredient
+    row = conn.execute(
+        text("SELECT id, aisle FROM ingredients WHERE LOWER(name) = :name"),
+        {"name": name.lower()},
+    ).fetchone()
+
+    if row:
+        ingredient_id = row["id"]
+    else:
+        # Infer shopping group
+        group = _infer_item_group(conn, name, request.state.user_id)
+        cursor = conn.execute(
+            text("""INSERT INTO ingredients (name, aisle, default_unit)
+               VALUES (:name, :aisle, 'count')
+               RETURNING id"""),
+            {"name": name.lower(), "aisle": group},
+        )
+        ingredient_id = cursor.fetchone()["id"]
+
+    # Check if already linked
+    existing = conn.execute(
+        text("SELECT id FROM recipe_ingredients WHERE recipe_id = :rid AND ingredient_id = :iid"),
+        {"rid": recipe_id, "iid": ingredient_id},
+    ).fetchone()
+    if existing:
+        conn.commit()
+        return {"ok": True, "exists": True}
+
+    conn.execute(
+        text("""INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit)
+           VALUES (:rid, :iid, 1, 'count')"""),
+        {"rid": recipe_id, "iid": ingredient_id},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
+@router.delete("/recipes/{recipe_id}/ingredients/{ri_id}")
+async def remove_recipe_ingredient(recipe_id: int, ri_id: int, request: Request):
+    """Remove an ingredient from a recipe."""
+    conn = _conn()
+    conn.execute(
+        text("DELETE FROM recipe_ingredients WHERE id = :id AND recipe_id = :rid"),
+        {"id": ri_id, "rid": recipe_id},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
 # ── Pantry ──────────────────────────────────────────────
 
 

@@ -16,11 +16,107 @@ function AccordionSection({ title, count, children, defaultOpen = false }) {
   )
 }
 
+function RecipeItem({ recipe, onRemove, allIngredients }) {
+  const [expanded, setExpanded] = useState(false)
+  const [ingredients, setIngredients] = useState(null)
+  const [addText, setAddText] = useState('')
+  const [showSuggestions, setShowSuggestions] = useState(false)
+
+  const loadIngredients = async () => {
+    const data = await api.getRecipeIngredients(recipe.id)
+    setIngredients(data.ingredients)
+  }
+
+  const handleToggle = () => {
+    if (!expanded && ingredients === null) loadIngredients()
+    setExpanded(!expanded)
+  }
+
+  const handleAdd = async (name) => {
+    const val = (name || addText).trim()
+    if (!val) return
+    await api.addRecipeIngredient(recipe.id, val)
+    setAddText('')
+    setShowSuggestions(false)
+    loadIngredients()
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    handleAdd()
+  }
+
+  const handleRemoveIngredient = async (riId) => {
+    await api.removeRecipeIngredient(recipe.id, riId)
+    loadIngredients()
+  }
+
+  const query = addText.trim().toLowerCase()
+  const existingNames = new Set((ingredients || []).map(i => i.name.toLowerCase()))
+  const matches = query.length >= 2 && allIngredients
+    ? allIngredients.filter(n => n.toLowerCase().includes(query) && !existingNames.has(n.toLowerCase())).slice(0, 6)
+    : []
+
+  return (
+    <div className="prefs-recipe-item">
+      <div className="prefs-list-item" onClick={handleToggle} style={{ cursor: 'pointer' }}>
+        <span className="prefs-accordion-arrow" style={{ marginRight: 6, fontSize: 11 }}>
+          {expanded ? '\u25B4' : '\u25BE'}
+        </span>
+        <span className="prefs-list-name">{recipe.name}</span>
+        {ingredients && <span className="prefs-list-meta">{ingredients.length} items</span>}
+        <button className="prefs-remove" onClick={(e) => { e.stopPropagation(); onRemove(recipe.id) }}>{'\u00D7'}</button>
+      </div>
+      {expanded && (
+        <div className="prefs-recipe-ingredients">
+          {ingredients && ingredients.length > 0 && (
+            <div className="prefs-ingredient-list">
+              {ingredients.map(ing => (
+                <div key={ing.id} className="prefs-ingredient-item">
+                  <span>{ing.name}</span>
+                  <button className="prefs-remove" onClick={() => handleRemoveIngredient(ing.id)}>{'\u00D7'}</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {ingredients && ingredients.length === 0 && (
+            <div className="prefs-section-hint" style={{ marginTop: 0 }}>No ingredients yet</div>
+          )}
+          <div className="prefs-autocomplete">
+            <form onSubmit={handleSubmit} className="prefs-add-row">
+              <input
+                className="prefs-add-input"
+                type="text"
+                placeholder="Add ingredient..."
+                value={addText}
+                onChange={(e) => { setAddText(e.target.value); setShowSuggestions(true) }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              />
+              <button className="btn primary" type="submit">+</button>
+            </form>
+            {showSuggestions && matches.length > 0 && (
+              <div className="prefs-autocomplete-list">
+                {matches.map(name => (
+                  <button key={name} className="prefs-autocomplete-option" onMouseDown={() => handleAdd(name)}>
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function PreferencesSheet({ onClose }) {
   const [regulars, setRegulars] = useState(null)
   const [pantry, setPantry] = useState(null)
   const [stores, setStores] = useState(null)
   const [recipes, setRecipes] = useState(null)
+  const [allIngredients, setAllIngredients] = useState(null)
   const [addRegularText, setAddRegularText] = useState('')
   const [addPantryText, setAddPantryText] = useState('')
   const [addStoreName, setAddStoreName] = useState('')
@@ -35,6 +131,7 @@ export default function PreferencesSheet({ onClose }) {
     api.getPantry().then(data => setPantry(data.items))
     api.getStores().then(data => setStores(data.stores))
     api.getRecipes().then(data => setRecipes(data.recipes))
+    api.getGrocerySuggestions().then(data => setAllIngredients(data.suggestions)).catch(() => {})
     api.getHouseholdMembers().then(data => setMembers(data.members)).catch(() => {})
   }, [])
 
@@ -219,11 +316,7 @@ export default function PreferencesSheet({ onClose }) {
           {recipes && recipes.length > 0 && (
             <div className="prefs-list">
               {recipes.map(r => (
-                <div key={r.id} className="prefs-list-item">
-                  <span className="prefs-list-name">{r.name}</span>
-                  {r.cuisine && <span className="prefs-list-meta">{r.cuisine}</span>}
-                  <button className="prefs-remove" onClick={() => handleRemoveRecipe(r.id)}>{'\u00D7'}</button>
-                </div>
+                <RecipeItem key={r.id} recipe={r} onRemove={handleRemoveRecipe} allIngredients={allIngredients} />
               ))}
             </div>
           )}
