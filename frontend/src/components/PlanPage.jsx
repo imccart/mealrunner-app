@@ -390,11 +390,12 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
           </svg>
           Fresh Start
         </button>
-        <button className="feedback-btn" onClick={() => { setShowFeedback(true); setFeedbackSent(false); setFeedbackText('') }}>
-          Yes, Chef!
-          <span className="feedback-btn-sub">send feedback</span>
-        </button>
       </div>
+
+      {/* Floating feedback FAB */}
+      <button className="feedback-fab" onClick={() => { setShowFeedback(true); setFeedbackSent(false); setFeedbackText('') }}>
+        Yes, Chef!
+      </button>
 
       {/* Feedback sheet */}
       {showFeedback && (

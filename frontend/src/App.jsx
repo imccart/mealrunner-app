@@ -90,7 +90,7 @@ function App() {
 
   return (
     <div className="app">
-      <Nav page={page} setPage={setPage} prefsOpen={showPrefs} onTogglePrefs={() => setShowPrefs(p => !p)} />
+      <Nav page={page} setPage={setPage} prefsOpen={showPrefs} onTogglePrefs={() => setShowPrefs(p => !p)} isWide={isWide} />
       <main>
         {isWide && (page === 'plan' || page === 'grocery') ? (
           <>
@@ -125,10 +125,12 @@ function App() {
           <div className="nav-tab-icon">{'\u{1F5D3}'}</div>
           <div className="nav-tab-label">Plan</div>
         </div>
-        <div className={`nav-tab${page === 'grocery' ? ' active' : ''}`} onClick={() => setPage('grocery')}>
-          <div className="nav-tab-icon">{'\u{1F6D2}'}</div>
-          <div className="nav-tab-label">Grocery</div>
-        </div>
+        {!isWide && (
+          <div className={`nav-tab${page === 'grocery' ? ' active' : ''}`} onClick={() => setPage('grocery')}>
+            <div className="nav-tab-icon">{'\u{1F6D2}'}</div>
+            <div className="nav-tab-label">Grocery</div>
+          </div>
+        )}
         <div className={`nav-tab${page === 'order' ? ' active' : ''}`} onClick={() => setPage('order')}>
           <div className="nav-tab-icon">{'\u{1F4E6}'}</div>
           <div className="nav-tab-label">Order</div>

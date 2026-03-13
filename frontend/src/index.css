@@ -621,12 +621,12 @@ main {
   align-items: center;
 }
 
-.feedback-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  background: none;
+.feedback-fab {
+  position: fixed;
+  bottom: 140px;
+  right: 20px;
+  z-index: 89;
+  background: var(--cream);
   border: 1.5px solid var(--tan);
   border-radius: 20px;
   padding: 8px 20px;
@@ -637,16 +637,19 @@ main {
   color: var(--accent);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: border-color 0.15s, color 0.15s;
-  margin-top: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
-.feedback-btn:hover { border-color: var(--accent); }
-.feedback-btn-sub {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 11px;
-  font-weight: 400;
-  font-style: normal;
-  color: var(--text-muted);
+.feedback-fab:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(212,98,58,0.15);
+}
+
+@media (min-width: 1024px) {
+  .feedback-fab {
+    bottom: 92px;
+    right: 32px;
+  }
 }
 
 .feedback-title {

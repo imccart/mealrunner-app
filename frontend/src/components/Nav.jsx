@@ -1,6 +1,6 @@
 import BentSpoonIcon from './BentSpoonIcon'
 
-export default function Nav({ page, setPage, prefsOpen, onTogglePrefs }) {
+export default function Nav({ page, setPage, prefsOpen, onTogglePrefs, isWide }) {
   const link = (name, label) => (
     <a
       href="#"
@@ -19,7 +19,7 @@ export default function Nav({ page, setPage, prefsOpen, onTogglePrefs }) {
       <div className="nav-right">
         <div className="nav-links">
           {link('plan', 'Plan')}
-          {link('grocery', 'Grocery')}
+          {!isWide && link('grocery', 'Grocery')}
           {link('order', 'Order')}
           {link('receipt', 'Receipt')}
         </div>
