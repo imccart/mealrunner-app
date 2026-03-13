@@ -238,7 +238,6 @@ export default function GroceryPage({ sidebar = false }) {
       ) : (
         <>
           {mobileTitleBlock}
-          {meals && <StatusBar status={meals.status} />}
           {addBar}
           {listContent}
         </>
