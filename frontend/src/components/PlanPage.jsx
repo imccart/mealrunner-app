@@ -36,6 +36,9 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const [showPast, setShowPast] = useState(false)
   const [sidePickerDate, setSidePickerDate] = useState(null)
   const [erasing, setErasing] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedbackText, setFeedbackText] = useState('')
+  const [feedbackSent, setFeedbackSent] = useState(false)
   const actionSwipe = useSwipeDismiss(() => setActionDate(null))
 
   // Touch drag refs
@@ -387,7 +390,52 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
           </svg>
           Fresh Start
         </button>
+        <button className="feedback-btn" onClick={() => { setShowFeedback(true); setFeedbackSent(false); setFeedbackText('') }}>
+          Yes, Chef!
+          <span className="feedback-btn-sub">send feedback</span>
+        </button>
       </div>
+
+      {/* Feedback sheet */}
+      {showFeedback && (
+        <div className="sheet-overlay" onClick={() => setShowFeedback(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-handle" />
+            <div className="sheet-title feedback-title">Yes, Chef!</div>
+            <div className="sheet-sub">Tell us what you think</div>
+            {feedbackSent ? (
+              <div className="feedback-thanks">
+                Thanks for the feedback!
+                <button className="btn primary" style={{ marginTop: 16 }} onClick={() => setShowFeedback(false)}>
+                  Done
+                </button>
+              </div>
+            ) : (
+              <>
+                <textarea
+                  className="feedback-textarea"
+                  placeholder="What's on your mind?"
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  rows={4}
+                  autoFocus
+                />
+                <button
+                  className="btn primary"
+                  style={{ width: '100%', marginTop: 12 }}
+                  disabled={!feedbackText.trim()}
+                  onClick={async () => {
+                    await api.sendFeedback(feedbackText.trim(), 'plan')
+                    setFeedbackSent(true)
+                  }}
+                >
+                  Send
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Meal picker sheet */}
       {pickerDate && (

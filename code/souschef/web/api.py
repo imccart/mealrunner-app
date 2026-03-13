@@ -1960,6 +1960,139 @@ async def remove_feedback_override(body: dict, request: Request):
     return {"ok": True}
 
 
+# ── Household ─────────────────────────────────────────────
+
+
+@router.get("/household/members")
+async def get_household_members(request: Request):
+    """List members of the current user's household."""
+    from souschef.web.auth import get_household_id
+
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    conn = _conn()
+    hh_id = get_household_id(conn, real_user_id)
+    if not hh_id:
+        return {"members": [], "household_id": None}
+
+    rows = conn.execute(
+        text("""SELECT hm.user_id, hm.role, u.email, u.display_name
+               FROM household_members hm
+               JOIN users u ON u.id = hm.user_id
+               WHERE hm.household_id = :hh_id
+               ORDER BY hm.role DESC, hm.joined_at"""),
+        {"hh_id": hh_id},
+    ).fetchall()
+
+    return {
+        "household_id": hh_id,
+        "members": [
+            {
+                "user_id": r["user_id"],
+                "email": r["email"],
+                "display_name": r["display_name"] or r["email"].split("@")[0],
+                "role": r["role"],
+                "is_you": r["user_id"] == real_user_id,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.post("/household/invite")
+async def invite_to_household(body: dict, request: Request):
+    """Invite someone to share your household."""
+    from souschef.web.auth import get_household_id, send_magic_link_email, find_or_create_user, create_magic_link
+
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    email = body.get("email", "").strip().lower()
+    if not email:
+        return {"ok": False, "error": "Email required"}
+
+    conn = _conn()
+    hh_id = get_household_id(conn, real_user_id)
+    if not hh_id:
+        return {"ok": False, "error": "No household found"}
+
+    # Check if already a member
+    existing = conn.execute(
+        text("""SELECT 1 FROM household_members hm
+               JOIN users u ON u.id = hm.user_id
+               WHERE hm.household_id = :hh_id AND LOWER(u.email) = :email"""),
+        {"hh_id": hh_id, "email": email},
+    ).fetchone()
+    if existing:
+        return {"ok": False, "error": "Already a household member"}
+
+    # Create invite record
+    conn.execute(
+        text("""INSERT INTO household_invites (household_id, email, invited_by, status)
+           VALUES (:hh_id, :email, :user_id, 'pending')"""),
+        {"hh_id": hh_id, "email": email, "user_id": real_user_id},
+    )
+
+    # Add to allowed_emails so they can sign up
+    conn.execute(
+        text("INSERT INTO allowed_emails (email) VALUES (:email) ON CONFLICT DO NOTHING"),
+        {"email": email},
+    )
+
+    # Create user + send magic link
+    user_id = find_or_create_user(conn, email)
+    token = create_magic_link(conn, user_id)
+    send_magic_link_email(email, token)
+
+    conn.commit()
+    return {"ok": True}
+
+
+@router.post("/beta/invite")
+async def invite_to_beta(body: dict, request: Request):
+    """Invite someone to try souschef (separate account, no household sharing)."""
+    from souschef.web.auth import find_or_create_user, create_magic_link, send_magic_link_email
+
+    email = body.get("email", "").strip().lower()
+    if not email:
+        return {"ok": False, "error": "Email required"}
+
+    conn = _conn()
+
+    # Add to allowed_emails
+    conn.execute(
+        text("INSERT INTO allowed_emails (email) VALUES (:email) ON CONFLICT DO NOTHING"),
+        {"email": email},
+    )
+
+    # Create user + send magic link
+    user_id = find_or_create_user(conn, email)
+    token = create_magic_link(conn, user_id)
+    send_magic_link_email(email, token)
+
+    conn.commit()
+    return {"ok": True}
+
+
+# ── Feedback ──────────────────────────────────────────────
+
+
+@router.post("/feedback")
+async def submit_feedback(body: dict, request: Request):
+    """Save user feedback."""
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    message = body.get("message", "").strip()
+    page = body.get("page", "")
+    if not message:
+        return {"ok": False, "error": "Message required"}
+
+    conn = _conn()
+    conn.execute(
+        text("""INSERT INTO user_feedback (user_id, message, page)
+           VALUES (:user_id, :message, :page)"""),
+        {"user_id": real_user_id, "message": message, "page": page},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
 # ── Helpers ──────────────────────────────────────────────
 
 

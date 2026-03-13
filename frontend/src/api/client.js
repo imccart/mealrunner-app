@@ -127,6 +127,23 @@ export const api = {
   getLearningSuggestions: () => request('/learning/suggestions'),
   dismissLearning: (name) => request(`/learning/dismiss/${encodeURIComponent(name)}`, { method: 'POST' }),
 
+  // Household
+  getHouseholdMembers: () => request('/household/members'),
+  inviteToHousehold: (email) => request('/household/invite', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  }),
+  inviteToBeta: (email) => request('/beta/invite', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  }),
+
+  // Feedback
+  sendFeedback: (message, page) => request('/feedback', {
+    method: 'POST',
+    body: JSON.stringify({ message, page }),
+  }),
+
   // Shopping feedback
   getFeedbackPatterns: () => request('/feedback/patterns'),
   dismissFeedback: (item, meal, kind) => request('/feedback/dismiss', {

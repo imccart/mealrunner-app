@@ -621,6 +621,65 @@ main {
   align-items: center;
 }
 
+.feedback-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: 1.5px solid var(--tan);
+  border-radius: 20px;
+  padding: 8px 20px;
+  font-family: 'Playfair Display', serif;
+  font-size: 14px;
+  font-weight: 600;
+  font-style: italic;
+  color: var(--accent);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s, color 0.15s;
+  margin-top: 8px;
+}
+.feedback-btn:hover { border-color: var(--accent); }
+.feedback-btn-sub {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  font-style: normal;
+  color: var(--text-muted);
+}
+
+.feedback-title {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  color: var(--accent);
+}
+
+.feedback-textarea {
+  width: 100%;
+  min-height: 100px;
+  border: 1.5px solid var(--tan);
+  border-radius: 10px;
+  padding: 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  color: var(--dark);
+  background: var(--warm-white);
+  resize: vertical;
+  margin-top: 12px;
+}
+.feedback-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.feedback-thanks {
+  text-align: center;
+  padding: 20px 0;
+  font-size: 15px;
+  color: var(--brown);
+}
+
 .btn-suggest-link {
   background: none;
   border: none;
@@ -2262,6 +2321,16 @@ main {
   color: var(--dark);
   font-weight: 600;
 }
+
+.prefs-invite-status {
+  font-size: 13px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  border-radius: 8px;
+  text-align: center;
+}
+.prefs-invite-status.success { background: var(--green-light); color: var(--green); }
+.prefs-invite-status.error { background: #FFF0F0; color: #C44; }
 
 /* ── Welcome ──────────────────────────── */
 

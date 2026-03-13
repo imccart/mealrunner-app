@@ -355,6 +355,34 @@ meal_item_overrides = Table(
     UniqueConstraint("user_id", "recipe_name", "item_name"),
 )
 
+household_members = Table(
+    "household_members", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("household_id", Text, nullable=False),
+    Column("user_id", Text, ForeignKey("users.id"), unique=True, nullable=False),
+    Column("role", Text, nullable=False, server_default=text("'owner'")),
+    Column("joined_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
+household_invites = Table(
+    "household_invites", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("household_id", Text, nullable=False),
+    Column("email", Text, nullable=False),
+    Column("invited_by", Text, ForeignKey("users.id"), nullable=False),
+    Column("status", Text, nullable=False, server_default=text("'pending'")),
+    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
+user_feedback = Table(
+    "user_feedback", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
+    Column("message", Text, nullable=False),
+    Column("page", Text, nullable=False, server_default=text("''")),
+    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
 settings = Table(
     "settings", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),

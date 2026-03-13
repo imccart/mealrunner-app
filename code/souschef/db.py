@@ -49,6 +49,7 @@ def init_db(conn: DictConnection) -> None:
     _migrate_grocery_to_trips(conn)
     _migrate_onboarding_marker(conn)
     _migrate_create_default_user(conn)
+    _migrate_create_households(conn)
 
     conn.commit()
 
@@ -432,6 +433,26 @@ def _migrate_create_default_user(conn: DictConnection) -> None:
            VALUES ('owner@souschef.app')
            ON CONFLICT DO NOTHING"""
     ))
+
+
+def _migrate_create_households(conn: DictConnection) -> None:
+    """One-time: create a household for every existing user who doesn't have one."""
+    import uuid
+
+    row = conn.execute(text(
+        "SELECT COUNT(*) AS n FROM household_members"
+    )).fetchone()
+    if row["n"] > 0:
+        return
+
+    users = conn.execute(text("SELECT id FROM users")).fetchall()
+    for u in users:
+        hh_id = str(uuid.uuid4())
+        conn.execute(text(
+            """INSERT INTO household_members (household_id, user_id, role)
+               VALUES (:hh_id, :user_id, 'owner')
+               ON CONFLICT DO NOTHING"""
+        ), {"hh_id": hh_id, "user_id": u["id"]})
 
 
 # ── Seed Data ─────────────────────────────────────────────

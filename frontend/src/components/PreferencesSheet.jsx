@@ -24,12 +24,17 @@ export default function PreferencesSheet({ onClose }) {
   const [addPantryText, setAddPantryText] = useState('')
   const [addStoreName, setAddStoreName] = useState('')
   const [addStoreMode, setAddStoreMode] = useState('in-person')
+  const [members, setMembers] = useState(null)
+  const [householdEmail, setHouseholdEmail] = useState('')
+  const [betaEmail, setBetaEmail] = useState('')
+  const [inviteStatus, setInviteStatus] = useState(null)
   const swipeHandlers = useSwipeDismiss(onClose)
 
   useEffect(() => {
     api.getRegulars().then(data => setRegulars(data.regulars))
     api.getPantry().then(data => setPantry(data.items))
     api.getStores().then(data => setStores(data.stores))
+    api.getHouseholdMembers().then(data => setMembers(data.members)).catch(() => {})
   }, [])
 
   const handleAddRegular = async (e) => {
@@ -83,6 +88,42 @@ export default function PreferencesSheet({ onClose }) {
     await api.removeStore(key)
     const data = await api.getStores()
     setStores(data.stores)
+  }
+
+  const handleHouseholdInvite = async (e) => {
+    e.preventDefault()
+    if (!householdEmail.trim()) return
+    setInviteStatus(null)
+    try {
+      const result = await api.inviteToHousehold(householdEmail.trim())
+      if (result.ok) {
+        setHouseholdEmail('')
+        setInviteStatus({ type: 'success', msg: 'Invite sent!' })
+        const data = await api.getHouseholdMembers()
+        setMembers(data.members)
+      } else {
+        setInviteStatus({ type: 'error', msg: result.error || 'Failed to send' })
+      }
+    } catch {
+      setInviteStatus({ type: 'error', msg: 'Something went wrong' })
+    }
+  }
+
+  const handleBetaInvite = async (e) => {
+    e.preventDefault()
+    if (!betaEmail.trim()) return
+    setInviteStatus(null)
+    try {
+      const result = await api.inviteToBeta(betaEmail.trim())
+      if (result.ok) {
+        setBetaEmail('')
+        setInviteStatus({ type: 'success', msg: 'Invite sent!' })
+      } else {
+        setInviteStatus({ type: 'error', msg: result.error || 'Failed to send' })
+      }
+    } catch {
+      setInviteStatus({ type: 'error', msg: 'Something went wrong' })
+    }
   }
 
   // Group regulars by shopping_group
@@ -227,6 +268,55 @@ export default function PreferencesSheet({ onClose }) {
               <span className="prefs-list-meta">Configure via CLI</span>
             </div>
           </div>
+        </AccordionSection>
+
+        {/* Household & Sharing */}
+        <AccordionSection title="Household" count={members?.length || 0}>
+          {members && members.length > 0 && (
+            <div className="prefs-list">
+              {members.map(m => (
+                <div key={m.user_id} className="prefs-list-item">
+                  <span className="prefs-list-name">
+                    {m.display_name}{m.is_you ? ' (you)' : ''}
+                  </span>
+                  <span className="prefs-list-meta">{m.role}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="prefs-section-hint">
+            Invite someone to share your meal plan, grocery list, and pantry.
+          </div>
+          <form onSubmit={handleHouseholdInvite} className="prefs-add-row">
+            <input
+              className="prefs-add-input"
+              type="email"
+              placeholder="Their email..."
+              value={householdEmail}
+              onChange={(e) => setHouseholdEmail(e.target.value)}
+            />
+            <button className="btn primary" type="submit">Invite</button>
+          </form>
+
+          <div className="prefs-section-hint" style={{ marginTop: 16 }}>
+            Know someone who'd like souschef? Give them their own account.
+          </div>
+          <form onSubmit={handleBetaInvite} className="prefs-add-row">
+            <input
+              className="prefs-add-input"
+              type="email"
+              placeholder="Their email..."
+              value={betaEmail}
+              onChange={(e) => setBetaEmail(e.target.value)}
+            />
+            <button className="btn primary" type="submit">Send</button>
+          </form>
+
+          {inviteStatus && (
+            <div className={`prefs-invite-status ${inviteStatus.type}`}>
+              {inviteStatus.msg}
+            </div>
+          )}
         </AccordionSection>
 
         {/* Account */}

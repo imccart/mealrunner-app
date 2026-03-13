@@ -261,6 +261,57 @@ def find_or_create_user(conn: DictConnection, email: str) -> str:
     return user_id
 
 
+# ── Household Resolution ────────────────────────────────
+
+
+def get_household_owner_id(conn: DictConnection, user_id: str) -> str:
+    """Resolve a user to their household owner's user_id.
+
+    All household members share data under the owner's user_id.
+    Returns the user's own ID if they have no household or are the owner.
+    """
+    row = conn.execute(
+        text("SELECT household_id FROM household_members WHERE user_id = :user_id"),
+        {"user_id": user_id},
+    ).fetchone()
+    if not row:
+        return user_id
+
+    owner = conn.execute(
+        text("SELECT user_id FROM household_members WHERE household_id = :hh_id AND role = 'owner'"),
+        {"hh_id": row["household_id"]},
+    ).fetchone()
+    return owner["user_id"] if owner else user_id
+
+
+def get_household_id(conn: DictConnection, user_id: str) -> str | None:
+    """Get the household_id for a user."""
+    row = conn.execute(
+        text("SELECT household_id FROM household_members WHERE user_id = :user_id"),
+        {"user_id": user_id},
+    ).fetchone()
+    return row["household_id"] if row else None
+
+
+def ensure_household(conn: DictConnection, user_id: str) -> str:
+    """Ensure a user has a household. Creates one if needed. Returns household_id."""
+    row = conn.execute(
+        text("SELECT household_id FROM household_members WHERE user_id = :user_id"),
+        {"user_id": user_id},
+    ).fetchone()
+    if row:
+        return row["household_id"]
+
+    hh_id = str(uuid.uuid4())
+    conn.execute(
+        text("""INSERT INTO household_members (household_id, user_id, role)
+           VALUES (:hh_id, :user_id, 'owner')"""),
+        {"hh_id": hh_id, "user_id": user_id},
+    )
+    conn.commit()
+    return hh_id
+
+
 # ── Middleware Helper ────────────────────────────────────
 
 

@@ -31,6 +31,8 @@ from souschef.web.auth import (
     clear_session_cookie,
     delete_session,
     get_user_from_session,
+    get_household_owner_id,
+    ensure_household,
     SESSION_COOKIE,
     BASE_URL,
 )
@@ -66,8 +68,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not user_id:
             return JSONResponse({"error": "Not authenticated"}, status_code=401)
 
+        # Resolve to household owner's user_id so all members share data
+        conn = get_connection()
+        try:
+            effective_user_id = get_household_owner_id(conn, user_id)
+        finally:
+            conn.close()
+
         # Attach user_id to request state for endpoints to use
-        request.state.user_id = user_id
+        request.state.user_id = effective_user_id
+        request.state.real_user_id = user_id  # actual logged-in user (for feedback, household mgmt)
         return await call_next(request)
 
 
@@ -123,6 +133,65 @@ async def health():
         return {"status": "ok"}
     except Exception:
         return JSONResponse({"status": "error"}, status_code=503)
+
+
+def _process_household_invite(conn, user_id: str, email: str) -> None:
+    """Check for pending household invites and join if found."""
+    invite = conn.execute(
+        text("""SELECT household_id FROM household_invites
+                WHERE LOWER(email) = LOWER(:email) AND status = 'pending'
+                ORDER BY created_at DESC LIMIT 1"""),
+        {"email": email},
+    ).fetchone()
+    if not invite:
+        return
+
+    target_hh = invite["household_id"]
+
+    # Find the owner of the target household
+    owner = conn.execute(
+        text("SELECT user_id FROM household_members WHERE household_id = :hh_id AND role = 'owner'"),
+        {"hh_id": target_hh},
+    ).fetchone()
+    if not owner:
+        return
+
+    owner_user_id = owner["user_id"]
+
+    # Reassign all of this user's data to the household owner
+    tables = [
+        "meals", "grocery_trips", "regulars", "pantry",
+        "product_preferences", "learning_dismissed",
+        "meal_item_overrides", "settings",
+    ]
+    for table in tables:
+        try:
+            conn.execute(
+                text(f"UPDATE {table} SET user_id = :owner_id WHERE user_id = :user_id"),
+                {"owner_id": owner_user_id, "user_id": user_id},
+            )
+        except Exception:
+            pass
+
+    # Remove existing household membership and join the new one
+    conn.execute(
+        text("DELETE FROM household_members WHERE user_id = :user_id"),
+        {"user_id": user_id},
+    )
+    conn.execute(
+        text("""INSERT INTO household_members (household_id, user_id, role)
+           VALUES (:hh_id, :user_id, 'member')"""),
+        {"hh_id": target_hh, "user_id": user_id},
+    )
+
+    # Mark invite as accepted
+    conn.execute(
+        text("""UPDATE household_invites SET status = 'accepted'
+           WHERE household_id = :hh_id AND LOWER(email) = LOWER(:email) AND status = 'pending'"""),
+        {"hh_id": target_hh, "email": email},
+    )
+    conn.commit()
+    print(f"[auth] User {user_id} joined household {target_hh} (owner: {owner_user_id})")
 
 
 def _claim_default_data(conn, user_id: str) -> None:
@@ -191,6 +260,17 @@ async def auth_verify(token: str):
 
         # One-time: claim orphaned 'default' user data for the first real user
         _claim_default_data(conn, user_id)
+
+        # Check for pending household invites
+        user = conn.execute(
+            text("SELECT email FROM users WHERE id = :id"),
+            {"id": user_id},
+        ).fetchone()
+        if user:
+            _process_household_invite(conn, user_id, user["email"])
+
+        # Ensure user has a household (creates one if needed)
+        ensure_household(conn, user_id)
 
         session_id = create_session(conn, user_id)
     finally:
