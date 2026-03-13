@@ -66,6 +66,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         conn = get_connection()
         try:
             effective_user_id = get_household_owner_id(conn, user_id)
+        except Exception as e:
+            print(f"[auth] Household resolution failed for {user_id}: {e}")
+            effective_user_id = user_id  # fall back to own user_id
         finally:
             conn.close()
 
@@ -145,8 +148,8 @@ def _process_household_invite(conn, user_id: str, email: str) -> None:
                 text(f"UPDATE {table} SET user_id = :owner_id WHERE user_id = :user_id"),
                 {"owner_id": owner_user_id, "user_id": user_id},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[household] Failed to migrate {table}: {e}")
 
     # Remove existing household membership and join the new one
     conn.execute(
@@ -189,20 +192,36 @@ def _claim_default_data(conn, user_id: str) -> None:
                 text(f"UPDATE {table} SET user_id = :uid WHERE user_id = 'default'"),
                 {"uid": user_id},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[auth] Failed to claim {table}: {e}")
     conn.commit()
     print(f"[auth] Claimed default user data for {user_id}")
 
 
 # ── Auth Endpoints ───────────────────────────────────────
 
+_login_attempts: dict[str, list[float]] = {}  # {email: [timestamps]}
+_LOGIN_MAX = 3
+_LOGIN_WINDOW = 900  # 15 minutes
+
+
 @app.post("/api/auth/login")
 async def auth_login(body: dict):
     """Send a magic link to the given email (if whitelisted)."""
+    import time as _time
+
     email = body.get("email", "").strip().lower()
     if not email:
         return {"ok": False, "error": "Email required"}
+
+    # Rate limit: max 3 attempts per email per 15 minutes
+    now = _time.time()
+    attempts = _login_attempts.get(email, [])
+    attempts = [t for t in attempts if now - t < _LOGIN_WINDOW]
+    if len(attempts) >= _LOGIN_MAX:
+        return {"ok": False, "error": "Too many login attempts. Please try again later."}
+    attempts.append(now)
+    _login_attempts[email] = attempts
 
     conn = get_connection()
     try:
@@ -361,15 +380,15 @@ async def kroger_callback(code: str = "", state: str = "", error: str = ""):
 
         user_id = row["user_id"]
 
-        # Clean up state
+        # Exchange code for tokens
+        redirect_uri = f"{BASE_URL}/api/kroger/callback"
+        token_data = exchange_code_for_token(code, redirect_uri)
+
+        # Clean up state only after successful exchange
         conn.execute(
             text("DELETE FROM settings WHERE user_id = :uid AND key = 'kroger_oauth_state'"),
             {"uid": user_id},
         )
-
-        # Exchange code for tokens
-        redirect_uri = f"{BASE_URL}/api/kroger/callback"
-        token_data = exchange_code_for_token(code, redirect_uri)
 
         expires_in = token_data.get("expires_in", 1800)
         expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in - 60)).isoformat()

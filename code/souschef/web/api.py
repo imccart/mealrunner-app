@@ -20,11 +20,11 @@ def _conn():
 @router.get("/meals")
 async def get_meals(request: Request):
     """Get rolling 7-day meals."""
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
 
     user_id = request.state.user_id
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn, user_id)
+    mw = load_rolling_week(conn, user_id)
     return {
         "start_date": mw.start_date,
         "end_date": mw.end_date,
@@ -89,7 +89,7 @@ async def swap_meal_smart(date: str, request: Request, body: dict = None):
     """
     from souschef.planner import swap_meal as do_swap
     from souschef.grocery import build_grocery_list, split_by_store
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
 
     user_id = request.state.user_id
     body = body or {}
@@ -107,7 +107,7 @@ async def swap_meal_smart(date: str, request: Request, body: dict = None):
         # Find old meal's unique ingredients (not shared by other on-list meals)
         removable = []
         if old_was_on_list and old_meal["recipe_id"]:
-            mw = workflow.get_rolling_meals(conn, user_id)
+            mw = load_rolling_week(conn, user_id)
             # Get all ingredients for the OLD meal
             old_ingredients = set()
             rows = conn.execute(
@@ -199,7 +199,7 @@ async def swap_meal_smart(date: str, request: Request, body: dict = None):
 
         # Refresh trip items if there's an active trip
         if trip:
-            mw = workflow.get_rolling_meals(conn, user_id)
+            mw = load_rolling_week(conn, user_id)
             _refresh_trip_meal_items(conn, trip["id"], mw, user_id)
 
         return await get_meals(request)
@@ -286,6 +286,8 @@ async def set_meal(date: str, body: dict, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
+    if "recipe_id" not in body:
+        return {"ok": False, "error": "recipe_id required"}
     recipe = get_recipe(conn, body["recipe_id"])
     if recipe:
         do_set(conn, user_id, date, recipe.name)
@@ -298,9 +300,9 @@ async def suggest_meals(request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
 
-    mw = workflow.get_rolling_meals(conn, user_id)
+    mw = load_rolling_week(conn, user_id)
     fill_dates(conn, user_id, mw.start_date, mw.end_date)
     return await get_meals(request)
 
@@ -308,11 +310,11 @@ async def suggest_meals(request: Request):
 @router.post("/meals/fresh-start")
 async def fresh_start(request: Request):
     """Clear all meals in the rolling window and deactivate the active grocery trip."""
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
 
     user_id = request.state.user_id
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn, user_id)
+    mw = load_rolling_week(conn, user_id)
 
     # Delete all meals in the rolling window
     conn.execute(
@@ -338,9 +340,9 @@ async def all_to_grocery(request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
 
-    mw = workflow.get_rolling_meals(conn, user_id)
+    mw = load_rolling_week(conn, user_id)
     if mw.meals:
         set_all_grocery(conn, user_id, mw.start_date, mw.end_date, on=True)
     return await get_meals(request)
@@ -362,6 +364,8 @@ async def set_freeform(date: str, body: dict, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
+    if not body.get("name"):
+        return {"ok": False, "error": "name required"}
     set_freeform_meal(conn, user_id, date, body["name"])
     return await get_meals(request)
 
@@ -372,6 +376,8 @@ async def swap_days(body: dict, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
+    if "date_a" not in body or "date_b" not in body:
+        return {"ok": False, "error": "date_a and date_b required"}
     swap_dates(conn, user_id, body["date_a"], body["date_b"])
     return await get_meals(request)
 
@@ -436,7 +442,6 @@ def _infer_item_group(conn, name: str, user_id: str) -> str:
 
 def _build_trip_from_meals(conn, trip_id: int, mw, user_id: str) -> None:
     """Populate trip_items from current meal grocery build + saved extras."""
-    from souschef import workflow
     from souschef.feedback import get_skips_for_meal, get_adds_for_meal
     from souschef.grocery import build_grocery_list, split_by_store
 
@@ -548,16 +553,16 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
                     "meal_count": len(item.meals),
                 }
 
-    # Get existing meal-sourced items and their checked state
+    # Get existing meal-sourced items and their checked/receipt state
     existing = conn.execute(
-        text("SELECT id, name, checked FROM trip_items WHERE trip_id = :trip_id AND source = 'meal'"),
+        text("SELECT id, name, checked, receipt_status FROM trip_items WHERE trip_id = :trip_id AND source = 'meal'"),
         {"trip_id": trip_id},
     ).fetchall()
     existing_map = {r["name"].lower(): r for r in existing}
 
-    # Remove meal items no longer needed
+    # Remove meal items no longer needed (but preserve items with receipt data)
     for name_lower, row in existing_map.items():
-        if name_lower not in fresh_meal_items:
+        if name_lower not in fresh_meal_items and not row["receipt_status"]:
             conn.execute(
                 text("DELETE FROM trip_items WHERE id = :id"),
                 {"id": row["id"]},
@@ -589,11 +594,11 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
 @router.get("/grocery")
 async def get_grocery(request: Request):
     """Get the grocery list from the active trip."""
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
 
     user_id = request.state.user_id
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn, user_id)
+    mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
     # Read all items from the trip
@@ -633,7 +638,7 @@ async def get_grocery(request: Request):
 @router.post("/grocery/add")
 async def add_grocery_item(body: dict, request: Request):
     """Add a free-form item to the active trip."""
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
 
     user_id = request.state.user_id
     name = body.get("name", "").strip().lower()
@@ -641,7 +646,7 @@ async def add_grocery_item(body: dict, request: Request):
         return {"ok": False}
 
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn, user_id)
+    mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
     group = _infer_item_group(conn, name, user_id)
@@ -689,8 +694,6 @@ async def recategorize_item(body: dict, request: Request):
 @router.post("/grocery/toggle/{item_name:path}")
 async def toggle_grocery_item(item_name: str, request: Request):
     """Toggle an item's checked state on the active trip."""
-    from souschef import workflow
-
     user_id = request.state.user_id
     conn = _conn()
     trip = _get_active_trip(conn, user_id)
@@ -756,7 +759,7 @@ async def get_carryover(request: Request):
 @router.post("/grocery/build")
 async def build_my_list(request: Request, body: dict = None):
     """Build/update the grocery trip. Merges new items into existing trip, preserving checked state."""
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
     from souschef.planner import set_all_grocery
 
     user_id = request.state.user_id
@@ -766,13 +769,13 @@ async def build_my_list(request: Request, body: dict = None):
     pantry_items = body.get("pantry_items", [])
 
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn, user_id)
+    mw = load_rolling_week(conn, user_id)
 
     # First, toggle all meals to grocery list
     if mw.meals:
         set_all_grocery(conn, user_id, mw.start_date, mw.end_date, on=True)
         # Refresh mw to pick up the on_grocery changes
-        mw = workflow.get_rolling_meals(conn, user_id)
+        mw = load_rolling_week(conn, user_id)
 
     # Merge into existing trip or create new one
     existing_trip = _get_active_trip(conn, user_id)
@@ -891,11 +894,11 @@ async def get_grocery_trips(request: Request):
 @router.get("/order")
 async def get_order(request: Request):
     """Get order state: pending items, selected items, and summary."""
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
 
     user_id = request.state.user_id
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn, user_id)
+    mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
     rows = conn.execute(
@@ -942,6 +945,7 @@ async def get_order(request: Request):
 
 _search_cache: dict[str, tuple[float, dict]] = {}  # {term: (timestamp, response)}
 _SEARCH_CACHE_TTL = 300  # 5 minutes
+_SEARCH_CACHE_MAX = 50
 
 @router.get("/order/search/{item_name:path}")
 async def search_order_products(item_name: str, request: Request):
@@ -957,10 +961,13 @@ async def search_order_products(item_name: str, request: Request):
 
     # Return cached response if fresh
     cache_key = item_name.lower().strip()
+    now = _time.time()
     if cache_key in _search_cache:
         ts, resp = _search_cache[cache_key]
-        if _time.time() - ts < _SEARCH_CACHE_TTL:
+        if now - ts < _SEARCH_CACHE_TTL:
             return resp
+        else:
+            del _search_cache[cache_key]
 
     conn = _conn()
 
@@ -1025,8 +1032,8 @@ async def search_order_products(item_name: str, request: Request):
     if need_price:
         try:
             fill_prices(need_price)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[search] fill_prices failed: {e}")
 
     # --- Scores: use cached or fetch from Open Food Facts ---
     need_scores = []
@@ -1093,7 +1100,14 @@ async def search_order_products(item_name: str, request: Request):
         "preferences": pref_list,
         "products": result,
     }
-    _search_cache[cache_key] = (_time.time(), response)
+    # Evict expired entries, then oldest if over max size
+    expired = [k for k, (ts, _) in _search_cache.items() if now - ts >= _SEARCH_CACHE_TTL]
+    for k in expired:
+        del _search_cache[k]
+    if len(_search_cache) >= _SEARCH_CACHE_MAX:
+        oldest = min(_search_cache, key=lambda k: _search_cache[k][0])
+        del _search_cache[oldest]
+    _search_cache[cache_key] = (now, response)
     return response
 
 
@@ -1101,14 +1115,16 @@ async def search_order_products(item_name: str, request: Request):
 async def select_product(body: dict, request: Request):
     """Select a Kroger product for a grocery item."""
     from souschef.kroger import save_preference, KrogerProduct
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
 
     user_id = request.state.user_id
-    item_name = body["item_name"]
-    product = body["product"]  # {upc, name, brand, size, price, image}
+    item_name = body.get("item_name")
+    product = body.get("product")
+    if not item_name or not product:
+        return {"ok": False, "error": "item_name and product required"}
 
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn, user_id)
+    mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
     conn.execute(
@@ -1146,11 +1162,11 @@ async def select_product(body: dict, request: Request):
 @router.post("/order/deselect/{item_name:path}")
 async def deselect_product(item_name: str, request: Request):
     """Remove product selection for a grocery item."""
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
 
     user_id = request.state.user_id
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn, user_id)
+    mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
     conn.execute(
@@ -1176,12 +1192,12 @@ async def submit_order(request: Request):
     household member with a linked account.
     """
     from souschef.kroger import add_to_cart, get_user_token_from_db
-    from souschef import workflow
+    from souschef.planner import load_rolling_week
 
     user_id = request.state.user_id
     real_user_id = request.state.real_user_id
     conn = _conn()
-    mw = workflow.get_rolling_meals(conn, user_id)
+    mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
     rows = conn.execute(
@@ -1518,8 +1534,10 @@ async def resolve_receipt_item(body: dict, request: Request):
     if not trip:
         return {"ok": False}
 
-    name = body["name"]
-    status = body["status"]
+    name = body.get("name")
+    status = body.get("status")
+    if not name or not status:
+        return {"ok": False, "error": "name and status required"}
 
     if status == "recover":
         # Put item back on the active grocery list (un-order it)
@@ -1575,6 +1593,8 @@ async def add_regular(body: dict, request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
+    if not body.get("name"):
+        return {"ok": False, "error": "name required"}
     r = do_add(conn, user_id, body["name"], body.get("shopping_group", ""), body.get("store_pref", "either"))
     return {
         "id": r.id,
@@ -1844,6 +1864,8 @@ async def add_pantry(body: dict, request: Request):
     user_id = request.state.user_id
     conn = _conn()
     name = body.get("name", "").strip()
+    if not name:
+        return {"ok": False, "error": "name required"}
     quantity = body.get("quantity", 1.0)
     unit = body.get("unit", "count")
 
@@ -1886,7 +1908,8 @@ async def get_stores(request: Request):
     """List configured stores."""
     from souschef.stores import list_stores
 
-    return {"stores": list_stores()}
+    user_id = request.state.user_id
+    return {"stores": list_stores(_conn(), user_id)}
 
 
 @router.post("/stores")
@@ -1894,13 +1917,14 @@ async def add_store(body: dict, request: Request):
     """Add a store."""
     from souschef.stores import add_store as do_add
 
+    user_id = request.state.user_id
     name = body.get("name", "").strip()
     key = body.get("key", name[:1].lower() if name else "x")
     mode = body.get("mode", "in-person")
     api_type = body.get("api", "none")
 
     try:
-        store = do_add(name, key, mode, api_type)
+        store = do_add(_conn(), user_id, name, key, mode, api_type)
         return {"ok": True, "store": store}
     except ValueError as e:
         return {"ok": False, "error": str(e)}
@@ -1911,7 +1935,8 @@ async def remove_store(key: str, request: Request):
     """Remove a store by key."""
     from souschef.stores import remove_store as do_remove
 
-    removed = do_remove(key)
+    user_id = request.state.user_id
+    removed = do_remove(_conn(), user_id, key)
     return {"ok": bool(removed), "name": removed}
 
 

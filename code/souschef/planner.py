@@ -152,17 +152,6 @@ def load_meals(conn: DictConnection, user_id: str, start_date: str, end_date: st
     ]
 
 
-def load_current_week(conn: DictConnection, user_id: str) -> list[Meal]:
-    start, end = week_range()
-    return load_meals(conn, user_id, start, end)
-
-
-def load_meal_week(conn: DictConnection, user_id: str, start: str | None = None) -> MealWeek:
-    """Load a MealWeek view for display."""
-    s, e = week_range(start)
-    meals = load_meals(conn, user_id, s, e)
-    return MealWeek(start_date=s, end_date=e, meals=meals)
-
 
 def save_meals(conn: DictConnection, user_id: str, meals: list[Meal]) -> list[Meal]:
     """Insert or update meals."""
@@ -627,14 +616,6 @@ def set_all_grocery(conn: DictConnection, user_id: str, start_date: str, end_dat
     conn.commit()
 
 
-def accept_meals(conn: DictConnection, user_id: str, start_date: str, end_date: str) -> None:
-    """Legacy: accept all meals in a date range. Now also sets on_grocery."""
-    conn.execute(
-        text("UPDATE meals SET status = 'accepted', on_grocery = 1 WHERE user_id = :user_id AND slot_date BETWEEN :start_date AND :end_date"),
-        {"user_id": user_id, "start_date": start_date, "end_date": end_date},
-    )
-    conn.commit()
-
 
 # ── Helpers ─────────────────────────────────────────────
 
@@ -696,100 +677,3 @@ def _pick_followup(conn, follow_names: list[str], used_ids: set[int], target_wee
     return random.choice(candidates) if candidates else None
 
 
-BULK_PREPPABLE = {
-    "chicken breast", "chicken thighs", "ground beef", "ground turkey",
-    "pork shoulder", "steak", "pork chops", "beef sausage",
-    "rice", "black beans", "kidney beans",
-}
-
-
-def detect_bulk_components(conn: DictConnection, meals: list[Meal]) -> list[str]:
-    """Find ingredients used across multiple meals that could be prepped in bulk."""
-    from collections import Counter
-    ingredient_meals: Counter = Counter()
-    ingredient_names: dict[int, str] = {}
-
-    for meal in meals:
-        if not meal.recipe_id:
-            continue
-        rows = conn.execute(
-            text("""SELECT ri.ingredient_id, i.name, ri.component
-               FROM recipe_ingredients ri
-               JOIN ingredients i ON i.id = ri.ingredient_id
-               WHERE ri.recipe_id = :recipe_id AND ri.component NOT IN ('', 'formed')"""),
-            {"recipe_id": meal.recipe_id},
-        ).fetchall()
-        for r in rows:
-            if r["name"] in BULK_PREPPABLE:
-                ingredient_meals[r["ingredient_id"]] += 1
-                ingredient_names[r["ingredient_id"]] = r["name"]
-
-    tips = []
-    for ing_id, count in ingredient_meals.items():
-        if count >= 2:
-            tips.append(f"  {ingredient_names[ing_id]} used in {count} meals — prep in bulk")
-    return tips
-
-
-# ── Legacy compatibility ────────────────────────────────
-# These wrap the old API signatures for code that hasn't been migrated yet.
-
-def save_plan(conn, plan):
-    """Legacy: save a MealPlan by converting slots to flat meals."""
-    from souschef.models import MealPlan
-    if not isinstance(plan, MealPlan):
-        raise TypeError("Expected MealPlan")
-    week_of = date.fromisoformat(plan.week_of)
-    meals = []
-    for slot in plan.slots:
-        slot_date = (week_of + timedelta(days=slot.day_of_week)).isoformat()
-        meals.append(Meal(
-            id=None, slot_date=slot_date,
-            recipe_id=slot.recipe_id, recipe_name=slot.recipe_name,
-            status=slot.status, side=slot.side,
-            locked=slot.locked, is_followup=slot.is_followup,
-        ))
-    save_meals(conn, meals)
-    # Set plan.id to a synthetic value for backward compat
-    plan.id = meals[0].id if meals else None
-    return plan
-
-
-def load_plan(conn, plan_id):
-    """Legacy: load by plan_id from old table, or fall back to meals table."""
-    from souschef.models import MealPlan, MealPlanSlot
-    # Try old table first
-    try:
-        row = conn.execute(
-            text("SELECT * FROM meal_plans WHERE id = :plan_id"),
-            {"plan_id": plan_id},
-        ).fetchone()
-        if row:
-            week_of = row["week_of"]
-            s, e = week_range(week_of)
-            meals = load_meals(conn, s, e)
-            plan = MealPlan(id=row["id"], week_of=week_of, created_at=row["created_at"])
-            plan.slots = [
-                MealPlanSlot(
-                    id=m.id, plan_id=row["id"], day_of_week=m.weekday,
-                    recipe_id=m.recipe_id, status=m.status,
-                    locked=m.locked, recipe_name=m.recipe_name,
-                    is_followup=m.is_followup, side=m.side,
-                )
-                for m in meals
-            ]
-            return plan
-    except Exception:
-        pass
-    return None
-
-
-def load_latest_plan(conn):
-    """Legacy: load the most recent plan."""
-    try:
-        row = conn.execute(text("SELECT id FROM meal_plans ORDER BY id DESC LIMIT 1")).fetchone()
-        if row:
-            return load_plan(conn, row["id"])
-    except Exception:
-        pass
-    return None

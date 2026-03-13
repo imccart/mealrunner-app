@@ -129,45 +129,6 @@ class MealWeek:
         return False
 
 
-@dataclass
-class GroceryRun:
-    """Ad-hoc grocery items not tied to any recipe."""
-    id: int | None
-    note: str = ""
-    created_at: str = ""
-    items: list[GroceryRunItem] = field(default_factory=list)
-
-
-@dataclass
-class GroceryRunItem:
-    id: int | None
-    run_id: int
-    item_name: str
-    checked: bool = False
-
-
-# ── Legacy models (kept for backward compat during migration) ──
-
-@dataclass
-class MealPlan:
-    id: int | None
-    week_of: str  # Monday date, ISO format
-    created_at: str = ""
-    slots: list[MealPlanSlot] = field(default_factory=list)
-
-
-@dataclass
-class MealPlanSlot:
-    id: int | None
-    plan_id: int
-    day_of_week: int  # 0=Mon..6=Sun
-    recipe_id: int | None = None
-    status: str = "suggested"  # suggested, accepted, rejected
-    locked: bool = False
-    recipe_name: str = ""  # populated on read
-    is_followup: bool = False  # placed by leftover logic
-    side: str = ""  # side dish name
-
 
 # ── Grocery models ──────────────────────────────────────
 
@@ -198,30 +159,3 @@ class GroceryListItem:
     meals: list[str] = field(default_factory=list)  # which recipes use this
 
 
-@dataclass
-class GrocerySelections:
-    """Saved grocery list selections — what the user chose to buy."""
-    plan_id: int = 0  # legacy
-    date_key: str = ""  # "2026-03-10/2026-03-16"
-    regulars: list[str] = field(default_factory=list)
-    extras: list[str] = field(default_factory=list)
-    meal_items: list[str] = field(default_factory=list)
-    stores: dict[str, str] = field(default_factory=dict)
-
-    @property
-    def all_names(self) -> list[str]:
-        return self.regulars + self.meal_items + self.extras
-
-
-@dataclass
-class WorkflowStatus:
-    """Current state of the meal planning workflow."""
-    start_date: str = ""
-    end_date: str = ""
-    plan_id: int | None = None  # legacy
-    has_meals: bool = False
-    meals_on_grocery: int = 0  # how many meals are on the grocery list
-    total_meals: int = 0
-    grocery_built: bool = False
-    order_placed: bool = False
-    reconcile_count: int = 0  # number of items checked off

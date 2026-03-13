@@ -94,36 +94,6 @@ def get_location_id() -> str:
     return loc
 
 
-def search_locations(zip_code: str, limit: int = 5) -> list[dict]:
-    resp = requests.get(
-        f"{BASE_URL}/locations",
-        params={
-            "filter.zipCode.near": zip_code,
-            "filter.limit": limit,
-            "filter.radiusInMiles": 15,
-        },
-        headers=_headers(),
-        timeout=15,
-    )
-    resp.raise_for_status()
-    results = []
-    for loc in resp.json().get("data", []):
-        addr = loc.get("address", {})
-        results.append({
-            "location_id": loc["locationId"],
-            "name": loc.get("name", ""),
-            "address": f"{addr.get('addressLine1', '')}, {addr.get('city', '')}",
-        })
-    return results
-
-
-def set_store(location_id: str) -> None:
-    creds = _load_credentials()
-    creds["location_id"] = location_id
-    _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with open(_CREDS_FILE, "w") as f:
-        json.dump(creds, f, indent=2)
-
 
 def _lookup_food_score(product_name: str, brand: str) -> tuple[int | None, str]:
     """Look up NOVA group and Nutri-Score from Open Food Facts by product name."""
@@ -263,12 +233,6 @@ def fill_prices(products: list[KrogerProduct]) -> None:
             p.curbside = info["curbside"]
             p.in_stock = info["curbside"] or info.get("in_store", False)
 
-
-def search_products(term: str, limit: int = 5, start: int = 1) -> list[KrogerProduct]:
-    """Full search with price backfill. Used by 'kroger search' command."""
-    products = search_products_fast(term, limit, start)
-    fill_prices(products)
-    return products
 
 
 def _get_product_prices(product_ids: list[str], location_id: str) -> dict[str, dict]:
@@ -474,23 +438,6 @@ def get_product_history(conn: DictConnection, search_term: str,
         results.append(d)
     return results
 
-
-def save_order(selections: list[dict]) -> Path:
-    """Save current order selections to ~/.souschef/current_order.json."""
-    order_file = _CONFIG_DIR / "current_order.json"
-    _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with open(order_file, "w") as f:
-        json.dump(selections, f, indent=2)
-    return order_file
-
-
-def load_order() -> list[dict]:
-    """Load saved order from ~/.souschef/current_order.json."""
-    order_file = _CONFIG_DIR / "current_order.json"
-    if not order_file.exists():
-        return []
-    with open(order_file) as f:
-        return json.load(f)
 
 
 # ── User OAuth (for cart operations) ─────────────────────

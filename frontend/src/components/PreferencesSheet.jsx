@@ -23,8 +23,10 @@ function RecipeItem({ recipe, onRemove, allIngredients }) {
   const [addText, setAddText] = useState('')
 
   const loadIngredients = async () => {
-    const data = await api.getRecipeIngredients(recipe.id)
-    setIngredients(data.ingredients)
+    try {
+      const data = await api.getRecipeIngredients(recipe.id)
+      setIngredients(data.ingredients)
+    } catch { /* leave as null */ }
   }
 
   const handleToggle = () => {
@@ -34,14 +36,18 @@ function RecipeItem({ recipe, onRemove, allIngredients }) {
 
   const handleAdd = async (name) => {
     if (!name.trim()) return
-    await api.addRecipeIngredient(recipe.id, name.trim())
-    setAddText('')
-    loadIngredients()
+    try {
+      await api.addRecipeIngredient(recipe.id, name.trim())
+      setAddText('')
+      loadIngredients()
+    } catch { /* ignore */ }
   }
 
   const handleRemoveIngredient = async (riId) => {
-    await api.removeRecipeIngredient(recipe.id, riId)
-    loadIngredients()
+    try {
+      await api.removeRecipeIngredient(recipe.id, riId)
+      loadIngredients()
+    } catch { /* ignore */ }
   }
 
   const existingNames = new Set((ingredients || []).map(i => i.name.toLowerCase()))
@@ -115,86 +121,100 @@ export default function PreferencesSheet({ onClose }) {
       setUserEmail(data.email || '')
       setDisplayName(data.display_name || '')
     }).catch(() => {})
-    api.getRegulars().then(data => setRegulars(data.regulars))
-    api.getPantry().then(data => setPantry(data.items))
-    api.getStores().then(data => setStores(data.stores))
-    api.getRecipes().then(data => setRecipes(data.recipes))
+    api.getRegulars().then(data => setRegulars(data.regulars)).catch(() => setRegulars([]))
+    api.getPantry().then(data => setPantry(data.items)).catch(() => setPantry([]))
+    api.getStores().then(data => setStores(data.stores)).catch(() => setStores([]))
+    api.getRecipes().then(data => setRecipes(data.recipes)).catch(() => setRecipes([]))
     api.getGrocerySuggestions().then(data => setAllIngredients(data.suggestions)).catch(() => {})
     api.getHouseholdMembers().then(data => setMembers(data.members)).catch(() => {})
-    api.getKrogerStatus().then(data => setKrogerConnected(data.connected)).catch(() => {})
+    api.getKrogerStatus().then(data => setKrogerConnected(data.connected)).catch(() => setKrogerConnected(false))
   }, [])
 
   const handleRemoveRegular = async (name) => {
-    await api.removeRegular(name)
-    const data = await api.getRegulars()
-    setRegulars(data.regulars)
+    try {
+      await api.removeRegular(name)
+      const data = await api.getRegulars()
+      setRegulars(data.regulars)
+    } catch { /* reload on next open */ }
   }
 
   const handleRemovePantry = async (id) => {
-    await api.removePantryItem(id)
-    const data = await api.getPantry()
-    setPantry(data.items)
+    try {
+      await api.removePantryItem(id)
+      const data = await api.getPantry()
+      setPantry(data.items)
+    } catch { /* reload on next open */ }
   }
 
   const handleMoveToPantry = async (name) => {
-    await api.removeRegular(name)
-    await api.addPantryItem(name)
-    const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
-    setRegulars(rData.regulars)
-    setPantry(pData.items)
+    try {
+      await api.removeRegular(name)
+      await api.addPantryItem(name)
+      const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
+      setRegulars(rData.regulars)
+      setPantry(pData.items)
+    } catch { /* reload on next open */ }
   }
 
   const handleMoveToRegulars = async (name, id) => {
-    await api.removePantryItem(id)
-    await api.addRegular(name)
-    const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
-    setRegulars(rData.regulars)
-    setPantry(pData.items)
+    try {
+      await api.removePantryItem(id)
+      await api.addRegular(name)
+      const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
+      setRegulars(rData.regulars)
+      setPantry(pData.items)
+    } catch { /* reload on next open */ }
   }
 
   const handleAddStore = async (e) => {
     e.preventDefault()
     if (!addStoreName.trim()) return
-    const name = addStoreName.trim()
-    // Generate unique key
-    let key = name[0].toLowerCase()
-    if (stores && stores.some(s => s.key === key)) {
-      key = name.slice(0, 2).toLowerCase()
-    }
-    // Pickup/delivery stores automatically get kroger integration (link happens on entry)
-    const storeApi = addStoreMode !== 'in-person' ? 'kroger' : 'none'
-    const result = await api.addStore(name, key, addStoreMode, storeApi)
-    if (result.ok) {
-      setAddStoreName('')
-      setAddStoreApi('none')
-      const data = await api.getStores()
-      setStores(data.stores)
-    }
+    try {
+      const name = addStoreName.trim()
+      let key = name[0].toLowerCase()
+      if (stores && stores.some(s => s.key === key)) {
+        key = name.slice(0, 2).toLowerCase()
+      }
+      const storeApi = addStoreMode !== 'in-person' ? 'kroger' : 'none'
+      const result = await api.addStore(name, key, addStoreMode, storeApi)
+      if (result.ok) {
+        setAddStoreName('')
+        setAddStoreApi('none')
+        const data = await api.getStores()
+        setStores(data.stores)
+      }
+    } catch { /* reload on next open */ }
   }
 
   const handleRemoveStore = async (key) => {
-    await api.removeStore(key)
-    const data = await api.getStores()
-    setStores(data.stores)
+    try {
+      await api.removeStore(key)
+      const data = await api.getStores()
+      setStores(data.stores)
+    } catch { /* reload on next open */ }
   }
 
   const handleAddRecipe = async (e) => {
     e.preventDefault()
     if (!addRecipeText.trim()) return
-    await api.addRecipe(addRecipeText.trim())
-    setAddRecipeText('')
-    const data = await api.getRecipes()
-    setRecipes(data.recipes)
+    try {
+      await api.addRecipe(addRecipeText.trim())
+      setAddRecipeText('')
+      const data = await api.getRecipes()
+      setRecipes(data.recipes)
+    } catch { /* reload on next open */ }
   }
 
   const handleRemoveRecipe = async (id) => {
-    const result = await api.deleteRecipe(id)
-    if (!result.ok) {
-      alert(result.error || 'Cannot remove this recipe')
-      return
-    }
-    const data = await api.getRecipes()
-    setRecipes(data.recipes)
+    try {
+      const result = await api.deleteRecipe(id)
+      if (!result.ok) {
+        alert(result.error || 'Cannot remove this recipe')
+        return
+      }
+      const data = await api.getRecipes()
+      setRecipes(data.recipes)
+    } catch { /* reload on next open */ }
   }
 
   const handleHouseholdInvite = async (e) => {
@@ -245,8 +265,10 @@ export default function PreferencesSheet({ onClose }) {
   }
 
   const handleDisconnectKroger = async () => {
-    await api.disconnectKroger()
-    setKrogerConnected(false)
+    try {
+      await api.disconnectKroger()
+      setKrogerConnected(false)
+    } catch { /* ignore */ }
   }
 
   // Group regulars by shopping_group
@@ -260,9 +282,11 @@ export default function PreferencesSheet({ onClose }) {
   }
 
   const handleSaveName = async () => {
-    await api.updateAccount({ display_name: displayName })
-    setNameSaved(true)
-    setTimeout(() => setNameSaved(false), 2000)
+    try {
+      await api.updateAccount({ display_name: displayName })
+      setNameSaved(true)
+      setTimeout(() => setNameSaved(false), 2000)
+    } catch { /* ignore */ }
   }
 
   return (

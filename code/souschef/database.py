@@ -417,6 +417,17 @@ community_data = Table(
     Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
 )
 
+stores = Table(
+    "stores", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, nullable=False, server_default=text("'default'")),
+    Column("name", Text, nullable=False),
+    Column("key", Text, nullable=False),
+    Column("mode", Text, nullable=False, server_default=text("'in-person'")),
+    Column("api", Text, nullable=False, server_default=text("'none'")),
+    UniqueConstraint("user_id", "key"),
+)
+
 settings = Table(
     "settings", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),

@@ -50,6 +50,7 @@ def init_db(conn: DictConnection) -> None:
     _migrate_onboarding_marker(conn)
     _migrate_create_default_user(conn)
     _migrate_create_households(conn)
+    _migrate_stores_to_db(conn)
 
     conn.commit()
 
@@ -454,6 +455,31 @@ def _migrate_create_households(conn: DictConnection) -> None:
                VALUES (:hh_id, :user_id, 'owner')
                ON CONFLICT DO NOTHING"""
         ), {"hh_id": hh_id, "user_id": u["id"]})
+
+
+def _migrate_stores_to_db(conn: DictConnection) -> None:
+    """One-time: move filesystem stores.json into stores table."""
+    row = conn.execute(text("SELECT 1 FROM stores LIMIT 1")).fetchone()
+    if row:
+        return
+
+    import json
+    stores_file = Path.home() / ".souschef" / "stores.json"
+    if not stores_file.exists():
+        return
+
+    try:
+        with open(stores_file) as f:
+            stores = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return
+
+    for s in stores:
+        conn.execute(text(
+            """INSERT INTO stores (user_id, name, key, mode, api)
+               VALUES ('default', :name, :key, :mode, :api)
+               ON CONFLICT DO NOTHING"""
+        ), {"name": s["name"], "key": s["key"], "mode": s.get("mode", "in-person"), "api": s.get("api", "none")})
 
 
 # ── Seed Data ─────────────────────────────────────────────
