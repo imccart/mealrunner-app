@@ -831,12 +831,41 @@ def _backfill_user_sides_from_library(conn: DictConnection) -> None:
                     ).fetchone()
                     if has_ings:
                         continue
-                    # Side exists but has no ingredients — delete it so deep copy recreates it
-                    conn.execute(text("DELETE FROM recipes WHERE id = :id"), {"id": user_side["id"]})
-                _deep_copy_recipe(conn, s["id"], uid)
+                    # Side exists but has no ingredients — delete and recreate with ingredients
+                    old_id = user_side["id"]
+                    conn.execute(text("DELETE FROM recipes WHERE id = :id"), {"id": old_id})
+                    new_id = _deep_copy_recipe(conn, s["id"], uid)
+                    # Repoint any meals that referenced the old side recipe
+                    if new_id:
+                        conn.execute(text(
+                            "UPDATE meals SET side_recipe_id = :new_id WHERE side_recipe_id = :old_id AND user_id = :uid"
+                        ), {"new_id": new_id, "old_id": old_id, "uid": uid})
+                else:
+                    _deep_copy_recipe(conn, s["id"], uid)
                 copied += 1
             if copied:
                 print(f"[db] Copied {copied} library sides (with ingredients) to user {uid}", flush=True)
+        # Repair dangling side_recipe_id references (from prior deploy that deleted without repointing)
+        dangling = conn.execute(text(
+            """SELECT m.id, m.side, m.user_id FROM meals m
+               WHERE m.side_recipe_id IS NOT NULL
+                 AND NOT EXISTS (SELECT 1 FROM recipes r WHERE r.id = m.side_recipe_id)"""
+        )).fetchall()
+        for d in dangling:
+            if not d["side"]:
+                continue
+            fix = conn.execute(text(
+                """SELECT id FROM recipes
+                   WHERE LOWER(name) = LOWER(:name) AND user_id = :uid AND recipe_type = 'side'
+                   LIMIT 1"""
+            ), {"name": d["side"], "uid": d["user_id"]}).fetchone()
+            if fix:
+                conn.execute(text(
+                    "UPDATE meals SET side_recipe_id = :rid WHERE id = :mid"
+                ), {"rid": fix["id"], "mid": d["id"]})
+        if dangling:
+            print(f"[db] Repaired {len(dangling)} dangling side_recipe_id references", flush=True)
+
         conn.commit()
     except Exception as e:
         print(f"[db] Side backfill error: {e}", flush=True)
