@@ -343,6 +343,15 @@ community_data = Table(
     Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
 )
 
+unknown_brands = Table(
+    "unknown_brands", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("brand", Text, nullable=False, unique=True),
+    Column("times_seen", Integer, nullable=False, server_default=text("1")),
+    Column("first_seen", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("last_seen", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
 stores = Table(
     "stores", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),

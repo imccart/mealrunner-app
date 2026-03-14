@@ -1147,8 +1147,12 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
             product_ratings[p.upc] = r["your_rating"]
 
     result = []
+    unknown_brands_batch = set()
     for p in products:
         rating = product_ratings.get(p.upc, 0)
+        parent = get_parent_company(p.brand)
+        if parent == "We're not sure" and p.brand:
+            unknown_brands_batch.add(p.brand.strip())
         result.append({
             "upc": p.upc,
             "product_id": p.product_id,
@@ -1163,8 +1167,20 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
             "nutriscore": p.nutriscore,
             "image": p.image_url,
             "rating": rating,
-            "parent_company": get_parent_company(p.brand),
+            "parent_company": parent,
         })
+
+    # Log unknown brands for later research
+    for brand in unknown_brands_batch:
+        try:
+            conn.execute(text(
+                """INSERT INTO unknown_brands (brand) VALUES (:b)
+                   ON CONFLICT (brand) DO UPDATE SET times_seen = unknown_brands.times_seen + 1, last_seen = CURRENT_TIMESTAMP"""
+            ), {"b": brand})
+        except Exception:
+            pass
+    if unknown_brands_batch:
+        conn.commit()
 
     # Sort: thumbs-up first, neutral middle, thumbs-down last (preserve relative order within tiers)
     result.sort(key=lambda r: -r["rating"])
@@ -2878,6 +2894,19 @@ async def get_all_feedback(request: Request):
         text("SELECT f.*, u.email FROM user_feedback f JOIN users u ON u.id = f.user_id ORDER BY f.created_at DESC"),
     ).fetchall()
     return {"feedback": [dict(r._mapping) for r in rows]}
+
+
+@router.get("/admin/unknown-brands")
+async def get_unknown_brands(request: Request):
+    """Admin: list unknown brands sorted by frequency."""
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    conn = _conn()
+    if not _is_admin(conn, real_user_id):
+        return {"ok": False, "error": "Not authorized"}
+    rows = conn.execute(
+        text("SELECT brand, times_seen, first_seen, last_seen FROM unknown_brands ORDER BY times_seen DESC"),
+    ).fetchall()
+    return {"brands": [dict(r._mapping) for r in rows]}
 
 
 @router.post("/feedback/{feedback_id}/respond")
