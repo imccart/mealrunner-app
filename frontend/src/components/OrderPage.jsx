@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import Sheet from './Sheet'
+import FeedbackFab from './FeedbackFab'
 
 function NovaBadge({ nova }) {
   if (!nova) return null
@@ -632,6 +633,7 @@ export default function OrderPage() {
       {communityConfirm && (
         <div className="community-toast">Yes, Chef!</div>
       )}
+      <FeedbackFab page="order" />
     </>
   )
 }

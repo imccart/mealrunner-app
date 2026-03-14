@@ -100,6 +100,10 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("stores", "location_id", "TEXT NOT NULL DEFAULT ''"),
         ("recipes", "recipe_type", "TEXT NOT NULL DEFAULT 'meal'"),
         ("meals", "side_recipe_id", "INTEGER"),
+        ("user_feedback", "status", "TEXT NOT NULL DEFAULT 'open'"),
+        ("user_feedback", "response", "TEXT"),
+        ("user_feedback", "responded_at", "TEXT"),
+        ("user_feedback", "dismissed", "INTEGER NOT NULL DEFAULT 0"),
     ]
 
     for table_name, col_name, col_def in migrations:

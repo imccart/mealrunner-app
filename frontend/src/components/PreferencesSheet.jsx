@@ -515,7 +515,7 @@ export default function PreferencesSheet({ onClose }) {
             </div>
             <div className="prefs-list-item">
               <span className="prefs-list-name">Brand ownership</span>
-              <span className="prefs-list-meta">Coming soon</span>
+              <span className="prefs-list-meta">On</span>
             </div>
           </div>
         </AccordionSection>

@@ -2753,6 +2753,78 @@ async def submit_feedback(body: dict, request: Request):
     return {"ok": True}
 
 
+@router.get("/feedback/responses")
+async def get_feedback_responses(request: Request):
+    """Return unread feedback responses for the current user."""
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    conn = _conn()
+    rows = conn.execute(
+        text("""SELECT id, message, response, responded_at
+           FROM user_feedback
+           WHERE user_id = :user_id AND status = 'responded' AND dismissed = 0
+           ORDER BY responded_at DESC"""),
+        {"user_id": real_user_id},
+    ).fetchall()
+    return {"responses": [{"id": r["id"], "message": r["message"],
+                           "response": r["response"], "responded_at": r["responded_at"]} for r in rows]}
+
+
+@router.post("/feedback/{feedback_id}/dismiss")
+async def dismiss_feedback_response(feedback_id: int, request: Request):
+    """Mark a feedback response as seen."""
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    conn = _conn()
+    conn.execute(
+        text("UPDATE user_feedback SET dismissed = 1 WHERE id = :id AND user_id = :user_id"),
+        {"id": feedback_id, "user_id": real_user_id},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
+def _is_admin(conn, user_id: str) -> bool:
+    """Admin = first registered user (household owner). Good enough for beta."""
+    import os
+    admin_id = os.environ.get("ADMIN_USER_ID")
+    if admin_id:
+        return user_id == admin_id
+    row = conn.execute(text("SELECT id FROM users ORDER BY created_at LIMIT 1")).fetchone()
+    return row and row["id"] == user_id
+
+
+@router.get("/feedback/all")
+async def get_all_feedback(request: Request):
+    """Admin: list all feedback."""
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    conn = _conn()
+    if not _is_admin(conn, real_user_id):
+        return {"ok": False, "error": "Not authorized"}
+    rows = conn.execute(
+        text("SELECT f.*, u.email FROM user_feedback f JOIN users u ON u.id = f.user_id ORDER BY f.created_at DESC"),
+    ).fetchall()
+    return {"feedback": [dict(r._mapping) for r in rows]}
+
+
+@router.post("/feedback/{feedback_id}/respond")
+async def respond_to_feedback(feedback_id: int, body: dict, request: Request):
+    """Admin: respond to a feedback item."""
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    conn = _conn()
+    if not _is_admin(conn, real_user_id):
+        return {"ok": False, "error": "Not authorized"}
+    response_text = body.get("response", "").strip()
+    if not response_text:
+        return {"ok": False, "error": "Response required"}
+    conn.execute(
+        text("""UPDATE user_feedback
+           SET status = 'responded', response = :response, responded_at = CURRENT_TIMESTAMP
+           WHERE id = :id"""),
+        {"id": feedback_id, "response": response_text},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
 # ── Helpers ──────────────────────────────────────────────
 
 

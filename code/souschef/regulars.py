@@ -203,6 +203,16 @@ _GROUP_KEYWORDS: dict[str, list[str]] = {
     "Breakfast & Beverages": ["cereal", "granola", "oatmeal", "juice", "tea",
                                "la croix", "soda", "water", "pancake"],
     "Snacks": ["tortilla chips", "chips", "crackers", "cookies", "snack", "popcorn", "nuts", "pretzel"],
+    "Personal Care": ["shampoo", "conditioner", "soap", "toothpaste", "toothbrush", "deodorant",
+                       "lotion", "razor", "floss", "mouthwash", "sunscreen", "body wash",
+                       "tissue", "tissues", "chapstick", "contact", "cotton"],
+    "Household": ["battery", "batteries", "light bulb", "trash bag", "garbage bag", "aluminum foil",
+                   "plastic wrap", "ziplock", "ziploc", "paper towel", "napkin", "candle",
+                   "toilet paper", "paper plate", "cup", "straw"],
+    "Cleaning": ["cleaner", "wipes", "sponge", "dish soap", "detergent", "bleach", "lysol",
+                  "disinfectant", "broom", "mop", "duster", "dryer sheet", "fabric softener"],
+    "Pets": ["cat food", "dog food", "cat litter", "kitty litter", "pet food", "treats",
+             "flea", "heartworm", "pet"],
 }
 
 

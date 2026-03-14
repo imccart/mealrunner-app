@@ -827,6 +827,37 @@ main {
   color: var(--brown);
 }
 
+.feedback-response-banner {
+  background: var(--cream);
+  border: 1.5px solid var(--tan);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.feedback-response-text {
+  flex: 1;
+  font-size: 14px;
+  color: var(--brown);
+  line-height: 1.4;
+}
+.feedback-response-dismiss {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 16px;
+  padding: 6px 16px;
+  font-family: 'Playfair Display', serif;
+  font-size: 13px;
+  font-weight: 600;
+  font-style: italic;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .btn-suggest-link {
   background: none;
   border: none;

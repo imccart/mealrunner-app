@@ -333,6 +333,10 @@ user_feedback = Table(
     Column("message", Text, nullable=False),
     Column("page", Text, nullable=False, server_default=text("''")),
     Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("status", Text, nullable=False, server_default=text("'open'")),
+    Column("response", Text, nullable=True),
+    Column("responded_at", Text, nullable=True),
+    Column("dismissed", Integer, nullable=False, server_default=text("0")),
 )
 
 user_item_groups = Table(

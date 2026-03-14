@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from './api/client'
 import Nav from './components/Nav'
+import useSwipeNav from './hooks/useSwipeNav'
 import PlanPage from './components/PlanPage'
 import GroceryPage from './components/GroceryPage'
 import OrderPage from './components/OrderPage'
@@ -44,6 +45,9 @@ function App() {
   const [inviteChecked, setInviteChecked] = useState(false)
   const isWide = useIsWide()
   const [mealData, setMealData] = useState(null)
+  const [feedbackResponse, setFeedbackResponse] = useState(null)
+  const mobilePages = useMemo(() => ['plan', 'grocery', 'order', 'receipt'], [])
+  const swipeHandlers = useSwipeNav(mobilePages, page, setPage)
 
   const handlePlanLoad = useCallback((data) => setMealData(data), [])
 
@@ -63,6 +67,10 @@ function App() {
           setOnboardingDone(true)
           return
         }
+        // Check for feedback responses
+        api.getFeedbackResponses().then(data => {
+          if (data.responses?.length) setFeedbackResponse(data.responses[0])
+        }).catch(() => {})
         // Authoritative check from DB
         return api.getOnboardingStatus()
           .then(data => {
@@ -120,7 +128,16 @@ function App() {
   return (
     <div className="app">
       <Nav page={page} setPage={setPage} prefsOpen={showPrefs} onTogglePrefs={() => setShowPrefs(p => !p)} isWide={isWide} />
-      <main>
+      <main {...(!isWide ? swipeHandlers : {})}>
+        {feedbackResponse && (
+          <div className="feedback-response-banner">
+            <div className="feedback-response-text">{feedbackResponse.response}</div>
+            <button className="feedback-response-dismiss" onClick={async () => {
+              try { await api.dismissFeedbackResponse(feedbackResponse.id) } catch {}
+              setFeedbackResponse(null)
+            }}>Yes, Chef!</button>
+          </div>
+        )}
         {isWide && (page === 'plan' || page === 'grocery') ? (
           <>
             {dateRange && (
@@ -159,7 +176,7 @@ function App() {
           </div>
         )}
         <div className={`nav-tab${page === 'order' ? ' active' : ''}`} onClick={() => setPage('order')}>
-          <div className="nav-tab-icon">{'\u{1F4E6}'}</div>
+          <div className="nav-tab-icon">{'\u{1F697}'}</div>
           <div className="nav-tab-label">Order</div>
         </div>
         <div className={`nav-tab${page === 'receipt' ? ' active' : ''}`} onClick={() => setPage('receipt')}>

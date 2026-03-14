@@ -193,6 +193,8 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ message, page }),
   }),
+  getFeedbackResponses: () => request('/feedback/responses'),
+  dismissFeedbackResponse: (id) => request(`/feedback/${id}/dismiss`, { method: 'POST' }),
 
   // Shopping feedback
   getFeedbackPatterns: () => request('/feedback/patterns'),

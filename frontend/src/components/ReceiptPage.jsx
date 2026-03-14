@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
+import FeedbackFab from './FeedbackFab'
 
 export default function ReceiptPage() {
   const [receipt, setReceipt] = useState(null)
@@ -330,6 +331,7 @@ export default function ReceiptPage() {
         </div>
       )}
 
+      <FeedbackFab page="receipt" />
     </>
   )
 }

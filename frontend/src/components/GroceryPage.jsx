@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import AutocompleteInput from './AutocompleteInput'
 import Sheet from './Sheet'
+import FeedbackFab from './FeedbackFab'
 
 const GROUP_ORDER = [
   'Produce', 'Meat', 'Dairy & Eggs', 'Bread & Bakery',
   'Pasta & Grains', 'Spices & Baking', 'Condiments & Sauces',
-  'Canned Goods', 'Frozen', 'Breakfast & Beverages', 'Snacks', 'Other'
+  'Canned Goods', 'Frozen', 'Breakfast & Beverages', 'Snacks',
+  'Personal Care', 'Household', 'Cleaning', 'Pets', 'Other'
 ]
 
 function formatDateRange(start, end) {
@@ -313,6 +315,7 @@ export default function GroceryPage({ sidebar = false }) {
           </div>
         </Sheet>
       )}
+      <FeedbackFab page="grocery" />
     </>
   )
 }

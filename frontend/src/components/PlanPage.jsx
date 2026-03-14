@@ -5,6 +5,7 @@ import MealPickerSheet from './MealPickerSheet'
 import BuildListFlow from './BuildListFlow'
 import SwapPrompt from './SwapPrompt'
 import SidePickerSheet from './SidePickerSheet'
+import FeedbackFab from './FeedbackFab'
 
 function formatDateRange(start, end) {
   if (!start || !end) return ''
@@ -35,9 +36,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const [showPast, setShowPast] = useState(false)
   const [sidePickerDate, setSidePickerDate] = useState(null)
   const [erasing, setErasing] = useState(false)
-  const [showFeedback, setShowFeedback] = useState(false)
-  const [feedbackText, setFeedbackText] = useState('')
-  const [feedbackSent, setFeedbackSent] = useState(false)
 
   // Touch drag refs
   const touchTimer = useRef(null)
@@ -412,47 +410,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
         </button>
       </div>
 
-      {/* Floating feedback FAB */}
-      <button className="feedback-fab" onClick={() => { setShowFeedback(true); setFeedbackSent(false); setFeedbackText('') }}>
-        Talk to the manager
-      </button>
-
-      {/* Feedback sheet */}
-      {showFeedback && (
-        <Sheet onClose={() => setShowFeedback(false)}>
-            {feedbackSent ? (
-              <div className="feedback-thanks">
-                <div className="feedback-title">Yes, Chef!</div>
-              </div>
-            ) : (
-              <>
-                <div className="sheet-title feedback-title">I'd like to speak to the manager</div>
-                <div className="sheet-sub">Tell us what you think</div>
-                <textarea
-                  className="feedback-textarea"
-                  placeholder="What's on your mind?"
-                  value={feedbackText}
-                  onChange={(e) => setFeedbackText(e.target.value)}
-                  rows={4}
-                  autoFocus
-                />
-                <button
-                  className="btn primary"
-                  style={{ width: '100%', marginTop: 12 }}
-                  disabled={!feedbackText.trim()}
-                  onClick={async () => {
-                    try {
-                      await api.sendFeedback(feedbackText.trim(), 'plan')
-                      setFeedbackSent(true)
-                    } catch { /* silent */ }
-                  }}
-                >
-                  Send
-                </button>
-              </>
-            )}
-        </Sheet>
-      )}
+      <FeedbackFab page="plan" />
 
       {/* Meal picker sheet */}
       {pickerDate && (
