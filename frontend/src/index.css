@@ -1817,6 +1817,39 @@ main {
   padding: 8px 16px;
 }
 
+.meal-ing-section {
+  margin-top: 16px;
+}
+.meal-ing-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.meal-ing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.meal-ing-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.meal-ing-empty {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.meal-ing-loading {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
 .meal-pill.current-side {
   background: var(--green-light);
   border-color: #B8D4BF;

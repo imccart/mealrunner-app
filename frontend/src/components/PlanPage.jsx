@@ -5,6 +5,7 @@ import MealPickerSheet from './MealPickerSheet'
 import BuildListFlow from './BuildListFlow'
 import SwapPrompt from './SwapPrompt'
 import SidePickerSheet from './SidePickerSheet'
+import MealIngredientsSheet from './MealIngredientsSheet'
 import FeedbackFab from './FeedbackFab'
 
 function formatDateRange(start, end) {
@@ -35,6 +36,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const [pastDays, setPastDays] = useState(null)
   const [showPast, setShowPast] = useState(false)
   const [sidePickerDate, setSidePickerDate] = useState(null)
+  const [ingredientsMeal, setIngredientsMeal] = useState(null)
   const [erasing, setErasing] = useState(false)
 
   // Touch drag refs
@@ -365,6 +367,13 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                   </div>
                 </button>
               )}
+              <button className="sheet-option" onClick={() => { setIngredientsMeal(actionMeal); setActionDate(null) }}>
+                <div className="sheet-opt-icon">{'\u{1F4CB}'}</div>
+                <div>
+                  <div className="sheet-opt-title">Ingredients</div>
+                  <div className="sheet-opt-desc">View or edit what goes into this meal</div>
+                </div>
+              </button>
               <button className="sheet-option" onClick={() => handleFreeform(actionDate, 'Eating Out')}>
                 <div className="sheet-opt-icon">{'\u{1F37D}'}</div>
                 <div>
@@ -438,6 +447,14 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
           mealName={days.find(d => d.date === sidePickerDate)?.meal?.recipe_name || ''}
           onSelect={(side, sideRecipeId) => handleSetSide(sidePickerDate, side, sideRecipeId)}
           onClose={() => setSidePickerDate(null)}
+        />
+      )}
+
+      {/* Meal ingredients sheet */}
+      {ingredientsMeal && (
+        <MealIngredientsSheet
+          meal={ingredientsMeal}
+          onClose={() => setIngredientsMeal(null)}
         />
       )}
 
