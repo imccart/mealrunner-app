@@ -104,7 +104,6 @@ export default function PreferencesSheet({ onClose }) {
   const [addRegularText, setAddRegularText] = useState('')
   const [addPantryText, setAddPantryText] = useState('')
   const [addStoreName, setAddStoreName] = useState('')
-  const [addStoreShowLink, setAddStoreShowLink] = useState(false)
   const [addRecipeText, setAddRecipeText] = useState('')
   const [members, setMembers] = useState(null)
   const [householdEmail, setHouseholdEmail] = useState('')
@@ -174,14 +173,9 @@ export default function PreferencesSheet({ onClose }) {
       if (stores && stores.some(s => s.key === key)) {
         key = name.slice(0, 2).toLowerCase()
       }
-      // Auto-detect Kroger integration from store name
-      const isKroger = /kroger/i.test(name)
-      const result = await api.addStore(name, key, 'in-person', isKroger ? 'kroger' : 'none')
+      const result = await api.addStore(name, key, 'in-person', 'none')
       if (result.ok) {
         setAddStoreName('')
-        if (isKroger && !krogerConnected) {
-          setAddStoreShowLink(true)
-        }
         const data = await api.getStores()
         setStores(data.stores)
       }
@@ -326,33 +320,14 @@ export default function PreferencesSheet({ onClose }) {
           </button>
         </AccordionSection>
 
-        {/* Stores */}
-        <AccordionSection title="Stores" count={stores?.length || 0}>
+        {/* My Stores */}
+        <AccordionSection title="My Stores" count={stores?.length || 0}>
           {stores && stores.length > 0 && (
             <div className="prefs-list">
               {stores.map(s => (
-                <div key={s.key} className="prefs-store-entry">
-                  <div className="prefs-list-item">
-                    <span className="prefs-list-name">{s.name}</span>
-                    <button className="prefs-remove" onClick={() => handleRemoveStore(s.key)}>{'\u00D7'}</button>
-                  </div>
-                  {s.api && s.api !== 'none' && (
-                    <div className="prefs-store-integration">
-                      {krogerConnected === null ? (
-                        <span className="prefs-list-meta">Checking...</span>
-                      ) : krogerConnected ? (
-                        <div className="prefs-integration-row">
-                          <span className="prefs-connected">Account linked</span>
-                          <button className="prefs-disconnect" onClick={handleDisconnectKroger}>Disconnect</button>
-                        </div>
-                      ) : (
-                        <div className="prefs-integration-row">
-                          <span className="prefs-list-meta">Link your account to add to cart</span>
-                          <button className="btn primary btn-sm" onClick={handleConnectKroger}>Link</button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                <div key={s.key} className="prefs-list-item">
+                  <span className="prefs-list-name">{s.name}</span>
+                  <button className="prefs-remove" onClick={() => handleRemoveStore(s.key)}>{'\u00D7'}</button>
                 </div>
               ))}
             </div>
@@ -367,14 +342,25 @@ export default function PreferencesSheet({ onClose }) {
             />
             <button className="btn primary" type="submit">+</button>
           </form>
-          {addStoreShowLink && !krogerConnected && (
-            <div className="prefs-link-prompt">
-              <span>Link your Kroger account to add items to your cart</span>
-              <button className="btn primary btn-sm" onClick={() => { setAddStoreShowLink(false); handleConnectKroger() }}>
-                Link account
+        </AccordionSection>
+
+        {/* Integrations */}
+        <AccordionSection title="Integrations">
+          <div className="prefs-integration-block">
+            {krogerConnected === null ? (
+              <div className="prefs-list-meta">Checking connection...</div>
+            ) : krogerConnected ? (
+              <div className="prefs-integration-connected">
+                <span className="prefs-connected">Kroger: Connected {'\u2713'}</span>
+                <button className="prefs-disconnect" onClick={handleDisconnectKroger}>Disconnect</button>
+              </div>
+            ) : (
+              <button className="btn primary prefs-integration-btn" onClick={handleConnectKroger}>
+                Connect Kroger Account
               </button>
-            </div>
-          )}
+            )}
+          </div>
+          <div className="prefs-section-hint">More integrations coming soon.</div>
         </AccordionSection>
 
         {/* Kitchen — Meals, Regulars, Pantry */}
@@ -568,6 +554,7 @@ export default function PreferencesSheet({ onClose }) {
         <div className="prefs-about">
           <div className="brand-name">sous<em style={{ color: 'var(--accent)', fontStyle: 'italic' }}>chef</em></div>
           <div style={{ marginTop: '4px' }}>by Aletheia</div>
+          <div className="prefs-version">v0.1.0</div>
         </div>
     </Sheet>
   )

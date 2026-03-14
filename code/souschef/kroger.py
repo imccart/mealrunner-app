@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import webbrowser
 from dataclasses import dataclass
@@ -46,10 +47,19 @@ class KrogerProduct:
 
 
 def _load_credentials() -> dict:
+    # Prefer env vars (Railway), fall back to local credentials file
+    client_id = os.environ.get("KROGER_CLIENT_ID", "")
+    client_secret = os.environ.get("KROGER_CLIENT_SECRET", "")
+    location_id = os.environ.get("KROGER_LOCATION_ID", "")
+    if client_id and client_secret:
+        creds = {"client_id": client_id, "client_secret": client_secret}
+        if location_id:
+            creds["location_id"] = location_id
+        return creds
     if not _CREDS_FILE.exists():
         raise FileNotFoundError(
             f"Kroger credentials not found at {_CREDS_FILE}\n"
-            "Register an app at https://developer.kroger.com and save credentials as:\n"
+            "Set KROGER_CLIENT_ID and KROGER_CLIENT_SECRET env vars, or save credentials as:\n"
             f"  {_CREDS_FILE}"
         )
     with open(_CREDS_FILE) as f:

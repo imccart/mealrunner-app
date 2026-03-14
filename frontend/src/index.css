@@ -2911,20 +2911,21 @@ main {
   font-style: italic;
 }
 
-.prefs-link-prompt {
+.prefs-integration-block {
+  padding: 4px 0 8px;
+}
+.prefs-integration-btn {
+  width: 100%;
+}
+.prefs-integration-connected {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--brown);
-  margin-top: 10px;
-  padding: 10px 12px;
-  background: var(--accent-bg);
-  border-radius: 8px;
+  gap: 8px;
 }
-
-.prefs-link-prompt span {
-  flex: 1;
+.prefs-version {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--warm-gray);
 }
 
 .prefs-add-input {
@@ -3026,18 +3027,6 @@ main {
 .prefs-invite-status.success { background: var(--green-light); color: var(--green); }
 .prefs-invite-status.error { background: #FFF0F0; color: #C44; }
 
-.prefs-store-entry {
-  border-bottom: 1px solid var(--tan);
-}
-.prefs-store-entry:last-child { border-bottom: none; }
-.prefs-store-integration {
-  padding: 4px 12px 8px 12px;
-}
-.prefs-integration-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 .prefs-connected {
   font-size: 13px;
   color: var(--green);
@@ -3052,10 +3041,6 @@ main {
   cursor: pointer;
   padding: 4px 8px;
   text-decoration: underline;
-}
-.btn-sm {
-  font-size: 12px;
-  padding: 4px 12px;
 }
 
 /* ── Welcome ──────────────────────────── */
