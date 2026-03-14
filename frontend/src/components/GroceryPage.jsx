@@ -31,6 +31,9 @@ export default function GroceryPage({ sidebar = false }) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [recatItem, setRecatItem] = useState(null) // item name being recategorized
+  const [bannerDismissed, setBannerDismissed] = useState(
+    () => localStorage.getItem('souschef_grocery_banner_seen') === 'true'
+  )
 
   const load = async () => {
     try {
@@ -152,10 +155,6 @@ export default function GroceryPage({ sidebar = false }) {
     }
   }
 
-  // First grocery list banner
-  const [bannerDismissed, setBannerDismissed] = useState(
-    () => localStorage.getItem('souschef_grocery_banner_seen') === 'true'
-  )
   const showBanner = hasItems && !bannerDismissed
 
   const handleDismissBanner = () => {
