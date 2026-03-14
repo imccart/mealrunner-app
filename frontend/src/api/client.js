@@ -103,7 +103,7 @@ export const api = {
     body: JSON.stringify({ name, shopping_group: shoppingGroup || '', store_pref: storePref || 'either' }),
   }),
   toggleRegular: (id) => request(`/regulars/${id}/toggle`, { method: 'POST' }),
-  removeRegular: (name) => request(`/regulars/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  removeRegular: (id) => request(`/regulars/${id}`, { method: 'DELETE' }),
 
   // Recipes
   getRecipes: () => request('/recipes'),

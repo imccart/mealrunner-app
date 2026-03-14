@@ -49,7 +49,11 @@ function App() {
   const mobilePages = useMemo(() => ['plan', 'grocery', 'order', 'receipt'], [])
   const swipeHandlers = useSwipeNav(mobilePages, page, setPage)
 
-  const handlePlanLoad = useCallback((data) => setMealData(data), [])
+  const [groceryVersion, setGroceryVersion] = useState(0)
+  const handlePlanLoad = useCallback((data) => {
+    setMealData(data)
+    setGroceryVersion(v => v + 1)
+  }, [])
 
   useEffect(() => {
     api.getMe()
@@ -152,13 +156,13 @@ function App() {
             )}
             <div className="two-col">
               <div className="col-plan"><PlanPage showHeader={false} onLoad={handlePlanLoad} onNavigate={setPage} /></div>
-              <div className="col-grocery"><GroceryPage sidebar /></div>
+              <div className="col-grocery"><GroceryPage sidebar key={`grocery-${groceryVersion}`} /></div>
             </div>
           </>
         ) : (
           <>
             {page === 'plan' && <PlanPage onNavigate={setPage} />}
-            {page === 'grocery' && <GroceryPage />}
+            {page === 'grocery' && <GroceryPage key={`grocery-${groceryVersion}`} />}
           </>
         )}
         {page === 'order' && <OrderPage />}

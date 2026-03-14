@@ -802,39 +802,85 @@ def _kill_stale_connections(conn: DictConnection) -> None:
 
 
 def _backfill_user_sides_from_library(conn: DictConnection) -> None:
-    """Copy library side recipes to users who have zero sides."""
+    """Deep-copy library side recipes (with ingredients) to users who need them."""
     try:
-        # Find users with meals but no side recipes
+        # Find users with meals
         users = conn.execute(text(
-            """SELECT DISTINCT m.user_id FROM meals m
-               WHERE m.user_id NOT IN (
-                   SELECT DISTINCT user_id FROM recipes WHERE recipe_type = 'side' AND user_id != '__library__'
-               )"""
+            "SELECT DISTINCT user_id FROM meals WHERE user_id != '__library__'"
         )).fetchall()
         if not users:
             return
-        # Get library sides
         lib_sides = conn.execute(text(
-            """SELECT name, cuisine, effort, cleanup, outdoor, kid_friendly, premade,
-                      prep_minutes, cook_minutes, servings
-               FROM recipes WHERE user_id = '__library__' AND recipe_type = 'side'"""
+            "SELECT id, name FROM recipes WHERE user_id = '__library__' AND recipe_type = 'side'"
         )).fetchall()
         if not lib_sides:
             return
         for u in users:
             uid = u["user_id"]
+            copied = 0
             for s in lib_sides:
-                conn.execute(text(
-                    """INSERT INTO recipes (name, cuisine, effort, cleanup, outdoor, kid_friendly, premade,
-                       prep_minutes, cook_minutes, servings, user_id, recipe_type)
-                       VALUES (:name, :cuisine, :effort, :cleanup, :outdoor, :kid_friendly, :premade,
-                       :prep_minutes, :cook_minutes, :servings, :user_id, 'side')
-                       ON CONFLICT DO NOTHING"""
-                ), {**dict(s), "user_id": uid})
-            print(f"[db] Copied {len(lib_sides)} library sides to user {uid}", flush=True)
+                # Check if user has this side already WITH ingredients
+                user_side = conn.execute(text(
+                    "SELECT id FROM recipes WHERE LOWER(name) = LOWER(:name) AND user_id = :uid AND recipe_type = 'side'"),
+                    {"name": s["name"], "uid": uid},
+                ).fetchone()
+                if user_side:
+                    has_ings = conn.execute(text(
+                        "SELECT 1 FROM recipe_ingredients WHERE recipe_id = :rid LIMIT 1"),
+                        {"rid": user_side["id"]},
+                    ).fetchone()
+                    if has_ings:
+                        continue
+                    # Side exists but has no ingredients — delete it so deep copy recreates it
+                    conn.execute(text("DELETE FROM recipes WHERE id = :id"), {"id": user_side["id"]})
+                _deep_copy_recipe(conn, s["id"], uid)
+                copied += 1
+            if copied:
+                print(f"[db] Copied {copied} library sides (with ingredients) to user {uid}", flush=True)
         conn.commit()
     except Exception as e:
         print(f"[db] Side backfill error: {e}", flush=True)
+
+
+def _deep_copy_recipe(conn: DictConnection, lib_recipe_id: int, user_id: str) -> int | None:
+    """Copy a library recipe and its ingredients to a user. Returns new recipe id."""
+    lib = conn.execute(
+        text("SELECT * FROM recipes WHERE id = :id AND user_id = '__library__'"),
+        {"id": lib_recipe_id},
+    ).fetchone()
+    if not lib:
+        return None
+    existing = conn.execute(
+        text("SELECT id FROM recipes WHERE LOWER(name) = LOWER(:name) AND user_id = :uid AND recipe_type = :rtype"),
+        {"name": lib["name"], "uid": user_id, "rtype": lib["recipe_type"]},
+    ).fetchone()
+    if existing:
+        return existing["id"]
+    result = conn.execute(text(
+        """INSERT INTO recipes (name, cuisine, effort, cleanup, outdoor, kid_friendly, premade,
+           prep_minutes, cook_minutes, servings, notes, user_id, recipe_type)
+           VALUES (:name, :cuisine, :effort, :cleanup, :outdoor, :kid, :premade,
+                    :prep, :cook, :servings, :notes, :uid, :recipe_type)
+           RETURNING id"""
+    ), {
+        "name": lib["name"], "cuisine": lib["cuisine"], "effort": lib["effort"],
+        "cleanup": lib["cleanup"], "outdoor": lib["outdoor"], "kid": lib["kid_friendly"],
+        "premade": lib["premade"], "prep": lib["prep_minutes"], "cook": lib["cook_minutes"],
+        "servings": lib["servings"], "notes": lib["notes"], "uid": user_id,
+        "recipe_type": lib["recipe_type"],
+    })
+    new_id = result.fetchone()["id"]
+    ingredients = conn.execute(
+        text("SELECT * FROM recipe_ingredients WHERE recipe_id = :rid"),
+        {"rid": lib_recipe_id},
+    ).fetchall()
+    for ing in ingredients:
+        conn.execute(text(
+            """INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, prep_note, component)
+               VALUES (:rid, :iid, :qty, :unit, :prep, :comp)"""
+        ), {"rid": new_id, "iid": ing["ingredient_id"], "qty": ing["quantity"],
+            "unit": ing["unit"], "prep": ing["prep_note"], "comp": ing["component"]})
+    return new_id
 
 
 def ensure_db(db_path: str | None = None) -> DictConnection:

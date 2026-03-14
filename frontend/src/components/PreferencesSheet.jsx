@@ -139,9 +139,9 @@ export default function PreferencesSheet({ onClose }) {
     }).catch(() => {})
   }, [])
 
-  const handleRemoveRegular = async (name) => {
+  const handleRemoveRegular = async (id) => {
     try {
-      await api.removeRegular(name)
+      await api.removeRegular(id)
       const data = await api.getRegulars()
       setRegulars(data.regulars)
     } catch { /* reload on next open */ }
@@ -155,9 +155,9 @@ export default function PreferencesSheet({ onClose }) {
     } catch { /* reload on next open */ }
   }
 
-  const handleMoveToPantry = async (name) => {
+  const handleMoveToPantry = async (id, name) => {
     try {
-      await api.removeRegular(name)
+      await api.removeRegular(id)
       await api.addPantryItem(name)
       const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
       setRegulars(rData.regulars)
@@ -166,13 +166,18 @@ export default function PreferencesSheet({ onClose }) {
   }
 
   const handleMoveToRegulars = async (name, id) => {
+    // Optimistic: remove from pantry UI immediately
+    setPantry(prev => (prev || []).filter(p => p.id !== id))
     try {
       await api.removePantryItem(id)
       await api.addRegular(name)
-      const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
+      const rData = await api.getRegulars()
       setRegulars(rData.regulars)
+    } catch {
+      // Revert on failure
+      const pData = await api.getPantry()
       setPantry(pData.items)
-    } catch { /* reload on next open */ }
+    }
   }
 
   const handleAddRecipe = async (e) => {
@@ -479,8 +484,8 @@ export default function PreferencesSheet({ onClose }) {
                     {regularGroups[group].map(r => (
                       <div key={r.id} className="prefs-list-item">
                         <span className="prefs-list-name">{r.name}</span>
-                        <button className="prefs-move" title="Move to Pantry" onClick={() => handleMoveToPantry(r.name)}>{'\u2192 pantry'}</button>
-                        <button className="prefs-remove" onClick={() => handleRemoveRegular(r.name)}>{'\u00D7'}</button>
+                        <button className="prefs-move" title="Move to Pantry" onClick={() => handleMoveToPantry(r.id, r.name)}>{'\u2192 pantry'}</button>
+                        <button className="prefs-remove" onClick={() => handleRemoveRegular(r.id)}>{'\u00D7'}</button>
                       </div>
                     ))}
                   </div>

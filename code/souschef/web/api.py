@@ -1763,21 +1763,28 @@ async def toggle_regular(regular_id: int, request: Request):
     }
 
 
-@router.delete("/regulars/{name:path}")
-async def remove_regular(name: str, request: Request):
-    """Soft-delete a regular."""
-    from souschef.regulars import remove_regular as do_remove
-
+@router.delete("/regulars/{regular_id}")
+async def remove_regular(regular_id: int, request: Request):
+    """Soft-delete a regular by ID."""
     user_id = request.state.user_id
     conn = _conn()
-    ok = do_remove(conn, user_id, name)
+    row = conn.execute(
+        text("SELECT name FROM regulars WHERE id = :id AND user_id = :user_id AND active = 1"),
+        {"id": regular_id, "user_id": user_id},
+    ).fetchone()
+    if not row:
+        return {"ok": False}
+    conn.execute(
+        text("UPDATE regulars SET active = 0 WHERE id = :id"),
+        {"id": regular_id},
+    )
     # Auto-dismiss any "add" learning suggestion for this item
     conn.execute(
         text("INSERT INTO learning_dismissed (name, user_id) VALUES (:name, :user_id) ON CONFLICT DO NOTHING"),
-        {"name": name.lower(), "user_id": user_id},
+        {"name": row["name"].lower(), "user_id": user_id},
     )
     conn.commit()
-    return {"ok": ok}
+    return {"ok": True}
 
 
 @router.get("/grocery/suggestions")
