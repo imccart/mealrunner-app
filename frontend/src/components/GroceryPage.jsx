@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import AutocompleteInput from './AutocompleteInput'
+import BuildListFlow from './BuildListFlow'
 import Sheet from './Sheet'
 import FeedbackFab from './FeedbackFab'
 
@@ -31,6 +32,8 @@ export default function GroceryPage({ sidebar = false }) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [recatItem, setRecatItem] = useState(null) // item name being recategorized
+  const [hideChecked, setHideChecked] = useState(false)
+  const [showBuildFlow, setShowBuildFlow] = useState(false)
   const [bannerDismissed, setBannerDismissed] = useState(
     () => localStorage.getItem('souschef_grocery_banner_seen') === 'true'
   )
@@ -167,6 +170,11 @@ export default function GroceryPage({ sidebar = false }) {
       <div className="grocery-build-hint">
         Ready to shop? Tap <strong>Build My List</strong> to add regulars and start your trip.
       </div>
+      {hasItems && checkedCount > 0 && (
+        <button className="hide-checked-toggle" onClick={() => setHideChecked(h => !h)}>
+          {hideChecked ? 'Show checked' : 'Hide checked'} ({checkedCount})
+        </button>
+      )}
       {showBanner && (
         <div className="grocery-banner">
           <span>This list was built from your meals, minus what's in your pantry and regulars.</span>
@@ -199,7 +207,7 @@ export default function GroceryPage({ sidebar = false }) {
                   <span className="group-left-count done">{'\u2713'} done</span>
                 )}
               </button>
-              {expanded && items.map(item => {
+              {expanded && items.filter(item => !hideChecked || !checkedSet.has(item.name.toLowerCase())).map(item => {
                 const nameLower = item.name.toLowerCase()
                 const isChecked = checkedSet.has(nameLower)
                 const isOrdered = orderedSet.has(nameLower)
@@ -299,6 +307,9 @@ export default function GroceryPage({ sidebar = false }) {
           {mobileTitleBlock}
           {addBar}
           {listContent}
+          <button className="build-list-fab" onClick={() => setShowBuildFlow(true)}>
+            <span className="fab-icon">+</span> Build My List
+          </button>
         </>
       )}
 
@@ -316,6 +327,12 @@ export default function GroceryPage({ sidebar = false }) {
             ))}
           </div>
         </Sheet>
+      )}
+      {showBuildFlow && (
+        <BuildListFlow onComplete={async () => {
+          setShowBuildFlow(false)
+          await load()
+        }} onClose={() => setShowBuildFlow(false)} />
       )}
       <FeedbackFab page="grocery" />
     </>
