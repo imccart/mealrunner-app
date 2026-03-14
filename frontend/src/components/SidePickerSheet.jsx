@@ -65,6 +65,11 @@ export default function SidePickerSheet({ date, mealName, onSelect, onClose }) {
                 {s.current && ' \u2713'}
               </button>
             ))}
+            {!query && (
+              <button className="meal-pill no-side" onClick={() => onSelect('', null)}>
+                No side
+              </button>
+            )}
           </div>
         </>
       )}
