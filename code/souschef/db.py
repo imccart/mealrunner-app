@@ -801,6 +801,42 @@ def _kill_stale_connections(conn: DictConnection) -> None:
         pass  # Best-effort — don't block startup if this fails
 
 
+def _backfill_user_sides_from_library(conn: DictConnection) -> None:
+    """Copy library side recipes to users who have zero sides."""
+    try:
+        # Find users with meals but no side recipes
+        users = conn.execute(text(
+            """SELECT DISTINCT m.user_id FROM meals m
+               WHERE m.user_id NOT IN (
+                   SELECT DISTINCT user_id FROM recipes WHERE recipe_type = 'side' AND user_id != '__library__'
+               )"""
+        )).fetchall()
+        if not users:
+            return
+        # Get library sides
+        lib_sides = conn.execute(text(
+            """SELECT name, cuisine, effort, cleanup, outdoor, kid_friendly, premade,
+                      prep_minutes, cook_minutes, servings
+               FROM recipes WHERE user_id = '__library__' AND recipe_type = 'side'"""
+        )).fetchall()
+        if not lib_sides:
+            return
+        for u in users:
+            uid = u["user_id"]
+            for s in lib_sides:
+                conn.execute(text(
+                    """INSERT INTO recipes (name, cuisine, effort, cleanup, outdoor, kid_friendly, premade,
+                       prep_minutes, cook_minutes, servings, user_id, recipe_type)
+                       VALUES (:name, :cuisine, :effort, :cleanup, :outdoor, :kid_friendly, :premade,
+                       :prep_minutes, :cook_minutes, :servings, :user_id, 'side')
+                       ON CONFLICT DO NOTHING"""
+                ), {**dict(s), "user_id": uid})
+            print(f"[db] Copied {len(lib_sides)} library sides to user {uid}", flush=True)
+        conn.commit()
+    except Exception as e:
+        print(f"[db] Side backfill error: {e}", flush=True)
+
+
 def ensure_db(db_path: str | None = None) -> DictConnection:
     """Create tables, run migrations, seed if empty. Returns a connection."""
     global _db_initialized
@@ -815,6 +851,7 @@ def ensure_db(db_path: str | None = None) -> DictConnection:
             else:
                 # Ensure library recipes exist even on existing databases
                 _seed_library_if_missing(conn)
+            _backfill_user_sides_from_library(conn)
             _db_initialized = True
         except Exception as e:
             print(f"[db] ensure_db error: {e}", flush=True)

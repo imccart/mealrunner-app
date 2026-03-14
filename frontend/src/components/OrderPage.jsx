@@ -177,7 +177,7 @@ export default function OrderPage() {
     setSubmitting(false)
   }
 
-  if (!order) return <div className="loading">Prepping...</div>
+  if (!order) return <><div className="loading">Prepping...</div><FeedbackFab page="order" /></>
 
   const allItems = [...order.pending, ...order.selected]
   const pickedCount = order.selected.length
@@ -194,6 +194,7 @@ export default function OrderPage() {
           <div className="icon">{'\u{1F6D2}'}</div>
           <p>No unchecked items to order. Check off items you bought in-store on the Grocery tab first.</p>
         </div>
+        <FeedbackFab page="order" />
       </>
     )
   }
@@ -458,7 +459,7 @@ export default function OrderPage() {
         {pickedCount > 0 && (
           <>
             {krogerAccounts && krogerAccounts.length === 0 ? (
-              <div className="submit-hint">Connect your account in Preferences, or ask a household member to share access, or ask a household member to share access</div>
+              <div className="submit-hint">Connect your account in Preferences, or ask a household member to share access</div>
             ) : (
               <>
                 {krogerAccounts && krogerAccounts.length > 1 && (

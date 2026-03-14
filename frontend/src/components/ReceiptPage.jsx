@@ -82,8 +82,8 @@ export default function ReceiptPage() {
     } catch { /* ignore */ }
   }
 
-  if (loadError) return <div className="loading">Something went wrong loading receipts. Try refreshing.</div>
-  if (!receipt) return <div className="loading">Checking the tab...</div>
+  if (loadError) return <><div className="loading">Something went wrong loading receipts. Try refreshing.</div><FeedbackFab page="receipt" /></>
+  if (!receipt) return <><div className="loading">Checking the tab...</div><FeedbackFab page="receipt" /></>
 
   if (!receipt.has_trip) {
     return (

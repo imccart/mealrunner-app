@@ -1,42 +1,23 @@
 import { Component } from 'react'
+import FeedbackFab from './FeedbackFab'
 
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
-    this.state = { error: null, reported: false, reporting: false }
+    this.state = { error: null }
   }
   static getDerivedStateFromError(error) {
     return { error }
   }
-  handleReport = async () => {
-    this.setState({ reporting: true })
-    try {
-      const msg = `[Error Boundary] ${this.state.error.message}\n\n${this.state.error.stack || ''}`
-      await fetch('/api/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, page: 'error-boundary' }),
-      })
-      this.setState({ reported: true })
-    } catch {
-      window.location.reload()
-    }
-    this.setState({ reporting: false })
-  }
   render() {
     if (this.state.error) {
-      return <ErrorScreen
-        onRefresh={() => window.location.reload()}
-        onReport={this.handleReport}
-        reporting={this.state.reporting}
-        reported={this.state.reported}
-      />
+      return <ErrorScreen onRefresh={() => window.location.reload()} />
     }
     return this.props.children
   }
 }
 
-export function ErrorScreen({ onRefresh, onReport, reporting, reported }) {
+export function ErrorScreen({ onRefresh }) {
   return (
     <div className="error-boundary">
       <div className="error-boundary-scene">
@@ -61,18 +42,8 @@ export function ErrorScreen({ onRefresh, onReport, reporting, reported }) {
         <button className="error-boundary-btn refresh" onClick={onRefresh}>
           Try again
         </button>
-        {onReport && !reported ? (
-          <button
-            className="error-boundary-btn report"
-            onClick={onReport}
-            disabled={reporting}
-          >
-            {reporting ? 'Reporting...' : 'Talk to the manager'}
-          </button>
-        ) : reported ? (
-          <div className="error-boundary-reported">Reported. We're on it.</div>
-        ) : null}
       </div>
+      <FeedbackFab page="error" />
     </div>
   )
 }

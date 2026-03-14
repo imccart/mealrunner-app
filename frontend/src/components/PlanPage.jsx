@@ -118,8 +118,8 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     e.preventDefault()
   }, [])
 
-  if (loading) return <div className="loading">Setting the table...</div>
-  if (loadError) return <div className="loading">Something went wrong loading meals. Try refreshing.</div>
+  if (loading) return <><div className="loading">Setting the table...</div><FeedbackFab page="plan" /></>
+  if (loadError) return <><div className="loading">Something went wrong loading meals. Try refreshing.</div><FeedbackFab page="plan" /></>
   if (!data) return null
 
   const { days, start_date, end_date } = data

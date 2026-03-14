@@ -56,8 +56,8 @@ export default function GroceryPage({ sidebar = false }) {
 
   useEffect(() => { load() }, [])
 
-  if (loading) return <div className="loading">Gathering ingredients...</div>
-  if (loadError) return <div className="loading">Something went wrong loading your list. Try refreshing.</div>
+  if (loading) return <><div className="loading">Gathering ingredients...</div><FeedbackFab page="grocery" /></>
+  if (loadError) return <><div className="loading">Something went wrong loading your list. Try refreshing.</div><FeedbackFab page="grocery" /></>
 
   const { items_by_group, checked, ordered, start_date, end_date } = grocery
   const checkedSet = new Set((checked || []).map(n => n.toLowerCase()))
