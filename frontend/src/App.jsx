@@ -62,15 +62,15 @@ function App() {
           }
           setInviteChecked(true)
         }).catch(() => setInviteChecked(true))
+        // Check for feedback responses (always, regardless of onboarding state)
+        api.getFeedbackResponses().then(data => {
+          if (data.responses?.length) setFeedbackResponses(data.responses)
+        }).catch(() => {})
         // Fast path: skip round trip if localStorage says onboarded
         if (localStorage.getItem('souschef_onboarded') === 'true') {
           setOnboardingDone(true)
           return
         }
-        // Check for feedback responses
-        api.getFeedbackResponses().then(data => {
-          if (data.responses?.length) setFeedbackResponses(data.responses)
-        }).catch(() => {})
         // Authoritative check from DB
         return api.getOnboardingStatus()
           .then(data => {
