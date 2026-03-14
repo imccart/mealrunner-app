@@ -2413,6 +2413,8 @@ main {
 .order-mobile-content,
 .order-mobile-footer { display: block; }
 .order-mobile-queue { display: flex; }
+.order-mobile-content .order-item-label,
+.order-mobile-content .order-item-name { display: none; }
 
 @media (min-width: 1024px) {
   /* Hide mobile-only order elements on desktop */
