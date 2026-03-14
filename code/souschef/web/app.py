@@ -82,7 +82,11 @@ app = FastAPI(title="Souschef")
 
 # Ensure DB tables exist before any request hits the middleware
 # (middleware queries household_members which must exist first)
-ensure_db()
+try:
+    ensure_db()
+except Exception as e:
+    print(f"[startup] FATAL: Database initialization failed: {e}", flush=True)
+    raise
 
 app.add_middleware(AuthMiddleware)
 app.add_middleware(

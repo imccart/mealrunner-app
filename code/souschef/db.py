@@ -521,10 +521,45 @@ def _migrate_default_user_id_rows(conn: DictConnection) -> None:
 
 def _migrate_recipes_unique_constraint(conn: DictConnection) -> None:
     """Drop global unique on recipes.name, add UNIQUE(name, user_id)."""
+    if is_sqlite():
+        # SQLite can't drop constraints; rebuild would be needed.
+        # Instead, just try to create the new index and skip if it fails.
+        try:
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS recipes_name_user_id_key ON recipes(name, user_id)"
+            ))
+        except Exception:
+            pass
+        return
+    # PostgreSQL: find and drop any unique constraint/index on recipes.name alone
     try:
-        conn.execute(text(
-            "ALTER TABLE recipes DROP CONSTRAINT IF EXISTS recipes_name_key"
-        ))
+        rows = conn.execute(text("""
+            SELECT con.conname
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            JOIN pg_attribute att ON att.attrelid = con.conrelid
+            JOIN unnest(con.conkey) AS cols(colnum) ON att.attnum = cols.colnum
+            WHERE rel.relname = 'recipes'
+              AND con.contype = 'u'
+              AND att.attname = 'name'
+            GROUP BY con.conname
+            HAVING COUNT(*) = 1
+        """)).fetchall()
+        for row in rows:
+            conn.execute(text(f'ALTER TABLE recipes DROP CONSTRAINT "{row[0]}"'))
+    except Exception:
+        pass
+    # Also drop any unique index on just name
+    try:
+        rows = conn.execute(text("""
+            SELECT indexname FROM pg_indexes
+            WHERE tablename = 'recipes'
+              AND indexdef LIKE '%UNIQUE%'
+              AND indexdef LIKE '%(name)%'
+              AND indexdef NOT LIKE '%(name, user_id)%'
+        """)).fetchall()
+        for row in rows:
+            conn.execute(text(f'DROP INDEX IF EXISTS "{row[0]}"'))
     except Exception:
         pass
     try:
@@ -668,7 +703,7 @@ def _seed_recipes(conn: DictConnection, path: Path, user_id: str | None = None) 
                     prep_minutes, cook_minutes, servings, notes, recipe_type)
                    VALUES (:name, :cuisine, :effort, :cleanup, :outdoor, :kid, :premade,
                             :prep, :cook, :servings, :notes, :recipe_type)
-                   ON CONFLICT (name, user_id) DO NOTHING
+                   ON CONFLICT DO NOTHING
                    RETURNING id"""
             ), params)
 
@@ -707,9 +742,17 @@ def _seed_library_if_missing(conn: DictConnection) -> None:
     data_dir = str(Path(__file__).resolve().parents[2] / "data")
     common_file = Path(data_dir) / "seed_recipes_common.yaml"
     if common_file.exists():
-        _seed_recipes(conn, common_file, user_id="__library__")
-        _migrate_side_text_to_recipe_id(conn)
-        conn.commit()
+        try:
+            _seed_recipes(conn, common_file, user_id="__library__")
+            _migrate_side_text_to_recipe_id(conn)
+            conn.commit()
+        except Exception as e:
+            print(f"[db] _seed_library_if_missing failed: {e}", flush=True)
+            # Don't crash the app — library recipes are nice-to-have
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
 
 _db_initialized = False
@@ -730,8 +773,10 @@ def ensure_db(db_path: str | None = None) -> DictConnection:
                 _seed_library_if_missing(conn)
             _db_initialized = True
         except Exception as e:
-            print(f"[db] ensure_db error: {e}")
+            print(f"[db] ensure_db error: {e}", flush=True)
             import traceback
             traceback.print_exc()
+            import sys
+            sys.stderr.flush()
             raise
     return conn

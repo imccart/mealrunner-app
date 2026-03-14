@@ -51,7 +51,7 @@ export default function GroceryPage({ sidebar = false }) {
   useEffect(() => {
     api.getGrocerySuggestions().then(data => {
       setItemPool(data.suggestions || [])
-    })
+    }).catch(() => {})
   }, [])
 
   useEffect(() => { load() }, [])

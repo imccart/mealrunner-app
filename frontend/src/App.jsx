@@ -45,7 +45,7 @@ function App() {
   const [inviteChecked, setInviteChecked] = useState(false)
   const isWide = useIsWide()
   const [mealData, setMealData] = useState(null)
-  const [feedbackResponse, setFeedbackResponse] = useState(null)
+  const [feedbackResponses, setFeedbackResponses] = useState([])
   const mobilePages = useMemo(() => ['plan', 'grocery', 'order', 'receipt'], [])
   const swipeHandlers = useSwipeNav(mobilePages, page, setPage)
 
@@ -69,7 +69,7 @@ function App() {
         }
         // Check for feedback responses
         api.getFeedbackResponses().then(data => {
-          if (data.responses?.length) setFeedbackResponse(data.responses[0])
+          if (data.responses?.length) setFeedbackResponses(data.responses)
         }).catch(() => {})
         // Authoritative check from DB
         return api.getOnboardingStatus()
@@ -129,15 +129,15 @@ function App() {
     <div className="app">
       <Nav page={page} setPage={setPage} prefsOpen={showPrefs} onTogglePrefs={() => setShowPrefs(p => !p)} isWide={isWide} />
       <main {...(!isWide ? swipeHandlers : {})}>
-        {feedbackResponse && (
-          <div className="feedback-response-banner">
-            <div className="feedback-response-text">{feedbackResponse.response}</div>
+        {feedbackResponses.map(fr => (
+          <div key={fr.id} className="feedback-response-banner">
+            <div className="feedback-response-text">{fr.response}</div>
             <button className="feedback-response-dismiss" onClick={async () => {
-              try { await api.dismissFeedbackResponse(feedbackResponse.id) } catch {}
-              setFeedbackResponse(null)
+              try { await api.dismissFeedbackResponse(fr.id) } catch {}
+              setFeedbackResponses(prev => prev.filter(r => r.id !== fr.id))
             }}>Yes, Chef!</button>
           </div>
-        )}
+        ))}
         {isWide && (page === 'plan' || page === 'grocery') ? (
           <>
             {dateRange && (
