@@ -458,7 +458,7 @@ export default function OrderPage() {
         {pickedCount > 0 && (
           <>
             {krogerAccounts && krogerAccounts.length === 0 ? (
-              <div className="submit-hint">Connect your account in Preferences to submit orders</div>
+              <div className="submit-hint">Connect your account in Preferences, or ask a household member to share access, or ask a household member to share access</div>
             ) : (
               <>
                 {krogerAccounts && krogerAccounts.length > 1 && (
@@ -572,7 +572,7 @@ export default function OrderPage() {
       {!activeItem && pickedCount > 0 && !submitResult?.ok && (
         <div className="order-footer order-mobile-footer">
           {krogerAccounts && krogerAccounts.length === 0 ? (
-            <div className="submit-hint">Connect your account in Preferences</div>
+            <div className="submit-hint">Connect your account in Preferences, or ask a household member to share access</div>
           ) : (
             <>
               {krogerAccounts && krogerAccounts.length > 1 && (

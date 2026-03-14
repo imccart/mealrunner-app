@@ -527,15 +527,16 @@ async def kroger_household_accounts(request: Request):
         if not hh_row:
             return {"accounts": []}
 
-        # Get all household members who have Kroger tokens
+        # Get household members with Kroger tokens — only show others if they opted in
         rows = conn.execute(
-            text("""SELECT hm.user_id, u.display_name, u.email
+            text("""SELECT hm.user_id, u.display_name, u.email, ukt.allow_household
                 FROM household_members hm
                 JOIN users u ON u.id = hm.user_id
                 JOIN user_kroger_tokens ukt ON ukt.user_id = hm.user_id
                 WHERE hm.household_id = :hh_id
+                  AND (ukt.user_id = :real_user_id OR ukt.allow_household = 1)
                 ORDER BY hm.role ASC, hm.joined_at ASC"""),
-            {"hh_id": hh_row["household_id"]},
+            {"hh_id": hh_row["household_id"], "real_user_id": real_user_id},
         ).fetchall()
     finally:
         conn.close()
@@ -543,13 +544,35 @@ async def kroger_household_accounts(request: Request):
     accounts = []
     for r in rows:
         name = r["display_name"] or r["email"].split("@")[0]
-        accounts.append({
+        acct = {
             "user_id": r["user_id"],
             "display_name": name,
             "is_you": r["user_id"] == real_user_id,
-        })
+        }
+        if r["user_id"] == real_user_id:
+            acct["allow_household"] = bool(r["allow_household"])
+        accounts.append(acct)
     return {"accounts": accounts}
 
+
+@app.post("/api/store/allow-household")
+async def store_allow_household(request: Request):
+    """Toggle whether household members can order through this account."""
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    body = await request.json()
+    allow = 1 if body.get("allow") else 0
+    conn = get_connection()
+    try:
+        result = conn.execute(
+            text("UPDATE user_kroger_tokens SET allow_household = :allow WHERE user_id = :uid"),
+            {"allow": allow, "uid": real_user_id},
+        )
+        conn.commit()
+        if result.rowcount == 0:
+            return {"ok": False, "error": "No linked account found"}
+    finally:
+        conn.close()
+    return {"ok": True}
 
 
 # ── Routes ────────────────────────────────────────────────

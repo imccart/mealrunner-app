@@ -3321,6 +3321,31 @@ main {
   padding: 4px 8px;
   text-decoration: underline;
 }
+.prefs-household-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 0;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--brown);
+  -webkit-tap-highlight-color: transparent;
+}
+.prefs-household-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.prefs-toggle-hint {
+  width: 100%;
+  font-size: 12px;
+  color: #a09080;
+  margin-top: -4px;
+  padding-left: 26px;
+}
 
 /* ── Welcome ──────────────────────────── */
 

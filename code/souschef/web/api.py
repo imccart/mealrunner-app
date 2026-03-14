@@ -1293,26 +1293,32 @@ async def submit_order(request: Request):
     token = None
 
     if kroger_user_id:
-        # Verify the requested user is in the same household
-        hh_row = conn.execute(
-            text("SELECT household_id FROM household_members WHERE user_id = :uid"),
-            {"uid": real_user_id},
-        ).fetchone()
-        if hh_row:
-            member = conn.execute(
-                text("""SELECT user_id FROM household_members
-                    WHERE household_id = :hh_id AND user_id = :target_uid"""),
-                {"hh_id": hh_row["household_id"], "target_uid": kroger_user_id},
+        if kroger_user_id == real_user_id:
+            # Using own account — no access check needed
+            token = get_user_token_from_db(conn, real_user_id)
+        else:
+            # Using another member's account — verify household + allow_household
+            hh_row = conn.execute(
+                text("SELECT household_id FROM household_members WHERE user_id = :uid"),
+                {"uid": real_user_id},
             ).fetchone()
-            if member:
-                token = get_user_token_from_db(conn, kroger_user_id)
+            if hh_row:
+                member = conn.execute(
+                    text("""SELECT hm.user_id FROM household_members hm
+                        JOIN user_kroger_tokens ukt ON ukt.user_id = hm.user_id
+                        WHERE hm.household_id = :hh_id AND hm.user_id = :target_uid
+                          AND ukt.allow_household = 1"""),
+                    {"hh_id": hh_row["household_id"], "target_uid": kroger_user_id},
+                ).fetchone()
+                if member:
+                    token = get_user_token_from_db(conn, kroger_user_id)
         if not token:
             return {"ok": False, "error": "Selected account is not available."}
     else:
         # Try current user first
         token = get_user_token_from_db(conn, real_user_id)
         if not token:
-            # Fall back to any household member's token
+            # Fall back to any household member's token that has opted in
             hh_row = conn.execute(
                 text("SELECT household_id FROM household_members WHERE user_id = :uid"),
                 {"uid": real_user_id},
@@ -1321,7 +1327,7 @@ async def submit_order(request: Request):
                 hh_tokens = conn.execute(
                     text("""SELECT hm.user_id FROM household_members hm
                         JOIN user_kroger_tokens ukt ON ukt.user_id = hm.user_id
-                        WHERE hm.household_id = :hh_id
+                        WHERE hm.household_id = :hh_id AND ukt.allow_household = 1
                         ORDER BY hm.role ASC LIMIT 1"""),
                     {"hh_id": hh_row["household_id"]},
                 ).fetchone()

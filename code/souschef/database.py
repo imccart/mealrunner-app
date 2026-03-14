@@ -329,6 +329,7 @@ user_kroger_tokens = Table(
     Column("scope", Text, nullable=False, server_default=text("''")),
     Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
     Column("updated_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("allow_household", Integer, nullable=False, server_default=text("0")),
 )
 
 community_data = Table(

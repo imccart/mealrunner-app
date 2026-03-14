@@ -143,6 +143,10 @@ export const api = {
   getKrogerLocation: () => request('/kroger/location'),
   setKrogerLocation: (locationId) => request('/kroger/location', { method: 'POST', body: JSON.stringify({ location_id: locationId }) }),
   getKrogerHouseholdAccounts: () => request('/kroger/household-accounts'),
+  setStoreHouseholdAccess: (allow) => request('/store/allow-household', {
+    method: 'POST',
+    body: JSON.stringify({ allow }),
+  }),
 
   // Auth
   getMe: () => request('/auth/me'),

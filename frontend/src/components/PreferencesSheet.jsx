@@ -117,6 +117,7 @@ export default function PreferencesSheet({ onClose }) {
   const [storeZip, setStoreZip] = useState('')
   const [storeResults, setStoreResults] = useState(null)
   const [storeSearching, setStoreSearching] = useState(false)
+  const [allowHousehold, setAllowHousehold] = useState(false)
   useEffect(() => {
     api.getMe().then(data => {
       setUserEmail(data.email || '')
@@ -130,6 +131,10 @@ export default function PreferencesSheet({ onClose }) {
     api.getKrogerStatus().then(data => setKrogerConnected(data.connected)).catch(() => setKrogerConnected(false))
     api.getKrogerLocation().then(data => {
       if (data.location_id) setKrogerLocationId(data.location_id)
+    }).catch(() => {})
+    api.getKrogerHouseholdAccounts().then(data => {
+      const yours = (data.accounts || []).find(a => a.is_you)
+      if (yours && yours.allow_household != null) setAllowHousehold(yours.allow_household)
     }).catch(() => {})
   }, [])
 
@@ -379,6 +384,21 @@ export default function PreferencesSheet({ onClose }) {
                     </>
                   )}
                 </div>
+                {members && members.length > 1 && (
+                  <label className="prefs-household-toggle">
+                    <input
+                      type="checkbox"
+                      checked={allowHousehold}
+                      onChange={async () => {
+                        const next = !allowHousehold
+                        setAllowHousehold(next)
+                        try { await api.setStoreHouseholdAccess(next) } catch { setAllowHousehold(!next) }
+                      }}
+                    />
+                    <span>Let household members order through this account</span>
+                    <div className="prefs-toggle-hint">They can place orders using your account and loyalty points.</div>
+                  </label>
+                )}
               </>
             ) : (
               <button className="btn primary prefs-integration-btn" onClick={handleConnectKroger}>
