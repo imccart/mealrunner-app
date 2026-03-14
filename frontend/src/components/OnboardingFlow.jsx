@@ -100,7 +100,6 @@ export function WelcomeScreen({ onStart }) {
 export default function OnboardingFlow({ onComplete }) {
   const [step, setStep] = useState(0)
   const [storeName, setStoreName] = useState('')
-  const [storeMode, setStoreMode] = useState('in-person')
   const [addedStores, setAddedStores] = useState([])
   const [mealInput, setMealInput] = useState('')
   const [addedMeals, setAddedMeals] = useState([])
@@ -112,8 +111,10 @@ export default function OnboardingFlow({ onComplete }) {
   const handleAddStore = async (e) => {
     e.preventDefault()
     if (!storeName.trim()) return
-    const key = storeName.trim()[0].toLowerCase()
-    const result = await api.addStore(storeName.trim(), key, storeMode)
+    const name = storeName.trim()
+    const key = name[0].toLowerCase()
+    const isKroger = /kroger/i.test(name)
+    const result = await api.addStore(name, key, 'in-person', isKroger ? 'kroger' : 'none')
     if (result.ok) {
       setAddedStores(prev => [...prev, result.store])
       setStoreName('')
@@ -221,7 +222,7 @@ export default function OnboardingFlow({ onComplete }) {
               <div className="onboarding-pills">
                 {addedStores.map((s, i) => (
                   <div key={i} className="onboarding-pill active">
-                    {s.name} ({s.mode})
+                    {s.name}
                   </div>
                 ))}
               </div>
@@ -237,18 +238,6 @@ export default function OnboardingFlow({ onComplete }) {
               />
               <button className="btn primary" type="submit">Add</button>
             </form>
-            <div className="onboarding-mode-pills">
-              {['in-person', 'pickup', 'delivery'].map(mode => (
-                <button
-                  key={mode}
-                  className={`onboarding-mode-pill ${storeMode === mode ? 'active' : ''}`}
-                  onClick={() => setStoreMode(mode)}
-                  type="button"
-                >
-                  {mode === 'in-person' ? 'In-person' : mode.charAt(0).toUpperCase() + mode.slice(1)}
-                </button>
-              ))}
-            </div>
           </>
         )}
 

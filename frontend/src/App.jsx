@@ -100,11 +100,8 @@ function App() {
     return <LoginPage />
   }
 
-  if (!onboardingDone) {
-    return <OnboardingFlow onComplete={() => setOnboardingDone(true)} />
-  }
-
-  // Show household invite prompt if pending
+  // Show household invite prompt before onboarding — invited members
+  // skip onboarding entirely (they join an existing household's data)
   if (inviteChecked && pendingInvite) {
     return <HouseholdInvitePrompt
       inviterName={pendingInvite.inviter_name}
@@ -114,6 +111,10 @@ function App() {
         window.location.reload()
       }}
     />
+  }
+
+  if (!onboardingDone) {
+    return <OnboardingFlow onComplete={() => setOnboardingDone(true)} />
   }
 
   return (

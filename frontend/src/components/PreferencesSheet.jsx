@@ -104,7 +104,7 @@ export default function PreferencesSheet({ onClose }) {
   const [addRegularText, setAddRegularText] = useState('')
   const [addPantryText, setAddPantryText] = useState('')
   const [addStoreName, setAddStoreName] = useState('')
-  const [addStoreKroger, setAddStoreKroger] = useState(false)
+  const [addStoreShowLink, setAddStoreShowLink] = useState(false)
   const [addRecipeText, setAddRecipeText] = useState('')
   const [members, setMembers] = useState(null)
   const [householdEmail, setHouseholdEmail] = useState('')
@@ -174,11 +174,14 @@ export default function PreferencesSheet({ onClose }) {
       if (stores && stores.some(s => s.key === key)) {
         key = name.slice(0, 2).toLowerCase()
       }
-      const storeApi = addStoreKroger ? 'kroger' : 'none'
-      const result = await api.addStore(name, key, 'in-person', storeApi)
+      // Auto-detect Kroger integration from store name
+      const isKroger = /kroger/i.test(name)
+      const result = await api.addStore(name, key, 'in-person', isKroger ? 'kroger' : 'none')
       if (result.ok) {
         setAddStoreName('')
-        setAddStoreKroger(false)
+        if (isKroger && !krogerConnected) {
+          setAddStoreShowLink(true)
+        }
         const data = await api.getStores()
         setStores(data.stores)
       }
@@ -364,15 +367,14 @@ export default function PreferencesSheet({ onClose }) {
             />
             <button className="btn primary" type="submit">+</button>
           </form>
-          <label className="prefs-kroger-check">
-            <input
-              type="checkbox"
-              checked={addStoreKroger}
-              onChange={(e) => setAddStoreKroger(e.target.checked)}
-            />
-            <span>Kroger account</span>
-          </label>
-          <div className="prefs-note">Check the box if this store uses Kroger for online ordering.</div>
+          {addStoreShowLink && !krogerConnected && (
+            <div className="prefs-link-prompt">
+              <span>Link your Kroger account to add items to your cart</span>
+              <button className="btn primary btn-sm" onClick={() => { setAddStoreShowLink(false); handleConnectKroger() }}>
+                Link account
+              </button>
+            </div>
+          )}
         </AccordionSection>
 
         {/* Kitchen — Meals, Regulars, Pantry */}
