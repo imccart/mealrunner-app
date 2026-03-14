@@ -51,6 +51,7 @@ def init_db(conn: DictConnection) -> None:
     _migrate_create_default_user(conn)
     _migrate_create_households(conn)
     _migrate_stores_to_db(conn)
+    _migrate_default_user_id_rows(conn)
 
     conn.commit()
 
@@ -481,6 +482,34 @@ def _migrate_stores_to_db(conn: DictConnection) -> None:
                VALUES ('default', :name, :key, :mode, :api)
                ON CONFLICT DO NOTHING"""
         ), {"name": s["name"], "key": s["key"], "mode": s.get("mode", "in-person"), "api": s.get("api", "none")})
+
+
+def _migrate_default_user_id_rows(conn: DictConnection) -> None:
+    """One-time: reassign rows with user_id='default' to the first real user."""
+    # Check if any 'default' rows exist
+    row = conn.execute(text(
+        "SELECT 1 FROM recipes WHERE user_id = 'default' LIMIT 1"
+    )).fetchone()
+    if not row:
+        return
+
+    # Find the first real user (oldest account)
+    user = conn.execute(text(
+        "SELECT id FROM users ORDER BY created_at ASC LIMIT 1"
+    )).fetchone()
+    if not user:
+        return
+
+    real_uid = user["id"]
+    for table in ("recipes", "meals", "regulars", "pantry", "grocery_trips",
+                  "product_preferences", "learning_dismissed", "meal_item_overrides", "stores"):
+        try:
+            conn.execute(
+                text(f"UPDATE {table} SET user_id = :uid WHERE user_id = 'default'"),
+                {"uid": real_uid},
+            )
+        except Exception:
+            pass
 
 
 # ── Seed Data ─────────────────────────────────────────────
