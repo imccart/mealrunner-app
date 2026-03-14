@@ -99,27 +99,12 @@ export function WelcomeScreen({ onStart }) {
 
 export default function OnboardingFlow({ onComplete }) {
   const [step, setStep] = useState(0)
-  const [storeName, setStoreName] = useState('')
-  const [addedStores, setAddedStores] = useState([])
   const [mealInput, setMealInput] = useState('')
   const [addedMeals, setAddedMeals] = useState([])
   const [selectedRegulars, setSelectedRegulars] = useState(new Set())
   const [regularInput, setRegularInput] = useState('')
   const [selectedPantry, setSelectedPantry] = useState(new Set())
   const [pantryInput, setPantryInput] = useState('')
-
-  const handleAddStore = async (e) => {
-    e.preventDefault()
-    if (!storeName.trim()) return
-    const name = storeName.trim()
-    const key = name[0].toLowerCase()
-    const isKroger = /kroger/i.test(name)
-    const result = await api.addStore(name, key, 'in-person', isKroger ? 'kroger' : 'none')
-    if (result.ok) {
-      setAddedStores(prev => [...prev, result.store])
-      setStoreName('')
-    }
-  }
 
   const handleAddMeal = async (e) => {
     e.preventDefault()
@@ -168,13 +153,13 @@ export default function OnboardingFlow({ onComplete }) {
   }
 
   const handleNext = async () => {
-    if (step === 2) {
+    if (step === 1) {
       // Save selected regulars
       for (const name of selectedRegulars) {
         try { await api.addRegular(name) } catch (e) { /* ignore duplicates */ }
       }
     }
-    if (step === 3) {
+    if (step === 2) {
       // Save selected pantry items
       for (const name of selectedPantry) {
         try { await api.addPantryItem(name) } catch (e) { /* ignore */ }
@@ -188,10 +173,7 @@ export default function OnboardingFlow({ onComplete }) {
     setStep(step + 1)
   }
 
-  const canProceed = step === 0 ? addedStores.length > 0 : true
-
   const steps = [
-    { title: 'Where do you shop?', desc: 'Add at least one store to get started.' },
     { title: 'What does your family eat?', desc: 'Type meals you make regularly. You can always add more later.' },
     { title: 'Weekly regulars', desc: 'Items you buy almost every trip. Check the ones that apply.' },
     { title: 'Pantry staples', desc: 'Things you always have on hand, so they stay off the grocery list.' },
@@ -215,34 +197,8 @@ export default function OnboardingFlow({ onComplete }) {
         <div className="onboarding-step-title">{steps[step].title}</div>
         <div className="onboarding-step-desc">{steps[step].desc}</div>
 
-        {/* Step 0: Store */}
+        {/* Step 0: Meals */}
         {step === 0 && (
-          <>
-            {addedStores.length > 0 && (
-              <div className="onboarding-pills">
-                {addedStores.map((s, i) => (
-                  <div key={i} className="onboarding-pill active">
-                    {s.name}
-                  </div>
-                ))}
-              </div>
-            )}
-            <form onSubmit={handleAddStore} className="onboarding-input-row">
-              <input
-                className="onboarding-input"
-                type="text"
-                placeholder="Store name"
-                value={storeName}
-                onChange={(e) => setStoreName(e.target.value)}
-                autoFocus
-              />
-              <button className="btn primary" type="submit">Add</button>
-            </form>
-          </>
-        )}
-
-        {/* Step 1: Meals */}
-        {step === 1 && (
           <>
             {addedMeals.length > 0 && (
               <div className="onboarding-pills">
@@ -268,8 +224,8 @@ export default function OnboardingFlow({ onComplete }) {
           </>
         )}
 
-        {/* Step 2: Regulars */}
-        {step === 2 && (
+        {/* Step 1: Regulars */}
+        {step === 1 && (
           <>
             <div className="onboarding-checklist">
               {COMMON_REGULARS.map(name => (
@@ -308,8 +264,8 @@ export default function OnboardingFlow({ onComplete }) {
           </>
         )}
 
-        {/* Step 3: Pantry */}
-        {step === 3 && (
+        {/* Step 2: Pantry */}
+        {step === 2 && (
           <>
             <div className="onboarding-checklist">
               {COMMON_PANTRY.map(name => (
@@ -357,9 +313,8 @@ export default function OnboardingFlow({ onComplete }) {
           <button
             className="onboarding-btn primary"
             onClick={handleNext}
-            disabled={!canProceed}
           >
-            {step === 3 ? 'Get cooking' : step === 0 ? 'Next' : 'Skip / Next'}
+            {step === 2 ? 'Get cooking' : 'Skip / Next'}
           </button>
         </div>
       </div>

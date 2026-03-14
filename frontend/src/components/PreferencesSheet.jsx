@@ -98,12 +98,10 @@ function RecipeItem({ recipe, onRemove, allIngredients }) {
 export default function PreferencesSheet({ onClose }) {
   const [regulars, setRegulars] = useState(null)
   const [pantry, setPantry] = useState(null)
-  const [stores, setStores] = useState(null)
   const [recipes, setRecipes] = useState(null)
   const [allIngredients, setAllIngredients] = useState(null)
   const [addRegularText, setAddRegularText] = useState('')
   const [addPantryText, setAddPantryText] = useState('')
-  const [addStoreName, setAddStoreName] = useState('')
   const [addRecipeText, setAddRecipeText] = useState('')
   const [members, setMembers] = useState(null)
   const [householdEmail, setHouseholdEmail] = useState('')
@@ -126,7 +124,6 @@ export default function PreferencesSheet({ onClose }) {
     }).catch(() => {})
     api.getRegulars().then(data => setRegulars(data.regulars)).catch(() => setRegulars([]))
     api.getPantry().then(data => setPantry(data.items)).catch(() => setPantry([]))
-    api.getStores().then(data => setStores(data.stores)).catch(() => setStores([]))
     api.getRecipes().then(data => setRecipes(data.recipes)).catch(() => setRecipes([]))
     api.getGrocerySuggestions().then(data => setAllIngredients(data.suggestions)).catch(() => {})
     api.getHouseholdMembers().then(data => setMembers(data.members)).catch(() => {})
@@ -169,32 +166,6 @@ export default function PreferencesSheet({ onClose }) {
       const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
       setRegulars(rData.regulars)
       setPantry(pData.items)
-    } catch { /* reload on next open */ }
-  }
-
-  const handleAddStore = async (e) => {
-    e.preventDefault()
-    if (!addStoreName.trim()) return
-    try {
-      const name = addStoreName.trim()
-      let key = name[0].toLowerCase()
-      if (stores && stores.some(s => s.key === key)) {
-        key = name.slice(0, 2).toLowerCase()
-      }
-      const result = await api.addStore(name, key, 'in-person', 'none')
-      if (result.ok) {
-        setAddStoreName('')
-        const data = await api.getStores()
-        setStores(data.stores)
-      }
-    } catch { /* reload on next open */ }
-  }
-
-  const handleRemoveStore = async (key) => {
-    try {
-      await api.removeStore(key)
-      const data = await api.getStores()
-      setStores(data.stores)
     } catch { /* reload on next open */ }
   }
 
@@ -351,32 +322,8 @@ export default function PreferencesSheet({ onClose }) {
           </button>
         </AccordionSection>
 
-        {/* My Stores */}
-        <AccordionSection title="My Stores" count={stores?.length || 0}>
-          {stores && stores.length > 0 && (
-            <div className="prefs-list">
-              {stores.map(s => (
-                <div key={s.key} className="prefs-list-item">
-                  <span className="prefs-list-name">{s.name}</span>
-                  <button className="prefs-remove" onClick={() => handleRemoveStore(s.key)}>{'\u00D7'}</button>
-                </div>
-              ))}
-            </div>
-          )}
-          <form onSubmit={handleAddStore} className="prefs-add-row">
-            <input
-              className="prefs-add-input"
-              type="text"
-              placeholder="Store name..."
-              value={addStoreName}
-              onChange={(e) => setAddStoreName(e.target.value)}
-            />
-            <button className="btn primary" type="submit">+</button>
-          </form>
-        </AccordionSection>
-
-        {/* Integrations */}
-        <AccordionSection title="Integrations">
+        {/* Online Ordering */}
+        <AccordionSection title="Online Ordering">
           <div className="prefs-integration-block">
             {krogerConnected === null ? (
               <div className="prefs-list-meta">Checking connection...</div>
