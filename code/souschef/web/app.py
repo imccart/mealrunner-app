@@ -452,15 +452,35 @@ async def kroger_locations(zip: str = "", request: Request = None):
 
 @app.get("/api/kroger/location")
 async def kroger_location_get(request: Request):
-    """Get the user's current Kroger store location."""
-    from souschef.stores import get_kroger_location_id
+    """Get the user's current Kroger store location with name/address."""
     user_id = request.state.user_id
     conn = get_connection()
     try:
-        loc = get_kroger_location_id(conn, user_id)
+        row = conn.execute(
+            text("SELECT location_id FROM stores WHERE user_id = :uid AND api = 'kroger' AND location_id != '' LIMIT 1"),
+            {"uid": user_id},
+        ).fetchone()
+        if not row:
+            return {"location_id": "", "name": "", "address": ""}
+        loc_id = row["location_id"]
+        # Try to look up store details from Kroger API
+        try:
+            from souschef.kroger import _headers, BASE_URL
+            import requests as _requests
+            resp = _requests.get(f"{BASE_URL}/locations/{loc_id}", headers=_headers(), timeout=10)
+            if resp.ok:
+                data = resp.json().get("data", {})
+                addr = data.get("address", {})
+                return {
+                    "location_id": loc_id,
+                    "name": data.get("name", "Kroger"),
+                    "address": f"{addr.get('addressLine1', '')}, {addr.get('city', '')} {addr.get('state', '')} {addr.get('zipCode', '')}",
+                }
+        except Exception:
+            pass
+        return {"location_id": loc_id, "name": "Kroger", "address": ""}
     finally:
         conn.close()
-    return {"location_id": loc or ""}
 
 
 @app.post("/api/kroger/location")

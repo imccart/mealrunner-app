@@ -54,6 +54,7 @@ export default function OrderPage() {
   const [krogerAccounts, setKrogerAccounts] = useState(null)
   const [selectedAccount, setSelectedAccount] = useState(null)
   const [fulfillment, setFulfillment] = useState(() => localStorage.getItem('souschef_fulfillment') || 'curbside')
+  const [storeInfo, setStoreInfo] = useState(null)
   const [communityBrand, setCommunityBrand] = useState(null)
   const [communityValue, setCommunityValue] = useState('')
   const [communityConfirm, setCommunityConfirm] = useState(false)
@@ -61,11 +62,11 @@ export default function OrderPage() {
   useEffect(() => {
     api.getKrogerHouseholdAccounts().then(data => {
       setKrogerAccounts(data.accounts || [])
-      // Auto-select: prefer "you", otherwise first available
       const yours = (data.accounts || []).find(a => a.is_you)
       if (yours) setSelectedAccount(yours.user_id)
       else if (data.accounts?.length > 0) setSelectedAccount(data.accounts[0].user_id)
     }).catch(() => setKrogerAccounts([]))
+    api.getKrogerLocation().then(data => setStoreInfo(data)).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -156,6 +157,31 @@ export default function OrderPage() {
     )
   }
 
+  const storeDetails = (
+    <div className="store-details">
+      <div className="store-details-row">
+        <div className="store-details-name">
+          <select className="store-select" value="kroger" disabled>
+            <option value="kroger">{storeInfo?.name || 'Kroger'}</option>
+          </select>
+        </div>
+        <div className="fulfillment-toggle">
+          <button
+            className={`fulfillment-btn${fulfillment === 'curbside' ? ' active' : ''}`}
+            onClick={() => { setFulfillment('curbside'); localStorage.setItem('souschef_fulfillment', 'curbside') }}
+          >Pickup</button>
+          <button
+            className={`fulfillment-btn${fulfillment === 'delivery' ? ' active' : ''}`}
+            onClick={() => { setFulfillment('delivery'); localStorage.setItem('souschef_fulfillment', 'delivery') }}
+          >Delivery</button>
+        </div>
+      </div>
+      {storeInfo?.address && (
+        <div className="store-details-address">{storeInfo.address}</div>
+      )}
+    </div>
+  )
+
   const queuePanel = (
     <div className="order-queue-panel">
       <div className="order-queue-header">
@@ -187,6 +213,9 @@ export default function OrderPage() {
 
   const centerPanel = (
     <div className="order-center-panel">
+      <div className="order-desktop-store-details">
+        {storeDetails}
+      </div>
       {activeItem && (
         <div className="order-active-item">
           <div className="order-item-label">Picking for</div>
@@ -417,16 +446,9 @@ export default function OrderPage() {
         </div>
       </div>
 
-      {/* Fulfillment toggle */}
-      <div className="fulfillment-toggle">
-        <button
-          className={`fulfillment-btn${fulfillment === 'curbside' ? ' active' : ''}`}
-          onClick={() => { setFulfillment('curbside'); localStorage.setItem('souschef_fulfillment', 'curbside') }}
-        >Pickup</button>
-        <button
-          className={`fulfillment-btn${fulfillment === 'delivery' ? ' active' : ''}`}
-          onClick={() => { setFulfillment('delivery'); localStorage.setItem('souschef_fulfillment', 'delivery') }}
-        >Delivery</button>
+      {/* Mobile: store details */}
+      <div className="order-mobile-store-details">
+        {storeDetails}
       </div>
 
       {/* Mobile: horizontal queue strip */}

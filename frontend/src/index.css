@@ -2217,25 +2217,49 @@ main {
 /* Hide desktop-only elements on mobile */
 .order-desktop-layout { display: none; }
 
-/* Show mobile elements by default */
+/* Store details block */
+.store-details {
+  padding: 12px 16px;
+}
+.store-details-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.store-select {
+  font-family: 'Playfair Display', serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--dark);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.store-details-address {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
 .fulfillment-toggle {
   display: flex;
   gap: 0;
-  margin: 0 16px 12px;
   border: 1.5px solid var(--tan);
   border-radius: 8px;
   overflow: hidden;
-  max-width: 220px;
 }
 
 .fulfillment-btn {
-  flex: 1;
-  padding: 7px 0;
-  font-size: 13px;
-  font-family: 'DM Sans', sans-serif;
-  font-weight: 500;
+  padding: 5px 14px;
   border: none;
-  background: white;
+  background: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--brown);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -2250,6 +2274,10 @@ main {
   background: var(--warm-white);
 }
 
+/* Mobile/desktop visibility for store details */
+.order-desktop-store-details { display: none; }
+.order-mobile-store-details { display: block; }
+
 .order-mobile-header,
 .order-mobile-content,
 .order-mobile-footer { display: block; }
@@ -2260,7 +2288,16 @@ main {
   .order-mobile-header,
   .order-mobile-queue,
   .order-mobile-content,
-  .order-mobile-footer { display: none !important; }
+  .order-mobile-footer,
+  .order-mobile-store-details { display: none !important; }
+
+  .order-desktop-store-details {
+    display: block;
+  }
+
+  .order-desktop-store-details .store-details {
+    padding: 20px 16px 12px;
+  }
 
   /* Show desktop 3-column layout — breaks out of main container */
   .order-desktop-layout {
@@ -2352,7 +2389,7 @@ main {
 
   /* Right: Order summary panel */
   .order-summary-panel {
-    background: white;
+    background: var(--cream);
     display: flex;
     flex-direction: column;
     overflow: hidden;
