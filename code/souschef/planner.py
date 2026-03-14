@@ -471,7 +471,10 @@ def swap_dates(conn: DictConnection, user_id: str, date_a: str, date_b: str) -> 
     return load_meals(conn, user_id, s, e)
 
 
-def set_meal(conn: DictConnection, user_id: str, slot_date: str, recipe_name: str) -> Meal | str:
+def set_meal(
+    conn: DictConnection, user_id: str, slot_date: str, recipe_name: str,
+    side_recipe_id: int | None = None, side_name: str | None = None,
+) -> Meal | str:
     """Manually set a date's recipe by name. No rule enforcement."""
     recipe = get_recipe_by_name(conn, recipe_name, user_id=user_id)
     if recipe is None:
@@ -499,13 +502,18 @@ def set_meal(conn: DictConnection, user_id: str, slot_date: str, recipe_name: st
     meal.is_followup = False
     meal.on_grocery = False  # new meal needs explicit grocery toggle
 
-    # Reassign side to match the new meal
-    s, e = rolling_range()
-    week_meals = load_meals(conn, user_id, s, e)
-    used_side_ids = [m.side_recipe_id for m in week_meals if m.slot_date != slot_date and m.side_recipe_id]
-    side_id, side_name = _assign_side(conn, user_id, used_side_ids)
-    meal.side = side_name
-    meal.side_recipe_id = side_id
+    if side_name is not None:
+        # User explicitly chose a side (or no side)
+        meal.side = side_name
+        meal.side_recipe_id = side_recipe_id
+    else:
+        # Auto-assign a random side
+        s, e = rolling_range()
+        week_meals = load_meals(conn, user_id, s, e)
+        used_side_ids = [m.side_recipe_id for m in week_meals if m.slot_date != slot_date and m.side_recipe_id]
+        sid, sname = _assign_side(conn, user_id, used_side_ids)
+        meal.side = sname
+        meal.side_recipe_id = sid
 
     save_meal(conn, user_id, meal)
     return meal

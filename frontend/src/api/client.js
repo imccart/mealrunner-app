@@ -25,9 +25,9 @@ export const api = {
     body: JSON.stringify({ side, side_recipe_id: sideRecipeId || null }),
   }),
   toggleGrocery: (date) => request(`/meals/${date}/toggle-grocery`, { method: 'POST' }),
-  setMeal: (date, recipeId) => request(`/meals/${date}/set`, {
+  setMeal: (date, recipeId, sideRecipeId, sideName) => request(`/meals/${date}/set`, {
     method: 'POST',
-    body: JSON.stringify({ recipe_id: recipeId }),
+    body: JSON.stringify({ recipe_id: recipeId, side_recipe_id: sideRecipeId, side_name: sideName }),
   }),
   suggestMeals: () => request('/meals/suggest', { method: 'POST' }),
   freshStart: () => request('/meals/fresh-start', { method: 'POST' }),

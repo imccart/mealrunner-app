@@ -20,6 +20,9 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
   const [history, setHistory] = useState(null)
   const [search, setSearch] = useState('')
   const [error, setError] = useState(false)
+  const [pickedRecipe, setPickedRecipe] = useState(null)
+  const [sides, setSides] = useState(null)
+  const [sideSearch, setSideSearch] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -31,6 +34,74 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
     }).catch(() => setError(true))
   }, [date])
 
+  // Load sides when a meal is picked
+  useEffect(() => {
+    if (pickedRecipe) {
+      api.getSides(date).then(data => setSides(data.sides || [])).catch(() => setSides([]))
+    }
+  }, [pickedRecipe, date])
+
+  // Step 2: Side selection
+  if (pickedRecipe) {
+    const query = sideSearch.trim().toLowerCase()
+    const filtered = query && sides
+      ? sides.filter(s => s.name.toLowerCase().includes(query))
+      : sides || []
+
+    return (
+      <Sheet onClose={onClose} className="meal-picker-sheet">
+        <div className="sheet-title">{dayName}</div>
+        <div className="sheet-sub">{pickedRecipe.name} + side?</div>
+        {!sides ? (
+          <div className="loading">Loading sides...</div>
+        ) : (
+          <>
+            <input
+              className="picker-search"
+              type="text"
+              placeholder="Search sides..."
+              value={sideSearch}
+              onChange={(e) => setSideSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && sideSearch.trim()) {
+                  onSelect(pickedRecipe.id, null, sideSearch.trim())
+                }
+              }}
+            />
+            {query && filtered.length === 0 ? (
+              <div className="picker-results">
+                <button className="picker-option freeform" onClick={() => onSelect(pickedRecipe.id, null, sideSearch.trim())}>
+                  Use "{sideSearch.trim()}" as a side
+                </button>
+              </div>
+            ) : (
+              <div className="picker-pills">
+                {filtered.map(s => (
+                  <button
+                    key={s.name}
+                    className={`meal-pill ${s.in_use ? 'in-use' : ''}`}
+                    onClick={() => onSelect(pickedRecipe.id, s.id, s.name)}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+                {!query && (
+                  <button className="meal-pill no-side" onClick={() => onSelect(pickedRecipe.id, null, '')}>
+                    No side
+                  </button>
+                )}
+              </div>
+            )}
+            <button className="picker-back" onClick={() => { setPickedRecipe(null); setSides(null); setSideSearch('') }}>
+              {'\u2190'} Back to meals
+            </button>
+          </>
+        )}
+      </Sheet>
+    )
+  }
+
+  // Step 1: Meal selection
   if (error) return (
     <Sheet onClose={onClose}>
       <div className="sheet-title">{dayName}</div>
@@ -78,6 +149,11 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
   const historyIds = new Set((history || []).map(h => h.recipe_id))
   const otherRecipes = candidates.filter(r => !historyIds.has(r.id)).slice(0, 6)
 
+  const pickMeal = (id, name) => {
+    setPickedRecipe({ id, name })
+    setSearch('')
+  }
+
   return (
     <Sheet onClose={onClose} className="meal-picker-sheet">
       <div className="sheet-title">{dayName}</div>
@@ -91,7 +167,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
         onKeyDown={(e) => {
           if (e.key === 'Enter' && search.trim()) {
             if (filtered.length > 0) {
-              onSelect(filtered[0].id)
+              pickMeal(filtered[0].id, filtered[0].name)
             } else {
               onFreeform(search.trim())
             }
@@ -105,7 +181,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
             filtered.map(r => {
               const h = (history || []).find(x => x.recipe_id === r.id)
               return (
-                <button key={r.id} className="picker-option" onClick={() => onSelect(r.id)}>
+                <button key={r.id} className="picker-option" onClick={() => pickMeal(r.id, r.name)}>
                   {r.name}
                   {h && (
                     <span className="picker-favorite-meta">
@@ -132,7 +208,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
                   <button
                     key={f.recipe_id}
                     className="meal-pill"
-                    onClick={() => onSelect(f.recipe_id)}
+                    onClick={() => pickMeal(f.recipe_id, f.recipe_name)}
                     title={`Made ${f.cook_count} times, last ${daysAgo(f.last_made)}`}
                   >
                     {f.recipe_name}
@@ -148,7 +224,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
           </div>
           <div className="picker-pills">
             {(favorites.length > 0 ? otherRecipes : candidates.slice(0, 8)).map(r => (
-              <button key={r.id} className="meal-pill" onClick={() => onSelect(r.id)}>
+              <button key={r.id} className="meal-pill" onClick={() => pickMeal(r.id, r.name)}>
                 {r.name}
               </button>
             ))}

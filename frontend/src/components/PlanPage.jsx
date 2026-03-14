@@ -155,9 +155,9 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     } catch { /* silent — checkbox stays in current state */ }
   }
 
-  const handleSetMeal = async (date, recipeId) => {
+  const handleSetMeal = async (date, recipeId, sideRecipeId, sideName) => {
     try {
-      const result = await api.setMeal(date, recipeId)
+      const result = await api.setMeal(date, recipeId, sideRecipeId, sideName)
       setData(result)
       setPickerDate(null)
       setPickerMode(null)
@@ -417,7 +417,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
         <MealPickerSheet
           date={pickerDate}
           dayName={pickerDayName}
-          onSelect={(recipeId) => handleSetMeal(pickerDate, recipeId)}
+          onSelect={(recipeId, sideId, sideName) => handleSetMeal(pickerDate, recipeId, sideId, sideName)}
           onFreeform={(name) => handleFreeform(pickerDate, name)}
           onClose={() => { setPickerDate(null); setPickerMode(null) }}
         />

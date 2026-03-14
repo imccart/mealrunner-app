@@ -322,7 +322,9 @@ async def set_meal(date: str, body: dict, request: Request):
         return {"ok": False, "error": "recipe_id required"}
     recipe = get_recipe(conn, body["recipe_id"])
     if recipe:
-        do_set(conn, user_id, date, recipe.name)
+        side_recipe_id = body.get("side_recipe_id")
+        side_name = body.get("side_name")
+        do_set(conn, user_id, date, recipe.name, side_recipe_id=side_recipe_id, side_name=side_name)
     return await get_meals(request)
 
 
