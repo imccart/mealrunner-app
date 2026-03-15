@@ -112,6 +112,15 @@ app.include_router(api_router)
 if _FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=str(_FRONTEND_DIST / "assets")), name="react-assets")
 
+# Serve root-level static files (favicon, manifest, icons)
+_ROOT_STATIC = ["favicon.ico", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "manifest.json"]
+for _fname in _ROOT_STATIC:
+    _fpath = _FRONTEND_DIST / _fname
+    if _fpath.exists():
+        @app.get(f"/{_fname}", include_in_schema=False)
+        async def _serve_static(path=str(_fpath)):
+            return FileResponse(path)
+
 
 # ── Health Check ──────────────────────────────────────────
 
