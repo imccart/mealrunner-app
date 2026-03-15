@@ -51,6 +51,7 @@ def init_db(conn: DictConnection) -> None:
         ("stores_to_db", _migrate_stores_to_db),
         ("default_user_id_rows", _migrate_default_user_id_rows),
         ("recipes_unique_constraint", _migrate_recipes_unique_constraint),
+        ("sides_to_junction", _migrate_sides_to_junction),
     ]:
         print(f"[db] Migration: {name}...", flush=True)
         fn(conn)
@@ -563,6 +564,33 @@ def _migrate_recipes_unique_constraint(conn: DictConnection) -> None:
         ))
     except Exception:
         pass
+
+
+def _migrate_sides_to_junction(conn: DictConnection) -> None:
+    """Move side data from meals columns to meal_sides junction table."""
+    # Check if meal_sides already has data (idempotent)
+    try:
+        row = conn.execute(text("SELECT COUNT(*) AS n FROM meal_sides")).fetchone()
+        if row["n"] > 0:
+            return
+    except Exception:
+        return  # table doesn't exist yet
+
+    # Check if old columns exist
+    try:
+        rows = conn.execute(text(
+            "SELECT id, side, side_recipe_id FROM meals WHERE (side != '' AND side IS NOT NULL) OR side_recipe_id IS NOT NULL"
+        )).fetchall()
+    except Exception:
+        return  # old columns don't exist
+
+    for r in rows:
+        side_name = r["side"] or ""
+        side_recipe_id = r["side_recipe_id"]
+        if side_name or side_recipe_id:
+            conn.execute(text(
+                "INSERT INTO meal_sides (meal_id, side_recipe_id, side_name, position) VALUES (:meal_id, :sid, :sname, 0)"
+            ), {"meal_id": r["id"], "sid": side_recipe_id, "sname": side_name})
 
 
 # ── Seed Data ─────────────────────────────────────────────

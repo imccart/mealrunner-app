@@ -20,6 +20,7 @@ function AccordionSection({ title, count, children, defaultOpen = false }) {
 function RecipeItem({ recipe, onRemove, allIngredients, defaultExpanded = false }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [ingredients, setIngredients] = useState(null)
+  const [renamed, setRenamed] = useState(null)
 
   useEffect(() => {
     if (defaultExpanded && ingredients === null) loadIngredients()
@@ -41,8 +42,12 @@ function RecipeItem({ recipe, onRemove, allIngredients, defaultExpanded = false 
   const handleAdd = async (name) => {
     if (!name.trim()) return
     try {
-      await api.addRecipeIngredient(recipe.id, name.trim())
+      const result = await api.addRecipeIngredient(recipe.id, name.trim())
       setAddText('')
+      if (result.renamed_from) {
+        setRenamed({ from: result.renamed_from, to: result.name })
+        setTimeout(() => setRenamed(null), 4000)
+      }
       loadIngredients()
     } catch { /* ignore */ }
   }
@@ -93,6 +98,7 @@ function RecipeItem({ recipe, onRemove, allIngredients, defaultExpanded = false 
             />
             <button className="btn primary" onClick={() => addText.trim() && handleAdd(addText)}>+</button>
           </div>
+          {renamed && <div className="prefs-renamed-hint">"{renamed.from}" added as "{renamed.to}"</div>}
         </div>
       )}
     </div>
@@ -108,6 +114,8 @@ export default function PreferencesSheet({ onClose }) {
   const [addPantryText, setAddPantryText] = useState('')
   const [addRecipeText, setAddRecipeText] = useState('')
   const [addSideText, setAddSideText] = useState('')
+  const [mealDupe, setMealDupe] = useState(false)
+  const [sideDupe, setSideDupe] = useState(false)
   const [newRecipeId, setNewRecipeId] = useState(null)
   const [showAllMeals, setShowAllMeals] = useState(false)
   const [showAllSides, setShowAllSides] = useState(false)
@@ -128,6 +136,7 @@ export default function PreferencesSheet({ onClose }) {
   const [storeResults, setStoreResults] = useState(null)
   const [storeSearching, setStoreSearching] = useState(false)
   const [allowHousehold, setAllowHousehold] = useState(false)
+  const [sharedAccountName, setSharedAccountName] = useState(null)
   useEffect(() => {
     api.getMe().then(data => {
       setUserEmail(data.email || '')
@@ -143,8 +152,12 @@ export default function PreferencesSheet({ onClose }) {
       if (data.location_id) setKrogerLocationId(data.location_id)
     }).catch(() => {})
     api.getKrogerHouseholdAccounts().then(data => {
-      const yours = (data.accounts || []).find(a => a.is_you)
+      const accounts = data.accounts || []
+      const yours = accounts.find(a => a.is_you)
       if (yours && yours.allow_household != null) setAllowHousehold(yours.allow_household)
+      // If user doesn't have their own account but a household member shared theirs
+      const shared = accounts.find(a => !a.is_you)
+      if (!yours && shared) setSharedAccountName(shared.display_name)
     }).catch(() => {})
   }, [])
 
@@ -191,10 +204,11 @@ export default function PreferencesSheet({ onClose }) {
 
   const handleAddRecipe = async (e) => {
     e.preventDefault()
-    if (!addRecipeText.trim()) return
+    if (!addRecipeText.trim() || mealDupe) return
     try {
       const result = await api.addRecipe(addRecipeText.trim())
       setAddRecipeText('')
+      setMealDupe(false)
       if (result.id) setNewRecipeId(result.id)
       const data = await api.getRecipes()
       setRecipes(data.recipes)
@@ -417,9 +431,16 @@ export default function PreferencesSheet({ onClose }) {
                 )}
               </>
             ) : (
-              <button className="btn primary prefs-integration-btn" onClick={handleConnectKroger}>
-                Connect Kroger Account
-              </button>
+              <>
+                {sharedAccountName && (
+                  <div className="prefs-shared-account">
+                    Ordering through {sharedAccountName}'s Kroger account
+                  </div>
+                )}
+                <button className="btn primary prefs-integration-btn" onClick={handleConnectKroger}>
+                  {sharedAccountName ? 'Connect your own account' : 'Connect Kroger Account'}
+                </button>
+              </>
             )}
           </div>
           <div className="prefs-section-hint">More integrations coming soon.</div>
@@ -433,14 +454,19 @@ export default function PreferencesSheet({ onClose }) {
             </div>
             <form onSubmit={handleAddRecipe} className="prefs-add-row">
               <input
-                className="prefs-add-input"
+                className={`prefs-add-input${mealDupe ? ' prefs-dupe' : ''}`}
                 type="text"
                 placeholder="Add a meal..."
                 value={addRecipeText}
-                onChange={(e) => setAddRecipeText(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setAddRecipeText(val)
+                  setMealDupe(val.trim() && recipes && recipes.some(r => r.recipe_type !== 'side' && r.name.toLowerCase() === val.trim().toLowerCase()))
+                }}
               />
-              <button className="btn primary" type="submit">+</button>
+              <button className="btn primary" type="submit" disabled={mealDupe}>+</button>
             </form>
+            {mealDupe && <div className="prefs-dupe-msg">Already exists</div>}
             {recipes && recipes.filter(r => r.recipe_type !== 'side').length > 0 && (
               <>
                 {showAllMeals ? (
@@ -464,24 +490,30 @@ export default function PreferencesSheet({ onClose }) {
             </div>
             <form onSubmit={async (e) => {
               e.preventDefault()
-              if (!addSideText.trim()) return
+              if (!addSideText.trim() || sideDupe) return
               try {
                 const result = await api.addRecipe(addSideText.trim(), 'side')
                 setAddSideText('')
+                setSideDupe(false)
                 if (result.id) setNewRecipeId(result.id)
                 const data = await api.getRecipes()
                 setRecipes(data.recipes)
               } catch { /* reload on next open */ }
             }} className="prefs-add-row">
               <input
-                className="prefs-add-input"
+                className={`prefs-add-input${sideDupe ? ' prefs-dupe' : ''}`}
                 type="text"
                 placeholder="Add a side..."
                 value={addSideText}
-                onChange={(e) => setAddSideText(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setAddSideText(val)
+                  setSideDupe(val.trim() && recipes && recipes.some(r => r.recipe_type === 'side' && r.name.toLowerCase() === val.trim().toLowerCase()))
+                }}
               />
-              <button className="btn primary" type="submit">+</button>
+              <button className="btn primary" type="submit" disabled={sideDupe}>+</button>
             </form>
+            {sideDupe && <div className="prefs-dupe-msg">Already exists</div>}
             {recipes && recipes.filter(r => r.recipe_type === 'side').length > 0 && (
               <>
                 {showAllSides ? (
@@ -614,9 +646,22 @@ export default function PreferencesSheet({ onClose }) {
               <span className="prefs-list-name">NOVA processing scores</span>
               <span className="prefs-list-meta">On</span>
             </div>
+            <div className="prefs-btl-info">
+              Classifies foods by processing level (1 = unprocessed, 4 = ultra-processed). Data from <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener noreferrer">Open Food Facts</a>.
+            </div>
+            <div className="prefs-list-item">
+              <span className="prefs-list-name">Nutri-Score</span>
+              <span className="prefs-list-meta">On</span>
+            </div>
+            <div className="prefs-btl-info">
+              Rates overall nutritional quality from A (best) to E. Data from <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener noreferrer">Open Food Facts</a>.
+            </div>
             <div className="prefs-list-item">
               <span className="prefs-list-name">Brand ownership</span>
               <span className="prefs-list-meta">On</span>
+            </div>
+            <div className="prefs-btl-info">
+              Shows the parent company behind each brand, so you know who you're buying from.
             </div>
           </div>
         </AccordionSection>

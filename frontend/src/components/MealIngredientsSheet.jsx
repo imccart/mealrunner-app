@@ -6,6 +6,7 @@ import AutocompleteInput from './AutocompleteInput'
 function IngredientSection({ title, recipeId, allIngredients }) {
   const [ingredients, setIngredients] = useState(null)
   const [addText, setAddText] = useState('')
+  const [renamed, setRenamed] = useState(null)
 
   useEffect(() => {
     if (recipeId) {
@@ -20,8 +21,12 @@ function IngredientSection({ title, recipeId, allIngredients }) {
   const handleAdd = async (name) => {
     if (!name.trim()) return
     try {
-      await api.addRecipeIngredient(recipeId, name.trim())
+      const result = await api.addRecipeIngredient(recipeId, name.trim())
       setAddText('')
+      if (result.renamed_from) {
+        setRenamed({ from: result.renamed_from, to: result.name })
+        setTimeout(() => setRenamed(null), 4000)
+      }
       const data = await api.getRecipeIngredients(recipeId)
       setIngredients(data.ingredients)
     } catch { /* ignore */ }
@@ -68,6 +73,7 @@ function IngredientSection({ title, recipeId, allIngredients }) {
             />
             <button className="btn primary" onClick={() => addText.trim() && handleAdd(addText)}>+</button>
           </div>
+          {renamed && <div className="prefs-renamed-hint">"{renamed.from}" added as "{renamed.to}"</div>}
         </>
       )}
     </div>
@@ -86,7 +92,7 @@ export default function MealIngredientsSheet({ meal, onClose }) {
   return (
     <Sheet onClose={onClose} className="meal-ingredients-sheet">
       <div className="sheet-title">Ingredients</div>
-      <div className="sheet-sub">{meal.recipe_name}{meal.side ? ` + ${meal.side}` : ''}</div>
+      <div className="sheet-sub">{meal.recipe_name}{meal.sides?.length > 0 ? ` + ${meal.sides.map(s => s.name).join(', ')}` : ''}</div>
 
       <IngredientSection
         title={meal.recipe_name}
@@ -94,13 +100,16 @@ export default function MealIngredientsSheet({ meal, onClose }) {
         allIngredients={allIngredients}
       />
 
-      {meal.side_recipe_id && (
-        <IngredientSection
-          title={meal.side}
-          recipeId={meal.side_recipe_id}
-          allIngredients={allIngredients}
-        />
-      )}
+      {meal.sides?.map((side, idx) => (
+        side.side_recipe_id && (
+          <IngredientSection
+            key={`${side.side_recipe_id}-${idx}`}
+            title={side.name}
+            recipeId={side.side_recipe_id}
+            allIngredients={allIngredients}
+          />
+        )
+      ))}
     </Sheet>
   )
 }

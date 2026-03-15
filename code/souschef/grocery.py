@@ -23,21 +23,24 @@ def build_grocery_list(
     agg: dict[int, dict] = {}
 
     for meal in meals:
-        # Add side dish ingredients from recipe_ingredients (DB-backed sides)
-        if meal.side_recipe_id:
+        # Add side dish ingredients from all sides
+        for side in meal.sides:
+            if not side.side_recipe_id:
+                continue
             side_rows = conn.execute(
                 text("""SELECT ri.ingredient_id, ri.quantity, ri.unit,
                           i.name, i.store_pref, i.aisle, i.is_pantry_staple, i.category
                    FROM recipe_ingredients ri
                    JOIN ingredients i ON i.id = ri.ingredient_id
                    WHERE ri.recipe_id = :recipe_id"""),
-                {"recipe_id": meal.side_recipe_id},
+                {"recipe_id": side.side_recipe_id},
             ).fetchall()
+            side_label = side.side_name or meal.recipe_name
             for sr in side_rows:
                 iid = sr["ingredient_id"]
                 if iid in agg:
                     agg[iid]["quantity"] += sr["quantity"]
-                    agg[iid]["meals"].add(meal.side or meal.recipe_name)
+                    agg[iid]["meals"].add(side_label)
                 else:
                     agg[iid] = {
                         "quantity": sr["quantity"],
@@ -47,7 +50,7 @@ def build_grocery_list(
                         "name": sr["name"],
                         "is_staple": bool(sr["is_pantry_staple"]),
                         "category": sr["category"],
-                        "meals": {meal.side or meal.recipe_name},
+                        "meals": {side_label},
                     }
 
         if meal.recipe_id is None:

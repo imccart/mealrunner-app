@@ -157,9 +157,9 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     } catch { /* silent — checkbox stays in current state */ }
   }
 
-  const handleSetMeal = async (date, recipeId, sideRecipeId, sideName) => {
+  const handleSetMeal = async (date, recipeId, sides) => {
     try {
-      const result = await api.setMeal(date, recipeId, sideRecipeId, sideName)
+      const result = await api.setMeal(date, recipeId, sides)
       setData(result)
       setPickerDate(null)
       setPickerMode(null)
@@ -181,9 +181,9 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     setSidePickerDate(date)
   }
 
-  const handleSetSide = async (date, side, sideRecipeId) => {
+  const handleSetSide = async (date, sides) => {
     try {
-      const result = await api.setSide(date, side, sideRecipeId)
+      const result = await api.setSide(date, sides)
       setData(result)
       setSidePickerDate(null)
     } catch { await load() }
@@ -237,7 +237,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const actionDay = actionDate ? days.find(d => d.date === actionDate) : null
   const actionMeal = actionDay?.meal
   const actionIsFreeform = actionMeal && !actionMeal.recipe_id
-  const actionHasSide = actionMeal && actionMeal.side && !actionIsFreeform
+  const actionHasSide = actionMeal && actionMeal.sides?.length > 0 && !actionIsFreeform
   const actionDayName = actionDate
     ? new Date(actionDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })
     : ''
@@ -277,7 +277,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                 {meal ? (
                   <>
                     <div className="meal-name">{meal.recipe_name}</div>
-                    {meal.side && <div className="meal-side-text">{meal.side}</div>}
+                    {meal.sides?.length > 0 && <div className="meal-side-text">{meal.sides.map(s => s.name).join(', ')}</div>}
                   </>
                 ) : (
                   <div className="meal-name freeform">No meal</div>
@@ -329,7 +329,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
               <div className="meal-day">{day_short}</div>
               <div className="meal-info">
                 <div className={`meal-name ${isFreeform ? 'freeform' : ''}`}>{meal.recipe_name}</div>
-                {meal.side && <div className="meal-side-text">{meal.side}</div>}
+                {meal.sides?.length > 0 && <div className="meal-side-text">{meal.sides.map(s => s.name).join(', ')}</div>}
               </div>
               <div className="meal-actions" onClick={(e) => e.stopPropagation()}>
                 {!isFreeform && (
@@ -349,7 +349,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
       {actionDate && actionMeal && (
         <Sheet onClose={() => setActionDate(null)}>
             <div className="sheet-title">{actionDayName}</div>
-            <div className="sheet-sub">{actionMeal.recipe_name}{actionMeal.side ? ` + ${actionMeal.side}` : ''}</div>
+            <div className="sheet-sub">{actionMeal.recipe_name}{actionMeal.sides?.length > 0 ? ` + ${actionMeal.sides.map(s => s.name).join(', ')}` : ''}</div>
             <div className="sheet-options">
               <button className="sheet-option" onClick={() => handleReplace(actionDate)}>
                 <div className="sheet-opt-icon">{'\u{1F504}'}</div>
@@ -358,12 +358,12 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                   <div className="sheet-opt-desc">Pick something else</div>
                 </div>
               </button>
-              {actionHasSide && (
+              {!actionIsFreeform && (
                 <button className="sheet-option" onClick={() => handleOpenSidePicker(actionDate)}>
                   <div className="sheet-opt-icon">{'\u{1F951}'}</div>
                   <div>
-                    <div className="sheet-opt-title">Change side</div>
-                    <div className="sheet-opt-desc">Keep the meal, swap the side dish</div>
+                    <div className="sheet-opt-title">{actionHasSide ? 'Change sides' : 'Add sides'}</div>
+                    <div className="sheet-opt-desc">{actionHasSide ? 'Keep the meal, change side dishes' : 'Pick side dishes for this meal'}</div>
                   </div>
                 </button>
               )}
@@ -426,7 +426,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
         <MealPickerSheet
           date={pickerDate}
           dayName={pickerDayName}
-          onSelect={(recipeId, sideId, sideName) => handleSetMeal(pickerDate, recipeId, sideId, sideName)}
+          onSelect={(recipeId, sides) => handleSetMeal(pickerDate, recipeId, sides)}
           onFreeform={(name) => handleFreeform(pickerDate, name)}
           onClose={() => { setPickerDate(null); setPickerMode(null) }}
         />
@@ -445,7 +445,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
         <SidePickerSheet
           date={sidePickerDate}
           mealName={days.find(d => d.date === sidePickerDate)?.meal?.recipe_name || ''}
-          onSelect={(side, sideRecipeId) => handleSetSide(sidePickerDate, side, sideRecipeId)}
+          onSelect={(sides) => handleSetSide(sidePickerDate, sides)}
           onClose={() => setSidePickerDate(null)}
         />
       )}

@@ -148,6 +148,15 @@ meals = Table(
     Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
 )
 
+meal_sides = Table(
+    "meal_sides", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("meal_id", Integer, ForeignKey("meals.id", ondelete="CASCADE"), nullable=False),
+    Column("side_recipe_id", Integer, ForeignKey("recipes.id"), nullable=True),
+    Column("side_name", Text, nullable=False, server_default=text("''")),
+    Column("position", Integer, nullable=False, server_default=text("0")),
+)
+
 grocery_runs = Table(
     "grocery_runs", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),

@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from sqlalchemy import text
 
 from souschef.database import DictConnection
-from souschef.models import Meal, MealWeek
+from souschef.models import Meal, MealSide, MealWeek
 from souschef.recipes import filter_recipes, get_recipe_by_name
 
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -83,6 +83,32 @@ def load_rolling_week(conn: DictConnection, user_id: str, days: int = 10) -> Mea
     return MealWeek(start_date=s, end_date=e, meals=meals)
 
 
+def _resolve_side(conn: DictConnection, user_id: str, side_name: str) -> int:
+    """Find or create a side recipe by name. Returns recipe ID."""
+    row = conn.execute(
+        text("SELECT id FROM recipes WHERE LOWER(name) = :name AND user_id = :uid AND recipe_type = 'side'"),
+        {"name": side_name.lower(), "uid": user_id},
+    ).fetchone()
+    if row:
+        return row["id"]
+    # Use ON CONFLICT to handle concurrent requests
+    cur = conn.execute(
+        text("""INSERT INTO recipes (name, user_id, recipe_type, effort, cleanup)
+           VALUES (:name, :uid, 'side', 'easy', 'easy')
+           ON CONFLICT (name, user_id) DO NOTHING RETURNING id"""),
+        {"name": side_name, "uid": user_id},
+    )
+    result = cur.fetchone()
+    if result:
+        return result["id"]
+    # Race: another request created it first — re-fetch
+    row = conn.execute(
+        text("SELECT id FROM recipes WHERE LOWER(name) = :name AND user_id = :uid AND recipe_type = 'side'"),
+        {"name": side_name.lower(), "uid": user_id},
+    ).fetchone()
+    return row["id"]
+
+
 def _assign_side(conn: DictConnection, user_id: str, used_side_ids: list[int]) -> tuple[int | None, str]:
     """Pick a random side recipe from user's sides, avoiding recently used ones.
     Returns (side_recipe_id, side_name)."""
@@ -111,18 +137,34 @@ def load_meals(conn: DictConnection, user_id: str, start_date: str, end_date: st
            ORDER BY m.slot_date"""),
         {"user_id": user_id, "start_date": start_date, "end_date": end_date},
     ).fetchall()
-    return [
+    meals = [
         Meal(
             id=r["id"], slot_date=r["slot_date"], recipe_id=r["recipe_id"],
             recipe_name=r["rname"] or "", status=r["status"],
-            side=r["side"], locked=bool(r["locked"]),
+            locked=bool(r["locked"]),
             is_followup=bool(r["is_followup"]),
             on_grocery=bool(r["on_grocery"]),
-            side_recipe_id=r["side_recipe_id"],
             created_at=r["created_at"],
         )
         for r in rows
     ]
+    # Bulk-load sides from junction table
+    meal_ids = [m.id for m in meals if m.id]
+    if meal_ids:
+        placeholders = ",".join(str(mid) for mid in meal_ids)
+        side_rows = conn.execute(
+            text(f"SELECT * FROM meal_sides WHERE meal_id IN ({placeholders}) ORDER BY meal_id, position"),
+        ).fetchall()
+        sides_by_meal: dict[int, list[MealSide]] = {}
+        for sr in side_rows:
+            sides_by_meal.setdefault(sr["meal_id"], []).append(
+                MealSide(id=sr["id"], side_recipe_id=sr["side_recipe_id"],
+                         side_name=sr["side_name"], position=sr["position"])
+            )
+        for m in meals:
+            if m.id in sides_by_meal:
+                m.sides = sides_by_meal[m.id]
+    return meals
 
 
 
@@ -132,25 +174,42 @@ def save_meals(conn: DictConnection, user_id: str, meals: list[Meal]) -> list[Me
         if meal.id:
             conn.execute(
                 text("""UPDATE meals SET recipe_id = :recipe_id, recipe_name = :recipe_name, status = :status,
-                   side = :side, side_recipe_id = :side_recipe_id, locked = :locked, is_followup = :is_followup, on_grocery = :on_grocery
+                   locked = :locked, is_followup = :is_followup, on_grocery = :on_grocery
                    WHERE id = :id AND user_id = :user_id"""),
                 {"recipe_id": meal.recipe_id, "recipe_name": meal.recipe_name, "status": meal.status,
-                 "side": meal.side, "side_recipe_id": meal.side_recipe_id, "locked": int(meal.locked),
+                 "locked": int(meal.locked),
                  "is_followup": int(meal.is_followup),
                  "on_grocery": int(meal.on_grocery), "id": meal.id, "user_id": user_id},
             )
         else:
             cur = conn.execute(
-                text("""INSERT INTO meals (user_id, slot_date, recipe_id, recipe_name, status, side, side_recipe_id, locked, is_followup, on_grocery)
-                   VALUES (:user_id, :slot_date, :recipe_id, :recipe_name, :status, :side, :side_recipe_id, :locked, :is_followup, :on_grocery)
+                text("""INSERT INTO meals (user_id, slot_date, recipe_id, recipe_name, status, locked, is_followup, on_grocery)
+                   VALUES (:user_id, :slot_date, :recipe_id, :recipe_name, :status, :locked, :is_followup, :on_grocery)
                    RETURNING id"""),
                 {"user_id": user_id, "slot_date": meal.slot_date, "recipe_id": meal.recipe_id, "recipe_name": meal.recipe_name,
-                 "status": meal.status, "side": meal.side, "side_recipe_id": meal.side_recipe_id, "locked": int(meal.locked),
+                 "status": meal.status, "locked": int(meal.locked),
                  "is_followup": int(meal.is_followup), "on_grocery": int(meal.on_grocery)},
             )
             meal.id = cur.fetchone()["id"]
+        # Sync sides to junction table
+        _save_meal_sides(conn, meal)
     conn.commit()
     return meals
+
+
+def _save_meal_sides(conn: DictConnection, meal: Meal) -> None:
+    """Sync meal_sides rows for a meal (delete + reinsert)."""
+    if not meal.id:
+        return
+    conn.execute(text("DELETE FROM meal_sides WHERE meal_id = :mid"), {"mid": meal.id})
+    for i, side in enumerate(meal.sides):
+        cur = conn.execute(
+            text("""INSERT INTO meal_sides (meal_id, side_recipe_id, side_name, position)
+               VALUES (:mid, :sid, :sname, :pos) RETURNING id"""),
+            {"mid": meal.id, "sid": side.side_recipe_id, "sname": side.side_name, "pos": i},
+        )
+        side.id = cur.fetchone()["id"]
+        side.position = i
 
 
 def save_meal(conn: DictConnection, user_id: str, meal: Meal) -> Meal:
@@ -264,13 +323,13 @@ def fill_dates(
     # Schedule same-range follow-ups
     _schedule_same_range_followups(conn, all_meals, new_meals, used_ids, user_id)
 
-    # Assign sides
-    used_side_ids = [m.side_recipe_id for m in existing if m.side_recipe_id]
+    # Assign sides (one auto-assigned side per new meal)
+    used_side_ids = [s.side_recipe_id for m in existing for s in m.sides if s.side_recipe_id]
     for meal in new_meals:
         if meal.recipe_name and meal.recipe_name != "Eating Out":
             side_id, side_name = _assign_side(conn, user_id, used_side_ids)
-            meal.side = side_name
-            meal.side_recipe_id = side_id
+            if side_id or side_name:
+                meal.sides = [MealSide(id=None, side_recipe_id=side_id, side_name=side_name, position=0)]
             if side_id:
                 used_side_ids.append(side_id)
 
@@ -418,10 +477,12 @@ def swap_meal(conn: DictConnection, user_id: str, slot_date: str) -> Meal:
     meal.recipe_name = recipe.name if recipe else "No match"
     meal.on_grocery = True
 
-    used_side_ids = [m.side_recipe_id for m in week_meals if m.slot_date != slot_date and m.side_recipe_id]
+    used_side_ids = [s.side_recipe_id for m in week_meals if m.slot_date != slot_date for s in m.sides if s.side_recipe_id]
     side_id, side_name = _assign_side(conn, user_id, used_side_ids)
-    meal.side = side_name
-    meal.side_recipe_id = side_id
+    if side_id or side_name:
+        meal.sides = [MealSide(id=None, side_recipe_id=side_id, side_name=side_name, position=0)]
+    else:
+        meal.sides = []
 
     save_meal(conn, user_id, meal)
     return meal
@@ -435,12 +496,15 @@ def swap_meal_side(conn: DictConnection, user_id: str, slot_date: str) -> Meal:
     if meal is None:
         return None
 
-    used_side_ids = [m.side_recipe_id for m in week_meals if m.slot_date != slot_date and m.side_recipe_id]
-    if meal.side_recipe_id:
-        used_side_ids.append(meal.side_recipe_id)
+    used_side_ids = [s.side_recipe_id for m in week_meals if m.slot_date != slot_date for s in m.sides if s.side_recipe_id]
+    for s in meal.sides:
+        if s.side_recipe_id:
+            used_side_ids.append(s.side_recipe_id)
     side_id, side_name = _assign_side(conn, user_id, used_side_ids)
-    meal.side = side_name
-    meal.side_recipe_id = side_id
+    if side_id or side_name:
+        meal.sides = [MealSide(id=None, side_recipe_id=side_id, side_name=side_name, position=0)]
+    else:
+        meal.sides = []
 
     save_meal(conn, user_id, meal)
     return meal
@@ -458,13 +522,19 @@ def swap_dates(conn: DictConnection, user_id: str, date_a: str, date_b: str) -> 
     ).fetchall()
     meal_a = _row_to_meal(rows_a[0]) if rows_a else None
     meal_b = _row_to_meal(rows_b[0]) if rows_b else None
+    if meal_a:
+        _load_meal_sides(conn, meal_a)
+    if meal_b:
+        _load_meal_sides(conn, meal_b)
 
     if meal_a and meal_b:
-        for attr in ("recipe_id", "recipe_name", "is_followup", "side", "side_recipe_id"):
+        for attr in ("recipe_id", "recipe_name", "is_followup"):
             val_a = getattr(meal_a, attr)
             val_b = getattr(meal_b, attr)
             setattr(meal_a, attr, val_b)
             setattr(meal_b, attr, val_a)
+        # Swap sides lists
+        meal_a.sides, meal_b.sides = meal_b.sides, meal_a.sides
         save_meals(conn, user_id, [meal_a, meal_b])
 
     s, e = week_range(date_a)
@@ -473,9 +543,13 @@ def swap_dates(conn: DictConnection, user_id: str, date_a: str, date_b: str) -> 
 
 def set_meal(
     conn: DictConnection, user_id: str, slot_date: str, recipe_name: str,
-    side_recipe_id: int | None = None, side_name: str | None = None,
+    sides: list[dict] | None = None,
 ) -> Meal | str:
-    """Manually set a date's recipe by name. No rule enforcement."""
+    """Manually set a date's recipe by name. No rule enforcement.
+
+    sides: list of {"side_recipe_id": int|None, "side_name": str} dicts, max 3.
+           If None, auto-assigns one random side.
+    """
     recipe = get_recipe_by_name(conn, recipe_name, user_id=user_id)
     if recipe is None:
         row = conn.execute(
@@ -494,6 +568,13 @@ def set_meal(
     ).fetchone()
     if existing:
         meal = _row_to_meal(existing)
+        # Load existing sides
+        side_rows = conn.execute(
+            text("SELECT * FROM meal_sides WHERE meal_id = :mid ORDER BY position"),
+            {"mid": meal.id},
+        ).fetchall()
+        meal.sides = [MealSide(id=sr["id"], side_recipe_id=sr["side_recipe_id"],
+                               side_name=sr["side_name"], position=sr["position"]) for sr in side_rows]
     else:
         meal = Meal(id=None, slot_date=slot_date)
 
@@ -502,18 +583,26 @@ def set_meal(
     meal.is_followup = False
     meal.on_grocery = True
 
-    if side_name is not None:
-        # User explicitly chose a side (or no side)
-        meal.side = side_name
-        meal.side_recipe_id = side_recipe_id
+    if sides is not None:
+        # User explicitly chose sides (may be empty list = no sides)
+        resolved = []
+        for i, s in enumerate(sides[:3]):
+            sid = s.get("side_recipe_id")
+            sname = s.get("side_name", "")
+            if not sid and sname:
+                sid = _resolve_side(conn, user_id, sname)
+            resolved.append(MealSide(id=None, side_recipe_id=sid, side_name=sname, position=i))
+        meal.sides = resolved
     else:
         # Auto-assign a random side
         s, e = rolling_range()
         week_meals = load_meals(conn, user_id, s, e)
-        used_side_ids = [m.side_recipe_id for m in week_meals if m.slot_date != slot_date and m.side_recipe_id]
+        used_side_ids = [sd.side_recipe_id for m in week_meals if m.slot_date != slot_date for sd in m.sides if sd.side_recipe_id]
         sid, sname = _assign_side(conn, user_id, used_side_ids)
-        meal.side = sname
-        meal.side_recipe_id = sid
+        if sid or sname:
+            meal.sides = [MealSide(id=None, side_recipe_id=sid, side_name=sname, position=0)]
+        else:
+            meal.sides = []
 
     save_meal(conn, user_id, meal)
     return meal
@@ -545,8 +634,7 @@ def set_freeform_meal(conn: DictConnection, user_id: str, slot_date: str, name: 
 
     meal.recipe_id = None
     meal.recipe_name = name
-    meal.side = ""
-    meal.side_recipe_id = None
+    meal.sides = []
     meal.is_followup = False
     meal.on_grocery = True
     save_meal(conn, user_id, meal)
@@ -588,9 +676,16 @@ def toggle_grocery(conn: DictConnection, user_id: str, slot_date: str) -> Meal |
     ).fetchone()
     if not row:
         return None
+    new_val = 0 if row["on_grocery"] else 1
+    conn.execute(
+        text("UPDATE meals SET on_grocery = :val WHERE id = :id"),
+        {"val": new_val, "id": row["id"]},
+    )
+    conn.commit()
     meal = _row_to_meal(row)
-    meal.on_grocery = not meal.on_grocery
-    save_meal(conn, user_id, meal)
+    meal.on_grocery = bool(new_val)
+    # Load sides for return value
+    _load_meal_sides(conn, meal)
     return meal
 
 
@@ -606,14 +701,28 @@ def set_all_grocery(conn: DictConnection, user_id: str, start_date: str, end_dat
 
 # ── Helpers ─────────────────────────────────────────────
 
+def _load_meal_sides(conn: DictConnection, meal: Meal) -> None:
+    """Load sides from junction table into a meal."""
+    if not meal.id:
+        return
+    side_rows = conn.execute(
+        text("SELECT * FROM meal_sides WHERE meal_id = :mid ORDER BY position"),
+        {"mid": meal.id},
+    ).fetchall()
+    meal.sides = [
+        MealSide(id=sr["id"], side_recipe_id=sr["side_recipe_id"],
+                 side_name=sr["side_name"], position=sr["position"])
+        for sr in side_rows
+    ]
+
+
 def _row_to_meal(row) -> Meal:
     return Meal(
         id=row["id"], slot_date=row["slot_date"],
         recipe_id=row["recipe_id"], recipe_name=row["recipe_name"],
-        status=row["status"], side=row["side"],
+        status=row["status"],
         locked=bool(row["locked"]), is_followup=bool(row["is_followup"]),
         on_grocery=bool(row["on_grocery"]),
-        side_recipe_id=row["side_recipe_id"],
     )
 
 

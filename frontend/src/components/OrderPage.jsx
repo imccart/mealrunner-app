@@ -17,16 +17,26 @@ function NutriBadge({ grade }) {
 }
 
 function ProductInsights({ nova, nutriscore }) {
+  const [showInfo, setShowInfo] = useState(false)
   if (!nova && !nutriscore) return null
   return (
     <div className="product-insights">
       <NovaBadge nova={nova} />
       <NutriBadge grade={nutriscore} />
+      <button className="info-dot" onClick={(e) => { e.stopPropagation(); setShowInfo(!showInfo) }} title="What is this?">{'\u24D8'}</button>
+      {showInfo && (
+        <div className="info-tooltip" onClick={(e) => e.stopPropagation()}>
+          {nova && <>NOVA classifies foods by processing level. </>}
+          {nutriscore && <>Nutri-Score rates nutritional quality (A=best). </>}
+          Data from Open Food Facts.
+        </div>
+      )}
     </div>
   )
 }
 
 function ParentCoBadge({ brand, parentCompany, onTapUnknown }) {
+  const [showInfo, setShowInfo] = useState(false)
   if (!parentCompany) return null
   const unknown = parentCompany === "We're not sure"
   return (
@@ -35,6 +45,12 @@ function ParentCoBadge({ brand, parentCompany, onTapUnknown }) {
       onClick={unknown ? (e) => { e.stopPropagation(); onTapUnknown(brand) } : undefined}
     >
       Parent Co.: {parentCompany}{unknown && ' \u00B7 ?'}
+      {!unknown && <button className="info-dot" onClick={(e) => { e.stopPropagation(); setShowInfo(!showInfo) }} title="What is this?">{'\u24D8'}</button>}
+      {showInfo && (
+        <div className="info-tooltip" onClick={(e) => e.stopPropagation()}>
+          Shows the parent company behind this brand, so you know who you're buying from.
+        </div>
+      )}
     </div>
   )
 }
@@ -63,12 +79,18 @@ export default function OrderPage() {
   const [communityConfirm, setCommunityConfirm] = useState(false)
   const [noStore, setNoStore] = useState(false)
 
+  const [sharedAccountName, setSharedAccountName] = useState(null)
+
   useEffect(() => {
     api.getKrogerHouseholdAccounts().then(data => {
-      setKrogerAccounts(data.accounts || [])
-      const yours = (data.accounts || []).find(a => a.is_you)
+      const accounts = data.accounts || []
+      setKrogerAccounts(accounts)
+      const yours = accounts.find(a => a.is_you)
       if (yours) setSelectedAccount(yours.user_id)
-      else if (data.accounts?.length > 0) setSelectedAccount(data.accounts[0].user_id)
+      else if (accounts.length > 0) {
+        setSelectedAccount(accounts[0].user_id)
+        setSharedAccountName(accounts[0].display_name)
+      }
     }).catch(() => setKrogerAccounts([]))
     api.getKrogerLocation().then(data => setStoreInfo(data)).catch(() => {})
   }, [])
@@ -220,6 +242,9 @@ export default function OrderPage() {
       </div>
       {storeInfo?.address && (
         <div className="store-details-address">{storeInfo.address}</div>
+      )}
+      {sharedAccountName && (
+        <div className="store-details-shared">Ordering through {sharedAccountName}'s account</div>
       )}
     </div>
   )

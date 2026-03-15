@@ -60,6 +60,15 @@ class PantryItem:
 # ── New flat model ──────────────────────────────────────
 
 @dataclass
+class MealSide:
+    """A side dish attached to a meal."""
+    id: int | None
+    side_recipe_id: int | None
+    side_name: str
+    position: int = 0
+
+
+@dataclass
 class Meal:
     """A single meal on a single date — the atomic planning unit."""
     id: int | None
@@ -67,12 +76,21 @@ class Meal:
     recipe_id: int | None = None
     recipe_name: str = ""
     status: str = "suggested"  # legacy, kept for compat
-    side: str = ""
     locked: bool = False
     is_followup: bool = False
     on_grocery: bool = False  # True = ingredients on grocery list
-    side_recipe_id: int | None = None
+    sides: list[MealSide] = field(default_factory=list)
     created_at: str = ""
+
+    @property
+    def side(self) -> str:
+        """Comma-joined side names (backward compat)."""
+        return ", ".join(s.side_name for s in self.sides if s.side_name)
+
+    @property
+    def side_recipe_id(self) -> int | None:
+        """First side's recipe ID (backward compat)."""
+        return self.sides[0].side_recipe_id if self.sides else None
 
     @property
     def weekday(self) -> int:

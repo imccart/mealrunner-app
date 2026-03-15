@@ -18,16 +18,15 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  swapSide: (date) => request(`/meals/${date}/swap-side`, { method: 'POST' }),
   getSides: (date) => request(`/meals/${date}/sides`),
-  setSide: (date, side, sideRecipeId) => request(`/meals/${date}/set-side`, {
+  setSide: (date, sides) => request(`/meals/${date}/set-side`, {
     method: 'POST',
-    body: JSON.stringify({ side, side_recipe_id: sideRecipeId || null }),
+    body: JSON.stringify({ sides }),
   }),
   toggleGrocery: (date) => request(`/meals/${date}/toggle-grocery`, { method: 'POST' }),
-  setMeal: (date, recipeId, sideRecipeId, sideName) => request(`/meals/${date}/set`, {
+  setMeal: (date, recipeId, sides) => request(`/meals/${date}/set`, {
     method: 'POST',
-    body: JSON.stringify({ recipe_id: recipeId, side_recipe_id: sideRecipeId, side_name: sideName }),
+    body: JSON.stringify({ recipe_id: recipeId, sides }),
   }),
   suggestMeals: () => request('/meals/suggest', { method: 'POST' }),
   freshStart: () => request('/meals/fresh-start', { method: 'POST' }),

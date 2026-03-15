@@ -127,57 +127,72 @@ async def swap_meal_smart(date: str, request: Request, body: dict = None):
     conn = _conn()
 
     if action == "preview":
-        # Get the old meal's info before swapping
-        old_meal = conn.execute(
-            text("SELECT recipe_id, recipe_name, on_grocery FROM meals WHERE slot_date = :date AND user_id = :user_id"),
-            {"date": date, "user_id": user_id},
-        ).fetchone()
-        old_was_on_list = old_meal and old_meal["on_grocery"]
+        # Wrap read-swap-read in a transaction to prevent interleaving
+        with conn.begin():
+            # Get the old meal's info before swapping
+            old_meal = conn.execute(
+                text("SELECT recipe_id, recipe_name, on_grocery FROM meals WHERE slot_date = :date AND user_id = :user_id"),
+                {"date": date, "user_id": user_id},
+            ).fetchone()
+            old_was_on_list = old_meal and old_meal["on_grocery"]
 
-        # Find old meal's unique ingredients (not shared by other on-list meals)
-        removable = []
-        if old_was_on_list and old_meal["recipe_id"]:
-            mw = load_rolling_week(conn, user_id)
-            # Get all ingredients for the OLD meal
-            old_ingredients = set()
-            rows = conn.execute(
-                text("""SELECT i.name FROM recipe_ingredients ri
-                   JOIN ingredients i ON ri.ingredient_id = i.id
-                   WHERE ri.recipe_id = :recipe_id"""),
-                {"recipe_id": old_meal["recipe_id"]},
-            ).fetchall()
-            old_ingredients = {r["name"].lower() for r in rows}
+            # Find old meal's unique ingredients (not shared by other on-list meals)
+            removable = []
+            if old_was_on_list and old_meal["recipe_id"]:
+                mw = load_rolling_week(conn, user_id)
+                # Get all ingredients for the OLD meal (including sides)
+                old_ingredients = set()
+                old_recipe_ids = [old_meal["recipe_id"]]
+                # Also gather side recipe IDs
+                old_meal_row = conn.execute(
+                    text("SELECT id FROM meals WHERE slot_date = :date AND user_id = :user_id"),
+                    {"date": date, "user_id": user_id},
+                ).fetchone()
+                if old_meal_row:
+                    side_rows = conn.execute(
+                        text("SELECT side_recipe_id FROM meal_sides WHERE meal_id = :mid AND side_recipe_id IS NOT NULL"),
+                        {"mid": old_meal_row["id"]},
+                    ).fetchall()
+                    old_recipe_ids.extend(sr["side_recipe_id"] for sr in side_rows)
 
-            # Get ingredients shared by OTHER on-list meals
-            shared = set()
-            for m in mw.meals:
-                if m.on_grocery and m.recipe_id and m.slot_date != date:
-                    other_rows = conn.execute(
+                for rid in old_recipe_ids:
+                    rows = conn.execute(
                         text("""SELECT i.name FROM recipe_ingredients ri
                            JOIN ingredients i ON ri.ingredient_id = i.id
                            WHERE ri.recipe_id = :recipe_id"""),
-                        {"recipe_id": m.recipe_id},
+                        {"recipe_id": rid},
                     ).fetchall()
-                    shared |= {r["name"].lower() for r in other_rows}
+                    old_ingredients |= {r["name"].lower() for r in rows}
 
-            # Removable = old ingredients not shared, not already checked/ordered
-            trip = _get_active_trip(conn, user_id)
-            if trip:
-                for name_lower in old_ingredients - shared:
-                    item = conn.execute(
-                        text("SELECT checked, ordered FROM trip_items WHERE trip_id = :trip_id AND LOWER(name) = :name"),
-                        {"trip_id": trip["id"], "name": name_lower},
-                    ).fetchone()
-                    if item and not item["checked"] and not item["ordered"]:
-                        # Get display name from trip_items
-                        display = conn.execute(
-                            text("SELECT name FROM trip_items WHERE trip_id = :trip_id AND LOWER(name) = :name"),
+                # Get ingredients shared by OTHER on-list meals (including their sides)
+                shared = set()
+                for m in mw.meals:
+                    if m.on_grocery and m.slot_date != date:
+                        share_ids = [m.recipe_id] if m.recipe_id else []
+                        share_ids.extend(s.side_recipe_id for s in m.sides if s.side_recipe_id)
+                        for rid in share_ids:
+                            other_rows = conn.execute(
+                                text("""SELECT i.name FROM recipe_ingredients ri
+                                   JOIN ingredients i ON ri.ingredient_id = i.id
+                                   WHERE ri.recipe_id = :recipe_id"""),
+                                {"recipe_id": rid},
+                            ).fetchall()
+                            shared |= {r["name"].lower() for r in other_rows}
+
+                # Removable = old ingredients not shared, not already checked/ordered
+                trip = _get_active_trip(conn, user_id)
+                if trip:
+                    for name_lower in old_ingredients - shared:
+                        item = conn.execute(
+                            text("SELECT name, checked, ordered FROM trip_items WHERE trip_id = :trip_id AND LOWER(name) = :name"),
                             {"trip_id": trip["id"], "name": name_lower},
                         ).fetchone()
-                        removable.append(display["name"] if display else name_lower)
+                        if item and not item["checked"] and not item["ordered"]:
+                            removable.append(item["name"])
 
-        # Now do the swap
-        do_swap(conn, user_id, date)
+            # Now do the swap (commits internally)
+            do_swap(conn, user_id, date)
+
         meals_data = await get_meals(request)
 
         # Get the new meal's name
@@ -200,7 +215,6 @@ async def swap_meal_smart(date: str, request: Request, body: dict = None):
     elif action == "confirm":
         # Apply user's choices
         remove_items = body.get("remove_items", [])
-        add_to_list = body.get("add_to_list", False)
 
         trip = _get_active_trip(conn, user_id)
         if trip:
@@ -211,20 +225,10 @@ async def swap_meal_smart(date: str, request: Request, body: dict = None):
                     {"trip_id": trip["id"], "name": name},
                 )
 
-        if add_to_list:
-            # Toggle on_grocery for the new meal
-            conn.execute(
-                text("UPDATE meals SET on_grocery = 1 WHERE slot_date = :date AND user_id = :user_id"),
-                {"date": date, "user_id": user_id},
-            )
-        else:
-            # "No" = mark cart as done (on_grocery stays false — "I've got this covered")
-            conn.execute(
-                text("UPDATE meals SET on_grocery = 1 WHERE slot_date = :date AND user_id = :user_id"),
-                {"date": date, "user_id": user_id},
-            )
-            # Mark it as on_grocery but we won't add ingredients since refresh handles it
-
+        conn.execute(
+            text("UPDATE meals SET on_grocery = 1 WHERE slot_date = :date AND user_id = :user_id"),
+            {"date": date, "user_id": user_id},
+        )
         conn.commit()
 
         # Refresh trip items if there's an active trip
@@ -243,11 +247,18 @@ async def get_sides(date: str, request: Request):
     user_id = request.state.user_id
     conn = _conn()
     meal_row = conn.execute(
-        text("SELECT recipe_name, side, side_recipe_id FROM meals WHERE slot_date = :date AND user_id = :user_id"),
+        text("SELECT id FROM meals WHERE slot_date = :date AND user_id = :user_id"),
         {"date": date, "user_id": user_id},
     ).fetchone()
     if not meal_row:
-        return {"sides": [], "current": None, "fixed": False}
+        return {"sides": [], "current_ids": [], "fixed": False, "max_sides": 3}
+
+    # Get current sides for this meal
+    current_sides = conn.execute(
+        text("SELECT side_recipe_id FROM meal_sides WHERE meal_id = :mid ORDER BY position"),
+        {"mid": meal_row["id"]},
+    ).fetchall()
+    current_ids = [cs["side_recipe_id"] for cs in current_sides if cs["side_recipe_id"]]
 
     # Get user's side recipes
     side_recipes = conn.execute(
@@ -257,23 +268,29 @@ async def get_sides(date: str, request: Request):
 
     s, e = rolling_range()
     week_meals = load_meals(conn, user_id, s, e)
-    used_sides = {m.side for m in week_meals if m.slot_date != date and m.side}
+    used_side_names = set()
+    for m in week_meals:
+        if m.slot_date != date:
+            for sd in m.sides:
+                if sd.side_name:
+                    used_side_names.add(sd.side_name)
 
     sides = []
     for sr in side_recipes:
         sides.append({
             "id": sr["id"],
             "name": sr["name"],
-            "in_use": sr["name"] in used_sides,
-            "current": sr["id"] == meal_row["side_recipe_id"],
+            "in_use": sr["name"] in used_side_names,
+            "current": sr["id"] in current_ids,
         })
-    return {"sides": sides, "current": meal_row["side"], "current_id": meal_row["side_recipe_id"], "fixed": False}
+    return {"sides": sides, "current_ids": current_ids, "fixed": False, "max_sides": 3}
 
 
 @router.post("/meals/{date}/set-side")
 async def set_side(date: str, body: dict, request: Request):
-    """Set a specific side for a date's meal."""
-    from souschef.planner import save_meal, _row_to_meal
+    """Set sides for a date's meal. Accepts {sides: [{side_recipe_id, side_name}, ...]}."""
+    from souschef.planner import save_meal, _row_to_meal, _resolve_side
+    from souschef.models import MealSide
 
     user_id = request.state.user_id
     conn = _conn()
@@ -285,8 +302,15 @@ async def set_side(date: str, body: dict, request: Request):
         return await get_meals(request)
 
     meal = _row_to_meal(row)
-    meal.side = body.get("side", "")
-    meal.side_recipe_id = body.get("side_recipe_id")
+    sides_data = body.get("sides", [])[:3]
+    resolved = []
+    for i, s in enumerate(sides_data):
+        sid = s.get("side_recipe_id")
+        sname = s.get("side_name", "")
+        if not sid and sname:
+            sid = _resolve_side(conn, user_id, sname)
+        resolved.append(MealSide(id=None, side_recipe_id=sid, side_name=sname, position=i))
+    meal.sides = resolved
     save_meal(conn, user_id, meal)
     return await get_meals(request)
 
@@ -322,9 +346,8 @@ async def set_meal(date: str, body: dict, request: Request):
         return {"ok": False, "error": "recipe_id required"}
     recipe = get_recipe(conn, body["recipe_id"])
     if recipe:
-        side_recipe_id = body.get("side_recipe_id")
-        side_name = body.get("side_name")
-        do_set(conn, user_id, date, recipe.name, side_recipe_id=side_recipe_id, side_name=side_name)
+        sides = body.get("sides")  # list of {side_recipe_id, side_name} or None
+        do_set(conn, user_id, date, recipe.name, sides=sides)
     return await get_meals(request)
 
 
@@ -1716,7 +1739,7 @@ async def get_regulars(request: Request):
 
     user_id = request.state.user_id
     conn = _conn()
-    regulars = list_regulars(conn, user_id, active_only=False)
+    regulars = list_regulars(conn, user_id, active_only=True)
     return {
         "regulars": [
             {
@@ -1987,7 +2010,10 @@ async def add_recipe_ingredient(recipe_id: int, body: dict, request: Request):
         {"rid": recipe_id, "iid": ingredient_id},
     )
     conn.commit()
-    return {"ok": True}
+    result = {"ok": True, "name": name}
+    if name.lower() != raw_name.lower():
+        result["renamed_from"] = raw_name
+    return result
 
 
 @router.delete("/recipes/{recipe_id}/ingredients/{ri_id}")
@@ -2938,8 +2964,12 @@ def _meal_dict(m) -> dict:
         "slot_date": m.slot_date,
         "recipe_id": m.recipe_id,
         "recipe_name": m.recipe_name,
-        "side": m.side,
-        "side_recipe_id": m.side_recipe_id,
+        "side": m.side,  # backward compat: comma-joined side names
+        "side_recipe_id": m.side_recipe_id,  # backward compat: first side's recipe ID
+        "sides": [
+            {"id": s.id, "side_recipe_id": s.side_recipe_id, "name": s.side_name, "position": s.position}
+            for s in m.sides
+        ],
         "locked": m.locked,
         "is_followup": m.is_followup,
         "on_grocery": m.on_grocery,

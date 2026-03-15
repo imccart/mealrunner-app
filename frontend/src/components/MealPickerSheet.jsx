@@ -15,6 +15,8 @@ function daysAgo(dateStr) {
   return `${Math.floor(diff / 30)}mo ago`
 }
 
+const MAX_SIDES = 3
+
 export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, onClose }) {
   const [data, setData] = useState(null)
   const [history, setHistory] = useState(null)
@@ -23,6 +25,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
   const [pickedRecipe, setPickedRecipe] = useState(null)
   const [sides, setSides] = useState(null)
   const [sideSearch, setSideSearch] = useState('')
+  const [selectedSides, setSelectedSides] = useState([])
 
   useEffect(() => {
     Promise.all([
@@ -41,17 +44,36 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
     }
   }, [pickedRecipe, date])
 
-  // Step 2: Side selection
+  const toggleSide = (side) => {
+    setSelectedSides(prev => {
+      const exists = prev.find(s => s.id === side.id)
+      if (exists) return prev.filter(s => s.id !== side.id)
+      if (prev.length >= MAX_SIDES) return prev
+      return [...prev, side]
+    })
+  }
+
+  const confirmSides = () => {
+    const sidesPayload = selectedSides.map(s => ({
+      side_recipe_id: s.custom ? null : s.id,
+      side_name: s.name,
+    }))
+    onSelect(pickedRecipe.id, sidesPayload)
+  }
+
+  // Step 2: Side selection (multi-select)
   if (pickedRecipe) {
     const query = sideSearch.trim().toLowerCase()
     const filtered = query && sides
       ? sides.filter(s => s.name.toLowerCase().includes(query))
       : sides || []
 
+    const selectedIds = new Set(selectedSides.map(s => s.id))
+
     return (
       <Sheet onClose={onClose} className="meal-picker-sheet">
         <div className="sheet-title">{dayName}</div>
-        <div className="sheet-sub">{pickedRecipe.name} + side?</div>
+        <div className="sheet-sub">{pickedRecipe.name} + sides? ({selectedSides.length}/{MAX_SIDES})</div>
         {!sides ? (
           <div className="loading">Loading sides...</div>
         ) : (
@@ -62,37 +84,40 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
               placeholder="Search sides..."
               value={sideSearch}
               onChange={(e) => setSideSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && sideSearch.trim()) {
-                  onSelect(pickedRecipe.id, null, sideSearch.trim())
-                }
-              }}
             />
             {query && filtered.length === 0 ? (
               <div className="picker-results">
-                <button className="picker-option freeform" onClick={() => onSelect(pickedRecipe.id, null, sideSearch.trim())}>
-                  Use "{sideSearch.trim()}" as a side
+                <button className="picker-option freeform" onClick={() => {
+                  if (selectedSides.length < MAX_SIDES) {
+                    const custom = { id: `custom-${sideSearch.trim()}`, name: sideSearch.trim(), custom: true }
+                    setSelectedSides(prev => [...prev, custom])
+                    setSideSearch('')
+                  }
+                }}>
+                  Add "{sideSearch.trim()}" as a side
                 </button>
               </div>
             ) : (
               <div className="picker-pills">
                 {filtered.map(s => (
                   <button
-                    key={s.name}
-                    className={`meal-pill ${s.in_use ? 'in-use' : ''}`}
-                    onClick={() => onSelect(pickedRecipe.id, s.id, s.name)}
+                    key={s.id}
+                    className={`meal-pill ${selectedIds.has(s.id) ? 'selected-side' : ''} ${s.in_use ? 'in-use' : ''}`}
+                    onClick={() => toggleSide(s)}
+                    disabled={!selectedIds.has(s.id) && selectedSides.length >= MAX_SIDES}
                   >
                     {s.name}
+                    {selectedIds.has(s.id) && ' \u2713'}
                   </button>
                 ))}
-                {!query && (
-                  <button className="meal-pill no-side" onClick={() => onSelect(pickedRecipe.id, null, '')}>
-                    No side
-                  </button>
-                )}
               </div>
             )}
-            <button className="picker-back" onClick={() => { setPickedRecipe(null); setSides(null); setSideSearch('') }}>
+            <div className="picker-side-actions">
+              <button className="btn primary" onClick={confirmSides}>
+                {selectedSides.length === 0 ? 'No sides' : `Done (${selectedSides.length})`}
+              </button>
+            </div>
+            <button className="picker-back" onClick={() => { setPickedRecipe(null); setSides(null); setSideSearch(''); setSelectedSides([]) }}>
               {'\u2190'} Back to meals
             </button>
           </>

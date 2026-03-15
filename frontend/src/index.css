@@ -1832,6 +1832,19 @@ main {
   border-color: var(--border);
   color: var(--text-muted);
 }
+.meal-pill.selected-side {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.meal-pill:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.picker-side-actions {
+  margin-top: 16px;
+  text-align: center;
+}
 .picker-back {
   display: block;
   margin: 16px auto 0;
@@ -2198,6 +2211,37 @@ main {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  position: relative;
+}
+
+.info-dot {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.6;
+}
+.info-dot:hover {
+  opacity: 1;
+}
+
+.info-tooltip {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  padding: 6px 0;
+}
+
+.prefs-btl-info {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 0 0 10px;
+  line-height: 1.4;
+}
+.prefs-btl-info a {
+  color: var(--accent);
 }
 
 .parent-co {
@@ -2374,6 +2418,18 @@ main {
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 4px;
+}
+.store-details-shared {
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: 4px;
+  font-style: italic;
+}
+.prefs-shared-account {
+  color: var(--accent);
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+  font-style: italic;
 }
 
 .fulfillment-toggle {
@@ -3318,6 +3374,23 @@ main {
 
 .prefs-add-input::placeholder {
   color: var(--text-muted);
+}
+
+.prefs-add-input.prefs-dupe {
+  border-color: #c44;
+}
+
+.prefs-dupe-msg {
+  color: #c44;
+  font-size: 0.82rem;
+  margin-top: 2px;
+}
+
+.prefs-renamed-hint {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-style: italic;
+  margin-top: 4px;
 }
 
 .prefs-add-select {
