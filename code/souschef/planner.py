@@ -91,15 +91,18 @@ def _resolve_side(conn: DictConnection, user_id: str, side_name: str) -> int:
     ).fetchone()
     if row:
         return row["id"]
+    # Title-case for storage
+    stored_name = side_name.strip().title()
     # Use ON CONFLICT to handle concurrent requests
     cur = conn.execute(
         text("""INSERT INTO recipes (name, user_id, recipe_type, effort, cleanup)
            VALUES (:name, :uid, 'side', 'easy', 'easy')
            ON CONFLICT (name, user_id) DO NOTHING RETURNING id"""),
-        {"name": side_name, "uid": user_id},
+        {"name": stored_name, "uid": user_id},
     )
     result = cur.fetchone()
     if result:
+        _auto_add_side_ingredient(conn, result["id"], stored_name)
         return result["id"]
     # Race: another request created it first — re-fetch
     row = conn.execute(
@@ -107,6 +110,35 @@ def _resolve_side(conn: DictConnection, user_id: str, side_name: str) -> int:
         {"name": side_name.lower(), "uid": user_id},
     ).fetchone()
     return row["id"]
+
+
+def _auto_add_side_ingredient(conn: DictConnection, recipe_id: int, side_name: str) -> None:
+    """Auto-link a matching ingredient when the side name IS the ingredient (e.g., Corn → corn)."""
+    ingredient_name = side_name.lower()
+    row = conn.execute(
+        text("SELECT id FROM ingredients WHERE LOWER(name) = :name"),
+        {"name": ingredient_name},
+    ).fetchone()
+    if not row:
+        # Try normalization (e.g., "roasted broccoli" → "broccoli")
+        from souschef.normalize import normalize_item_name
+        _canonical, matched_id = normalize_item_name(conn, ingredient_name)
+        if matched_id:
+            ingredient_id = matched_id
+        else:
+            return  # No known ingredient — user adds manually
+    else:
+        ingredient_id = row["id"]
+    # Link to recipe if not already linked
+    existing = conn.execute(
+        text("SELECT id FROM recipe_ingredients WHERE recipe_id = :rid AND ingredient_id = :iid"),
+        {"rid": recipe_id, "iid": ingredient_id},
+    ).fetchone()
+    if not existing:
+        conn.execute(
+            text("INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit) VALUES (:rid, :iid, 1, 'count')"),
+            {"rid": recipe_id, "iid": ingredient_id},
+        )
 
 
 def _assign_side(conn: DictConnection, user_id: str, used_side_ids: list[int]) -> tuple[int | None, str]:

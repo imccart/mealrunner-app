@@ -1872,7 +1872,7 @@ async def add_recipe(body: dict, request: Request):
     """Add a new recipe (name only, stub)."""
     conn = _conn()
     user_id = request.state.user_id
-    name = body.get("name", "").strip()
+    name = body.get("name", "").strip().title()
     if not name:
         return {"ok": False}
 
@@ -1895,8 +1895,15 @@ async def add_recipe(body: dict, request: Request):
            RETURNING id"""),
         {"name": name, "user_id": user_id, "rtype": recipe_type, **defaults},
     )
+    recipe_id = cursor.fetchone()["id"]
+
+    # Auto-add default ingredient for sides when name matches a known ingredient
+    if recipe_type == "side":
+        from souschef.planner import _auto_add_side_ingredient
+        _auto_add_side_ingredient(conn, recipe_id, name)
+
     conn.commit()
-    return {"ok": True, "id": cursor.fetchone()["id"]}
+    return {"ok": True, "id": recipe_id}
 
 
 @router.delete("/recipes/{recipe_id}")
