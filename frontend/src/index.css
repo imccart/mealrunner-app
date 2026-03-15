@@ -2209,7 +2209,8 @@ main {
   margin-top: 8px;
   padding-top: 8px;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
   position: relative;
 }
@@ -2220,8 +2221,10 @@ main {
   color: var(--text-muted);
   font-size: 13px;
   cursor: pointer;
-  padding: 0 4px;
+  padding: 0 2px;
   opacity: 0.6;
+  vertical-align: middle;
+  line-height: 1;
 }
 .info-dot:hover {
   opacity: 1;
@@ -2232,6 +2235,7 @@ main {
   color: var(--text-muted);
   line-height: 1.4;
   padding: 6px 0;
+  width: 100%;
 }
 
 .prefs-btl-info {
@@ -2249,6 +2253,10 @@ main {
   color: var(--brown);
   padding: 2px 8px;
   margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
 }
 .parent-co.unknown {
   color: var(--accent);
