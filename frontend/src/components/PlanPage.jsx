@@ -374,31 +374,11 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                   <div className="sheet-opt-desc">View or edit what goes into this meal</div>
                 </div>
               </button>
-              <button className="sheet-option" onClick={() => handleFreeform(actionDate, 'Eating Out')}>
-                <div className="sheet-opt-icon">{'\u{1F37D}'}</div>
+              <button className="sheet-option" onClick={() => handleFreeform(actionDate, 'Nothing Planned')}>
+                <div className="sheet-opt-icon">{'\u{1F44B}'}</div>
                 <div>
-                  <div className="sheet-opt-title">Eating Out</div>
-                  <div className="sheet-opt-desc">No groceries needed</div>
-                </div>
-              </button>
-              <button className="sheet-option" onClick={() => handleFreeform(actionDate, 'Leftovers')}>
-                <div className="sheet-opt-icon">{'\u{1F4E6}'}</div>
-                <div>
-                  <div className="sheet-opt-title">Leftovers</div>
-                  <div className="sheet-opt-desc">Use what you have</div>
-                </div>
-              </button>
-              <button className="sheet-option" onClick={async () => {
-                try {
-                  await api.removeMeal(actionDate)
-                  setActionDate(null)
-                  await load()
-                } catch { /* silent */ }
-              }}>
-                <div className="sheet-opt-icon">{'\u{1F5D1}'}</div>
-                <div>
-                  <div className="sheet-opt-title">Remove</div>
-                  <div className="sheet-opt-desc">Clear this day</div>
+                  <div className="sheet-opt-title">Nothing needed</div>
+                  <div className="sheet-opt-desc">Eating out, leftovers, winging it</div>
                 </div>
               </button>
             </div>
