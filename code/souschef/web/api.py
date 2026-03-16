@@ -1081,6 +1081,7 @@ async def get_order(request: Request):
     rows = conn.execute(
         text("""SELECT * FROM trip_items WHERE trip_id = :trip_id
            AND checked = 0 AND skipped = 0 AND have_it = 0
+           AND submitted_at IS NULL
            ORDER BY shopping_group, name"""),
         {"trip_id": trip["id"]},
     ).fetchall()
@@ -1447,7 +1448,7 @@ async def submit_order(request: Request):
 
     rows = conn.execute(
         text("""SELECT product_upc FROM trip_items
-           WHERE trip_id = :trip_id AND product_upc != '' AND ordered = 1"""),
+           WHERE trip_id = :trip_id AND product_upc != '' AND ordered = 1 AND submitted_at IS NULL"""),
         {"trip_id": trip["id"]},
     ).fetchall()
 
@@ -1512,6 +1513,12 @@ async def submit_order(request: Request):
     items = [{"upc": r["product_upc"]} for r in rows]
     try:
         add_to_cart(items, token=token)
+        # Mark all submitted items so they don't show again in the order flow
+        conn.execute(
+            text("UPDATE trip_items SET submitted_at = CURRENT_TIMESTAMP WHERE trip_id = :trip_id AND product_upc != '' AND ordered = 1 AND submitted_at IS NULL"),
+            {"trip_id": trip["id"]},
+        )
+        conn.commit()
         return {"ok": True, "count": len(items)}
     except Exception as e:
         logger.exception("Failed to add items to cart")
