@@ -682,21 +682,31 @@ async def get_grocery(request: Request):
         group = r["shopping_group"] or "Other"
         for_meals_str = r["for_meals"]
         for_meals = [m for m in for_meals_str.split(",") if m] if for_meals_str else []
+        try:
+            added_at = r["added_at"]
+        except (KeyError, Exception):
+            added_at = None
         items_by_group.setdefault(group, []).append({
             "name": r["name"],
             "for_meals": for_meals,
             "meal_count": r["meal_count"],
             "source": r["source"],
-            "added_at": r["added_at"] if r["added_at"] else None,
+            "added_at": added_at,
         })
         if r["checked"]:
             checked_names.append(r["name"].lower())
         if r["ordered"]:
             ordered_names.append(r["name"].lower())
-        if r["skipped"]:
-            skipped_names.append(r["name"].lower())
-        if r["have_it"]:
-            have_it_names.append(r["name"].lower())
+        try:
+            if r["skipped"]:
+                skipped_names.append(r["name"].lower())
+        except (KeyError, Exception):
+            pass
+        try:
+            if r["have_it"]:
+                have_it_names.append(r["name"].lower())
+        except (KeyError, Exception):
+            pass
 
     return {
         "start_date": mw.start_date,
@@ -706,8 +716,8 @@ async def get_grocery(request: Request):
         "ordered": ordered_names,
         "skipped": skipped_names,
         "have_it": have_it_names,
-        "regulars_added": bool(trip["regulars_added"]),
-        "pantry_checked": bool(trip["pantry_checked"]),
+        "regulars_added": bool(trip["regulars_added"]) if "regulars_added" in trip.keys() else False,
+        "pantry_checked": bool(trip["pantry_checked"]) if "pantry_checked" in trip.keys() else False,
     }
 
 
