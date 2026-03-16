@@ -283,15 +283,14 @@ export default function GroceryPage({ sidebar = false }) {
 
   // Regulars prompt handlers
   const handleRegularsExpand = async () => {
-    if (!regularsData) {
-      try {
-        const data = await api.getRegulars()
-        const active = (data.regulars || []).filter(r => r.active)
-        setRegularsData(active)
-        setRegularsChecked(new Set(active.map(r => r.name)))
-      } catch {
-        setRegularsData([])
-      }
+    try {
+      const data = await api.getRegulars()
+      const active = (data.regulars || []).filter(r => r.active)
+      setRegularsData(active)
+      // Pre-check items NOT already on the list
+      setRegularsChecked(new Set(active.filter(r => !onListSet.has(r.name.toLowerCase())).map(r => r.name)))
+    } catch {
+      setRegularsData([])
     }
     setRegularsExpanded(true)
   }
@@ -314,13 +313,12 @@ export default function GroceryPage({ sidebar = false }) {
 
   // Pantry prompt handlers
   const handlePantryExpand = async () => {
-    if (!pantryData) {
-      try {
-        const data = await api.getPantry()
-        setPantryData(data.items || [])
-      } catch {
-        setPantryData([])
-      }
+    try {
+      const data = await api.getPantry()
+      setPantryData(data.items || [])
+      setPantryChecked(new Set()) // default unchecked, user checks what they need
+    } catch {
+      setPantryData([])
     }
     setPantryExpanded(true)
   }
@@ -353,25 +351,30 @@ export default function GroceryPage({ sidebar = false }) {
             </div>
             {data && data.length > 0 ? (
               <div className="grocery-prompt-checklist">
-                {data.map(item => (
-                  <div
-                    key={item.id}
-                    className="grocery-prompt-check-item"
-                    onClick={() => {
-                      setChecked(prev => {
-                        const next = new Set(prev)
-                        next.has(item.name) ? next.delete(item.name) : next.add(item.name)
-                        return next
-                      })
-                    }}
-                  >
-                    <div className={`grocery-prompt-check ${checkedSet.has(item.name) ? 'active' : ''}`}>
-                      {checkedSet.has(item.name) && '\u2713'}
+                {data.map(item => {
+                  const alreadyOnList = onListSet.has(item.name.toLowerCase())
+                  return (
+                    <div
+                      key={item.id}
+                      className={`grocery-prompt-check-item ${alreadyOnList ? 'on-list' : ''}`}
+                      onClick={() => {
+                        if (alreadyOnList) return
+                        setChecked(prev => {
+                          const next = new Set(prev)
+                          next.has(item.name) ? next.delete(item.name) : next.add(item.name)
+                          return next
+                        })
+                      }}
+                    >
+                      <div className={`grocery-prompt-check ${alreadyOnList ? 'on-list' : checkedSet.has(item.name) ? 'active' : ''}`}>
+                        {(alreadyOnList || checkedSet.has(item.name)) && '\u2713'}
+                      </div>
+                      <span>{item.name}</span>
+                      {alreadyOnList && <span className="grocery-prompt-on-list">on list</span>}
+                      {!alreadyOnList && groupField && item[groupField] && <span className="grocery-prompt-group">{item[groupField]}</span>}
                     </div>
-                    <span>{item.name}</span>
-                    {groupField && item[groupField] && <span className="grocery-prompt-group">{item[groupField]}</span>}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             ) : (
               <div className="grocery-prompt-empty">

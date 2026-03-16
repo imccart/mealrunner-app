@@ -796,6 +796,18 @@ main {
   color: var(--text-muted);
   margin-left: auto;
 }
+.grocery-prompt-check-item.on-list { opacity: 0.5; cursor: default; }
+.grocery-prompt-check.on-list {
+  background: var(--tan);
+  border-color: var(--tan);
+  color: white;
+}
+.grocery-prompt-on-list {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+  font-style: italic;
+}
 .grocery-prompt-empty {
   font-size: 13px;
   color: var(--text-muted);
