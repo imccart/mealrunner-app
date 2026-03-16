@@ -229,7 +229,8 @@ async def health_db():
             "pool": pool,
         }
     except Exception as e:
-        return {"error": str(e)}
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
     finally:
         conn.close()
 
