@@ -875,7 +875,7 @@ main {
 
 .feedback-fab {
   position: fixed;
-  bottom: 140px;
+  bottom: 80px;
   right: 20px;
   z-index: 89;
   background: var(--cream);
@@ -899,7 +899,7 @@ main {
 
 @media (min-width: 1024px) {
   .feedback-fab {
-    bottom: 92px;
+    bottom: 32px;
     right: 32px;
   }
 }
