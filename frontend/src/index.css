@@ -1492,6 +1492,34 @@ main {
   margin-top: 4px;
 }
 
+/* Compact toggle in sidebar */
+.col-grocery .grocery-item-toggle {
+  margin-left: auto;
+}
+.col-grocery .toggle-seg {
+  font-size: 10px;
+  padding: 2px 7px;
+}
+
+/* Compact prompt cards in sidebar */
+.col-grocery .grocery-prompt-card {
+  margin-bottom: 8px;
+}
+.col-grocery .grocery-prompt-trigger {
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.col-grocery .grocery-prompt-body {
+  padding: 12px;
+}
+.col-grocery .grocery-prompt-check-item {
+  font-size: 13px;
+  padding: 7px 4px;
+}
+.col-grocery .grocery-prompt-checklist {
+  max-height: 30vh;
+}
+
 /* Compact add bar in sidebar — not fixed */
 .col-grocery .add-bar {
   position: static;
