@@ -22,6 +22,7 @@ export default function MyKitchenSheet({ onClose }) {
   const [addStapleText, setAddStapleText] = useState('')
   const [showStapleInfo, setShowStapleInfo] = useState(false)
   const [recatStaple, setRecatStaple] = useState(null) // { name, type, id }
+  const [pendingStaple, setPendingStaple] = useState(null) // name waiting for type choice
 
   // Detail view state
   const [detailIngredients, setDetailIngredients] = useState(null)
@@ -122,14 +123,26 @@ export default function MyKitchenSheet({ onClose }) {
   }
 
   // Staples handlers
-  const handleAddStaple = async (name) => {
+  const handleAddStaple = (name) => {
     if (!name.trim()) return
+    setPendingStaple(name.trim())
+    setAddStapleText('')
+  }
+
+  const handleConfirmStaple = async (type) => {
+    if (!pendingStaple) return
     try {
-      await api.addRegular(name.trim())
-      setAddStapleText('')
-      const data = await api.getRegulars()
-      setRegulars(data.regulars)
+      if (type === 'regular') {
+        await api.addRegular(pendingStaple)
+        const data = await api.getRegulars()
+        setRegulars(data.regulars)
+      } else {
+        await api.addPantryItem(pendingStaple)
+        const data = await api.getPantry()
+        setPantry(data.items)
+      }
     } catch { /* ignore */ }
+    setPendingStaple(null)
   }
 
   const handleRemoveRegular = async (id) => {
@@ -376,6 +389,16 @@ export default function MyKitchenSheet({ onClose }) {
             />
             <button className="btn primary" onClick={() => addStapleText.trim() && handleAddStaple(addStapleText)}>+</button>
           </div>
+          {pendingStaple && (
+            <div className="staple-type-prompt">
+              <span className="staple-type-name">{pendingStaple}</span>
+              <div className="staple-toggle-pair">
+                <button className="staple-toggle" onClick={() => handleConfirmStaple('regular')}>Every trip</button>
+                <button className="staple-toggle" onClick={() => handleConfirmStaple('pantry')}>Keep on hand</button>
+              </div>
+              <button className="staple-type-cancel" onClick={() => setPendingStaple(null)}>{'\u00D7'}</button>
+            </div>
+          )}
           {regulars === null && pantry === null ? (
             <div className="prefs-section-hint">Loading...</div>
           ) : staples.length === 0 ? (
