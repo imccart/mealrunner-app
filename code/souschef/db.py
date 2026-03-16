@@ -32,9 +32,9 @@ def init_db(conn: DictConnection) -> None:
     create_tables()
     print("[db] Tables created", flush=True)
 
-    # Column migrations deferred — run on next deploy after old instance is gone.
-    # All new column access in api.py is defensive (try/except).
-    print("[db] Column migrations deferred", flush=True)
+    print("[db] Running column migrations...", flush=True)
+    _run_column_migrations(conn)
+    print("[db] Column migrations done", flush=True)
 
     # One-time data migrations
     for name, fn in [
@@ -808,12 +808,22 @@ def ensure_db(db_path: str | None = None) -> DictConnection:
     global _db_initialized
     conn = get_connection()
     if not _db_initialized:
-        # Skip all DDL/migrations this deploy to break lock cycle with old instance.
-        # DB is already set up. New columns will be added on next deploy.
-        print("[db] Skipping init_db (lock cycle break)", flush=True)
-        _db_initialized = True
+        _kill_stale_connections(conn)
         try:
-            _placeholder = True  # keep try/except structure
+            init_db(conn)
+            row = conn.execute(text("SELECT COUNT(*) AS n FROM recipes")).fetchone()
+            if row["n"] == 0:
+                seed_from_yaml(conn)
+            else:
+                # Ensure ingredient database is up to date (idempotent)
+                data_dir = str(Path(__file__).resolve().parents[2] / "data")
+                ing_db = Path(data_dir) / "seed_ingredient_database.yaml"
+                if ing_db.exists():
+                    _seed_ingredient_database(conn, ing_db)
+                    conn.commit()
+                # Ensure library recipes exist even on existing databases
+                _seed_library_if_missing(conn)
+            _db_initialized = True
         except Exception as e:
             print(f"[db] ensure_db error: {e}", flush=True)
             import traceback
