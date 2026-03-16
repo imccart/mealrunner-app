@@ -267,6 +267,7 @@ trip_items = Table(
     Column("product_size", Text, nullable=False, server_default=text("''")),
     Column("product_price", Float),
     Column("product_image", Text, nullable=False, server_default=text("''")),
+    Column("quantity", Integer, nullable=False, server_default=text("1")),
     Column("selected_at", Text),
     Column("receipt_item", Text, nullable=False, server_default=text("''")),
     Column("receipt_price", Float),

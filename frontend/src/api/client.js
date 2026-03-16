@@ -56,9 +56,9 @@ export const api = {
     const qs = params.toString()
     return request(`/order/search/${encodeURIComponent(itemName)}${qs ? `?${qs}` : ''}`)
   },
-  selectProduct: (itemName, product) => request('/order/select', {
+  selectProduct: (itemName, product, quantity) => request('/order/select', {
     method: 'POST',
-    body: JSON.stringify({ item_name: itemName, product }),
+    body: JSON.stringify({ item_name: itemName, product, quantity: quantity || 1 }),
   }),
   deselectProduct: (itemName) => request(`/order/deselect/${encodeURIComponent(itemName)}`, { method: 'POST' }),
   submitOrder: (krogerUserId) => request('/order/submit', {

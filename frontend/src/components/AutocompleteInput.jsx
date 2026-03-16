@@ -109,7 +109,7 @@ export default function AutocompleteInput({
             <div
               key={name}
               className={`autocomplete-item ${i === selectedIndex ? 'selected' : ''}`}
-              onMouseDown={() => handleSelect(name)}
+              onPointerDown={() => handleSelect(name)}
             >
               {name}
             </div>

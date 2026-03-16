@@ -67,6 +67,9 @@ export default function OrderPage() {
   const [products, setProducts] = useState(null)
   const [searching, setSearching] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [pendingProduct, setPendingProduct] = useState(null) // product awaiting quantity confirmation
+  const [pendingQty, setPendingQty] = useState(1)
+  const [showAnythingElse, setShowAnythingElse] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitResult, setSubmitResult] = useState(null)
   const [krogerAccounts, setKrogerAccounts] = useState(null)
@@ -166,18 +169,35 @@ export default function OrderPage() {
     }
   }
 
-  const handleSelect = async (product) => {
+  const handleSelect = (product) => {
+    setPendingProduct(product)
+    setPendingQty(1)
+    setShowAnythingElse(false)
+  }
+
+  const handleConfirmQuantity = async () => {
+    if (!pendingProduct) return
     try {
-      const data = await api.selectProduct(activeItem, product)
+      const data = await api.selectProduct(activeItem, pendingProduct, pendingQty)
       setOrder(data)
-      // Remove from skipped if it was there
       setSkippedItems(prev => {
         const next = new Set(prev)
         next.delete(activeItem)
         return next
       })
-      advanceToNext(data)
+      setPendingProduct(null)
+      setShowAnythingElse(true)
     } catch { /* silent */ }
+  }
+
+  const handleAnythingElseYes = () => {
+    setShowAnythingElse(false)
+    // Keep activeItem the same, search stays visible
+  }
+
+  const handleAnythingElseNo = () => {
+    setShowAnythingElse(false)
+    if (order) advanceToNext(order)
   }
 
   const handleSkip = () => {
@@ -402,7 +422,8 @@ export default function OrderPage() {
                   onClick={() => handleSelect({
                     upc: pref.upc, name: pref.name,
                     brand: pref.brand, size: pref.size,
-                    price: null, image: pref.image || '',
+                    price: pref.promo_price || pref.price || null,
+                    image: pref.image || '',
                   })}
                 >
                   {pref.image && (
@@ -412,8 +433,24 @@ export default function OrderPage() {
                   )}
                   <div className="product-info">
                     <div className="product-name">{pref.name}</div>
-                    <div className="product-meta">{pref.size}</div>
+                    <div className="product-meta">
+                      {pref.brand && <span>{pref.brand}</span>}
+                      {pref.size && <span> {'\u00B7'} {pref.size}</span>}
+                    </div>
+                    {(pref.price || pref.promo_price) && (
+                      <div className="product-price-row">
+                        {pref.promo_price ? (
+                          <>
+                            <span className="price-promo">{formatPrice(pref.promo_price)}</span>
+                            <span className="price-original">{formatPrice(pref.price)}</span>
+                          </>
+                        ) : (
+                          <span className="price">{formatPrice(pref.price)}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
+                  <ProductInsights nova={pref.nova} nutriscore={pref.nutriscore} />
                   {pref.rating === 1 && <span className="pref-star">{'\u{1F44D}'}</span>}
                   {pref.rating === -1 && <span className="pref-down">{'\u{1F44E}'}</span>}
                 </button>
@@ -484,6 +521,29 @@ export default function OrderPage() {
             )}
           </div>
         </>
+      )}
+
+      {pendingProduct && (
+        <div className="order-qty-prompt">
+          <div className="order-qty-label">How many?</div>
+          <div className="order-qty-product">{pendingProduct.name}</div>
+          <div className="order-qty-controls">
+            <button className="order-qty-btn" onClick={() => setPendingQty(q => Math.max(1, q - 1))}>{'\u2212'}</button>
+            <span className="order-qty-value">{pendingQty}</span>
+            <button className="order-qty-btn" onClick={() => setPendingQty(q => q + 1)}>+</button>
+          </div>
+          <button className="order-qty-confirm" onClick={handleConfirmQuantity}>Confirm</button>
+        </div>
+      )}
+
+      {showAnythingElse && (
+        <div className="order-anything-else">
+          <span>Anything else for <strong>{activeItem}</strong>?</span>
+          <div className="order-anything-else-btns">
+            <button className="order-grocery-btn" onClick={handleAnythingElseYes}>Yes</button>
+            <button className="order-grocery-btn" onClick={handleAnythingElseNo}>No</button>
+          </div>
+        </div>
       )}
     </div>
   )

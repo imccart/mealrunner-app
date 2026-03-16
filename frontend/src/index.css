@@ -2184,8 +2184,7 @@ main {
 .order-item-top-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
 }
 .order-item-actions {
   display: flex;
@@ -2308,6 +2307,80 @@ main {
 }
 .load-more-btn:hover { border-color: var(--accent); }
 .load-more-btn:disabled { color: var(--text-muted); cursor: default; }
+
+/* ── Order quantity prompt ────── */
+.order-qty-prompt {
+  background: var(--warm-white);
+  border-radius: 10px;
+  padding: 16px;
+  margin: 12px 0;
+  text-align: center;
+}
+.order-qty-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.order-qty-product {
+  font-weight: 500;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+.order-qty-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.order-qty-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--tan);
+  background: none;
+  font-size: 18px;
+  color: var(--dark);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.order-qty-value {
+  font-size: 22px;
+  font-weight: 600;
+  min-width: 32px;
+}
+.order-qty-confirm {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+.order-qty-confirm:hover { background: #C0562F; }
+
+/* ── Anything else prompt ────── */
+.order-anything-else {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--warm-white);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.order-anything-else-btns {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
 
 .product-card {
   background: white;

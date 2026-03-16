@@ -1095,6 +1095,10 @@ async def get_order(request: Request):
             "for_meals": [m for m in r["for_meals"].split(",") if m] if r["for_meals"] else [],
         }
         if r["product_upc"]:
+            try:
+                qty = r["quantity"]
+            except (KeyError, Exception):
+                qty = 1
             item["product"] = {
                 "upc": r["product_upc"],
                 "name": r["product_name"],
@@ -1102,13 +1106,15 @@ async def get_order(request: Request):
                 "size": r["product_size"],
                 "price": r["product_price"],
                 "image": r["product_image"],
+                "quantity": qty,
             }
             selected.append(item)
         else:
             pending.append(item)
 
     total_price = sum(
-        r["product_price"] for r in rows
+        r["product_price"] * (r["quantity"] if "quantity" in r.keys() else 1)
+        for r in rows
         if r["product_upc"] and r["product_price"]
     )
 
@@ -1167,14 +1173,33 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
 
     # Get preferences first
     prefs = get_preferred_products(conn, user_id, item_name, limit=3)
-    pref_list = [{
-        "upc": p.upc,
-        "name": p.description,
-        "brand": p.brand,
-        "size": p.size,
-        "rating": p.rating,
-        "image": f"https://www.kroger.com/product/images/medium/front/{p.upc}",
-    } for p in prefs]
+    # Enrich preferences with cached scores/prices
+    pref_upcs = [p.upc for p in prefs]
+    pref_scores = {}
+    if pref_upcs:
+        ph = ", ".join(f":pu{i}" for i in range(len(pref_upcs)))
+        ps = {f"pu{i}": u for i, u in enumerate(pref_upcs)}
+        pref_score_rows = conn.execute(
+            text(f"SELECT upc, nova_group, nutriscore, price, promo_price FROM product_scores WHERE upc IN ({ph})"),
+            ps,
+        ).fetchall()
+        pref_scores = {r["upc"]: dict(r) for r in pref_score_rows}
+
+    pref_list = []
+    for p in prefs:
+        sc = pref_scores.get(p.upc, {})
+        pref_list.append({
+            "upc": p.upc,
+            "name": p.description,
+            "brand": p.brand,
+            "size": p.size,
+            "rating": p.rating,
+            "image": f"https://www.kroger.com/product/images/medium/front/{p.upc}",
+            "price": sc.get("price"),
+            "promo_price": sc.get("promo_price"),
+            "nova": sc.get("nova_group"),
+            "nutriscore": sc.get("nutriscore", ""),
+        })
 
     # Search Kroger
     try:
@@ -1337,6 +1362,7 @@ async def select_product(body: dict, request: Request):
     user_id = request.state.user_id
     item_name = body.get("item_name")
     product = body.get("product")
+    quantity = body.get("quantity", 1)
     if not item_name or not product:
         return {"ok": False, "error": "item_name and product required"}
 
@@ -1348,11 +1374,13 @@ async def select_product(body: dict, request: Request):
         text("""UPDATE trip_items SET
                product_upc = :upc, product_name = :name, product_brand = :brand,
                product_size = :size, product_price = :price, product_image = :image,
+               quantity = :quantity,
                ordered = 1, ordered_at = CURRENT_TIMESTAMP, selected_at = CURRENT_TIMESTAMP
            WHERE trip_id = :trip_id AND LOWER(name) = :item_name"""),
         {"upc": product["upc"], "name": product["name"], "brand": product.get("brand", ""),
          "size": product.get("size", ""), "price": product.get("price"),
          "image": product.get("image", ""),
+         "quantity": quantity,
          "trip_id": trip["id"], "item_name": item_name.lower()},
     )
     # Update trip source based on what's happening
