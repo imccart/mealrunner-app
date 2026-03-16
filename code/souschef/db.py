@@ -118,13 +118,6 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("grocery_trips", "pantry_checked", "INTEGER NOT NULL DEFAULT 0"),
     ]
 
-    # Set a short lock timeout so ALTER TABLE doesn't block forever
-    # if the old instance still has active queries
-    try:
-        conn.execute(text("SET lock_timeout = '5s'"))
-    except Exception:
-        pass
-
     for table_name, col_name, col_def in migrations:
         print(f"[db]   checking {table_name}.{col_name}...", flush=True)
         try:
@@ -136,18 +129,8 @@ def _run_column_migrations(conn: DictConnection) -> None:
                 conn.execute(text(
                     f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_def}"
                 ))
-                conn.commit()
             except Exception:
-                try:
-                    conn.execute(text("ROLLBACK"))
-                except Exception:
-                    pass
-
-    # Reset lock timeout
-    try:
-        conn.execute(text("SET lock_timeout = '0'"))
-    except Exception:
-        pass
+                pass
 
 
 def _migrate_accepted_to_on_grocery(conn: DictConnection) -> None:
@@ -787,11 +770,10 @@ def _kill_stale_connections(conn: DictConnection) -> None:
             SELECT pid FROM pg_stat_activity
             WHERE datname = current_database()
               AND pid != pg_backend_pid()
-              AND state IN ('idle in transaction', 'idle', 'active')
+              AND state = 'idle in transaction'
         """)).fetchall()
         for row in rows:
             conn.execute(text("SELECT pg_terminate_backend(:pid)"), {"pid": row[0]})
-        conn.commit()
         if rows:
             print(f"[db] Terminated {len(rows)} stale connections", flush=True)
     except Exception:
