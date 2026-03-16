@@ -182,14 +182,11 @@ export default function MyKitchenSheet({ onClose }) {
   const handleRecatStaple = async (group) => {
     if (!recatStaple) return
     try {
-      const res = await api.recategorizeStaple(recatStaple.name, recatStaple.type, recatStaple.id, group)
-      console.log('recategorize result:', res)
-      // Refresh data
+      await api.recategorizeStaple(recatStaple.name, recatStaple.type, recatStaple.id, group)
       const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
-      console.log('refresh regulars:', rData.regulars?.length, 'pantry:', pData.items?.length)
       setRegulars(rData.regulars)
       setPantry(pData.items)
-    } catch (e) { console.error('recategorize failed:', e) }
+    } catch { /* ignore */ }
     setRecatStaple(null)
   }
 
