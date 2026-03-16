@@ -123,13 +123,15 @@ export default function MyKitchenSheet({ onClose }) {
 
   // Staples handlers
   const handleAddStaple = async (name) => {
-    if (!name.trim()) return
+    console.log('handleAddStaple called with:', JSON.stringify(name))
+    if (!name.trim()) { console.log('empty name, skipping'); return }
     try {
-      await api.addRegular(name.trim())
+      const result = await api.addRegular(name.trim())
+      console.log('addRegular result:', result)
       setAddStapleText('')
       const data = await api.getRegulars()
       setRegulars(data.regulars)
-    } catch { /* ignore */ }
+    } catch (e) { console.error('addStaple failed:', e) }
   }
 
   const handleRemoveRegular = async (id) => {
