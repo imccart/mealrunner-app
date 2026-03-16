@@ -197,6 +197,20 @@ export default function OrderPage() {
     }
   }
 
+  // Grocery-level actions — mark item on the trip and remove from order
+  const handleGroceryAction = async (action) => {
+    if (!activeItem) return
+    try {
+      if (action === 'bought') await api.toggleGroceryItem(activeItem)
+      else if (action === 'have_it') await api.haveItGroceryItem(activeItem)
+      else if (action === 'skip') await api.skipGroceryItem(activeItem)
+      // Refresh order — item will be excluded since it's now checked/skipped/have_it
+      const data = await api.getOrder()
+      setOrder(data)
+      advanceToNext(data)
+    } catch { /* silent */ }
+  }
+
   const handleDeselect = async (itemName) => {
     try {
       const data = await api.deselectProduct(itemName)
@@ -332,8 +346,17 @@ export default function OrderPage() {
       </div>
       {activeItem && (
         <div className="order-active-item">
-          <div className="order-item-label">Picking for</div>
-          <div className="order-item-name">{activeItem}</div>
+          <div className="order-item-top-row">
+            <div>
+              <div className="order-item-label">Picking for</div>
+              <div className="order-item-name">{activeItem}</div>
+            </div>
+            <div className="order-item-actions">
+              <button className="order-grocery-btn" onClick={() => handleGroceryAction('bought')}>Bought</button>
+              <button className="order-grocery-btn" onClick={() => handleGroceryAction('have_it')}>Have it</button>
+              <button className="order-grocery-btn skip" onClick={() => handleGroceryAction('skip')}>Skip</button>
+            </div>
+          </div>
           <form className="modifier-form" onSubmit={e => {
             e.preventDefault()
             doSearch(activeItem, modifier)

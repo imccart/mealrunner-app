@@ -2181,6 +2181,32 @@ main {
 .order-active-item {
   padding: 12px 0 8px;
 }
+.order-item-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.order-item-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.order-grocery-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  border: 1.5px solid var(--tan);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.order-grocery-btn:hover { border-color: var(--accent); color: var(--accent); }
+.order-grocery-btn.skip { color: var(--text-muted); }
+.order-grocery-btn.skip:hover { color: var(--accent); }
 
 .order-item-label {
   font-size: 10px;
@@ -2685,6 +2711,8 @@ main {
 .order-mobile-queue { display: flex; }
 .order-mobile-content .order-item-label,
 .order-mobile-content .order-item-name { display: none; }
+.order-mobile-content .order-item-top-row { justify-content: flex-end; }
+.order-mobile-content .order-item-actions { margin-bottom: 4px; }
 
 @media (min-width: 1024px) {
   /* Hide mobile-only order elements on desktop */
