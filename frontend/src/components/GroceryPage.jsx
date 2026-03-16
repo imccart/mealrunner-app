@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../api/client'
 import AutocompleteInput from './AutocompleteInput'
+import BentSpoonIcon from './BentSpoonIcon'
 import Sheet from './Sheet'
 import FeedbackFab from './FeedbackFab'
 
@@ -347,7 +348,7 @@ export default function GroceryPage({ sidebar = false }) {
         <div className="grocery-prompt-card">
           {!regularsExpanded ? (
             <button className="grocery-prompt-trigger" onClick={handleRegularsExpand}>
-              <span className="grocery-prompt-icon">{'\u{1F504}'}</span>
+              <BentSpoonIcon size={18} />
               <span>Add your regulars</span>
               <span className="grocery-prompt-arrow">{'\u203A'}</span>
             </button>
@@ -395,7 +396,7 @@ export default function GroceryPage({ sidebar = false }) {
         <div className="grocery-prompt-card">
           {!pantryExpanded ? (
             <button className="grocery-prompt-trigger" onClick={handlePantryExpand}>
-              <span className="grocery-prompt-icon">{'\u{1F3E0}'}</span>
+              <BentSpoonIcon size={18} />
               <span>Running low on anything?</span>
               <span className="grocery-prompt-arrow">{'\u203A'}</span>
             </button>

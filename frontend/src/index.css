@@ -725,7 +725,6 @@ main {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.grocery-prompt-icon { font-size: 18px; }
 .grocery-prompt-arrow { margin-left: auto; color: var(--text-muted); font-size: 20px; }
 .grocery-prompt-body { padding: 16px; }
 .grocery-prompt-title {
