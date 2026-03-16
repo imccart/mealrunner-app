@@ -803,45 +803,7 @@ def ensure_db(db_path: str | None = None) -> DictConnection:
     if not _db_initialized:
         _kill_stale_connections(conn)
 
-        # Set statement_timeout on the connection so ANY DDL/schema query
-        # fails fast if the old instance is still holding locks.
-        # The app will start without migrations and they'll succeed next deploy.
-        try:
-            conn.execute(text("SET statement_timeout = '5000'"))
-            conn.commit()
-        except Exception:
-            pass
-
-        try:
-            init_db(conn)
-            row = conn.execute(text("SELECT COUNT(*) AS n FROM recipes")).fetchone()
-            if row["n"] == 0:
-                seed_from_yaml(conn)
-            else:
-                # Ensure ingredient database is up to date (idempotent)
-                data_dir = str(Path(__file__).resolve().parents[2] / "data")
-                ing_db = Path(data_dir) / "seed_ingredient_database.yaml"
-                if ing_db.exists():
-                    _seed_ingredient_database(conn, ing_db)
-                    conn.commit()
-                # Ensure library recipes exist even on existing databases
-                _seed_library_if_missing(conn)
-        except Exception as e:
-            print(f"[db] ensure_db error (non-fatal, will retry next deploy): {e}", flush=True)
-            try:
-                conn.raw.rollback()
-            except Exception:
-                pass
-
-        # Reset statement_timeout and mark as initialized either way
-        # so the app starts even if migrations failed
-        try:
-            conn.execute(text("SET statement_timeout = '0'"))
-            conn.commit()
-        except Exception:
-            try:
-                conn.raw.rollback()
-            except Exception:
-                pass
+        # Skip all DDL/migrations — diagnosed via /health/db endpoint
+        print("[db] Skipping init_db (diagnosing lock issues)", flush=True)
         _db_initialized = True
     return conn

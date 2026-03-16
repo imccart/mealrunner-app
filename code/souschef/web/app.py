@@ -17,6 +17,7 @@ from sqlalchemy import text
 
 import sys
 
+from souschef.database import engine
 from souschef.db import ensure_db
 from souschef.web.api import router as api_router
 from souschef.web.auth import (
@@ -134,6 +135,103 @@ async def health():
         return {"status": "ok"}
     except Exception:
         return JSONResponse({"status": "error"}, status_code=503)
+
+
+@app.get("/health/db")
+async def health_db():
+    """Diagnostic endpoint — DB connection and lock info."""
+    conn = get_connection()
+    try:
+        # Max connections
+        max_conn = conn.execute(text("SHOW max_connections")).fetchone()
+
+        # Active connections
+        active = conn.execute(text("""
+            SELECT count(*) AS total,
+                   count(*) FILTER (WHERE state = 'active') AS active,
+                   count(*) FILTER (WHERE state = 'idle') AS idle,
+                   count(*) FILTER (WHERE state = 'idle in transaction') AS idle_in_tx
+            FROM pg_stat_activity
+            WHERE datname = current_database()
+        """)).fetchone()
+
+        # Locks held
+        locks = conn.execute(text("""
+            SELECT mode, count(*) AS cnt
+            FROM pg_locks
+            WHERE database = (SELECT oid FROM pg_database WHERE datname = current_database())
+            GROUP BY mode
+            ORDER BY cnt DESC
+        """)).fetchall()
+
+        # Blocked queries
+        blocked = conn.execute(text("""
+            SELECT blocked.pid AS blocked_pid,
+                   blocked.query AS blocked_query,
+                   blocking.pid AS blocking_pid,
+                   blocking.query AS blocking_query,
+                   blocking.state AS blocking_state
+            FROM pg_stat_activity blocked
+            JOIN pg_locks bl ON bl.pid = blocked.pid
+            JOIN pg_locks kl ON kl.locktype = bl.locktype
+                AND kl.database IS NOT DISTINCT FROM bl.database
+                AND kl.relation IS NOT DISTINCT FROM bl.relation
+                AND kl.page IS NOT DISTINCT FROM bl.page
+                AND kl.tuple IS NOT DISTINCT FROM bl.tuple
+                AND kl.virtualxid IS NOT DISTINCT FROM bl.virtualxid
+                AND kl.transactionid IS NOT DISTINCT FROM bl.transactionid
+                AND kl.classid IS NOT DISTINCT FROM bl.classid
+                AND kl.objid IS NOT DISTINCT FROM bl.objid
+                AND kl.objsubid IS NOT DISTINCT FROM bl.objsubid
+                AND kl.pid != bl.pid
+            JOIN pg_stat_activity blocking ON blocking.pid = kl.pid
+            WHERE NOT bl.granted
+            LIMIT 10
+        """)).fetchall()
+
+        # Check if new columns exist
+        cols = conn.execute(text("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'trip_items' AND column_name IN ('skipped', 'have_it', 'added_at')
+        """)).fetchall()
+
+        trip_cols = conn.execute(text("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'grocery_trips' AND column_name IN ('regulars_added', 'pantry_checked')
+        """)).fetchall()
+
+        # Pool info
+        pool = engine.pool.status()
+
+        return {
+            "max_connections": max_conn[0] if max_conn else "unknown",
+            "connections": {
+                "total": active["total"],
+                "active": active["active"],
+                "idle": active["idle"],
+                "idle_in_transaction": active["idle_in_tx"],
+            },
+            "locks": {r["mode"]: r["cnt"] for r in locks},
+            "blocked_queries": [
+                {
+                    "blocked_pid": r["blocked_pid"],
+                    "blocked_query": r["blocked_query"][:100],
+                    "blocking_pid": r["blocking_pid"],
+                    "blocking_query": r["blocking_query"][:100],
+                    "blocking_state": r["blocking_state"],
+                }
+                for r in blocked
+            ],
+            "new_columns": {
+                "trip_items": [r["column_name"] for r in cols],
+                "grocery_trips": [r["column_name"] for r in trip_cols],
+            },
+            "pool": pool,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        conn.close()
 
 
 def _process_household_invite(conn, user_id: str, email: str) -> None:
