@@ -503,15 +503,18 @@ export default function GroceryPage({ sidebar = false }) {
             <button
               className="grocery-skip-btn"
               onClick={() => handleSkip(item.name)}
+              title="Don't need this time"
             >Skip</button>
             <div className="grocery-item-toggle">
               <button
                 className={`toggle-seg bought ${isChecked ? 'active' : ''}`}
                 onClick={() => handleBought(item.name)}
+                title="Picked up at the store"
               >Bought</button>
               <button
                 className={`toggle-seg have-it ${isHaveIt ? 'active' : ''}`}
                 onClick={() => handleHaveIt(item.name)}
+                title="Already have it at home"
               >Have it</button>
             </div>
           </div>
