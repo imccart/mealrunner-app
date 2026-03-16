@@ -1309,9 +1309,27 @@ main {
   cursor: pointer;
   opacity: 0.4;
   flex-shrink: 0;
-  margin-left: auto;
 }
 .recat-btn:hover { opacity: 0.8; }
+
+.recat-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.recat-picker {
+  background: white;
+  border-radius: 16px 16px 0 0;
+  padding: 20px 16px 32px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
 .recat-options {
   display: flex;
   flex-direction: column;

@@ -102,6 +102,12 @@ export const api = {
     body: JSON.stringify({ upc, rating, product_description: productDescription || '' }),
   }),
 
+  // Staples
+  recategorizeStaple: (name, type, id, shoppingGroup) => request('/staples/recategorize', {
+    method: 'POST',
+    body: JSON.stringify({ name, type, id, shopping_group: shoppingGroup }),
+  }),
+
   // Regulars
   getRegulars: () => request('/regulars'),
   addRegular: (name, shoppingGroup, storePref) => request('/regulars', {

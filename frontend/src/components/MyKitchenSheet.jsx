@@ -21,6 +21,7 @@ export default function MyKitchenSheet({ onClose }) {
   // Staples add state
   const [addStapleText, setAddStapleText] = useState('')
   const [showStapleInfo, setShowStapleInfo] = useState(false)
+  const [recatStaple, setRecatStaple] = useState(null) // { name, type, id }
 
   // Detail view state
   const [detailIngredients, setDetailIngredients] = useState(null)
@@ -147,21 +148,21 @@ export default function MyKitchenSheet({ onClose }) {
     } catch { /* ignore */ }
   }
 
-  const handleMoveToPantry = async (id, name) => {
+  const handleMoveToPantry = async (id, name, shoppingGroup) => {
     try {
       await api.removeRegular(id)
-      await api.addPantryItem(name)
+      await api.addPantryItem(name, shoppingGroup || 'Other')
       const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
       setRegulars(rData.regulars)
       setPantry(pData.items)
     } catch { /* ignore */ }
   }
 
-  const handleMoveToRegulars = async (name, id) => {
+  const handleMoveToRegulars = async (name, id, shoppingGroup) => {
     setPantry(prev => (prev || []).filter(p => p.id !== id))
     try {
       await api.removePantryItem(id)
-      await api.addRegular(name)
+      await api.addRegular(name, shoppingGroup || '')
       const rData = await api.getRegulars()
       setRegulars(rData.regulars)
     } catch {
@@ -171,6 +172,25 @@ export default function MyKitchenSheet({ onClose }) {
   }
 
   // Build unified staples list
+  const STAPLE_GROUPS = [
+    'Produce', 'Meat', 'Dairy & Eggs', 'Bread & Bakery',
+    'Pasta & Grains', 'Spices & Baking', 'Condiments & Sauces',
+    'Canned Goods', 'Frozen', 'Breakfast & Beverages', 'Snacks',
+    'Personal Care', 'Household', 'Cleaning', 'Pets', 'Other'
+  ]
+
+  const handleRecatStaple = async (group) => {
+    if (!recatStaple) return
+    try {
+      await api.recategorizeStaple(recatStaple.name, recatStaple.type, recatStaple.id, group)
+      // Refresh data
+      const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
+      setRegulars(rData.regulars)
+      setPantry(pData.items)
+    } catch { /* ignore */ }
+    setRecatStaple(null)
+  }
+
   const staples = []
   if (regulars) {
     for (const r of regulars) {
@@ -369,16 +389,21 @@ export default function MyKitchenSheet({ onClose }) {
                   {stapleGroups[group].map(s => (
                     <div key={`${s.type}-${s.id}`} className="prefs-list-item">
                       <span className="prefs-list-name">{s.name}</span>
+                      <button
+                        className="recat-btn"
+                        title="Change category"
+                        onClick={() => setRecatStaple({ name: s.name, type: s.type, id: s.id })}
+                      >{'\u2630'}</button>
                       <div className="staple-toggle-pair">
                         <button
                           className={`staple-toggle${s.type === 'regular' ? ' active' : ''}`}
-                          onClick={() => { if (s.type !== 'regular') handleMoveToRegulars(s.name, s.id) }}
+                          onClick={() => { if (s.type !== 'regular') handleMoveToRegulars(s.name, s.id, s.shopping_group) }}
                         >
                           Every trip
                         </button>
                         <button
                           className={`staple-toggle${s.type === 'pantry' ? ' active' : ''}`}
-                          onClick={() => { if (s.type !== 'pantry') handleMoveToPantry(s.id, s.name) }}
+                          onClick={() => { if (s.type !== 'pantry') handleMoveToPantry(s.id, s.name, s.shopping_group) }}
                         >
                           Keep on hand
                         </button>
@@ -393,6 +418,19 @@ export default function MyKitchenSheet({ onClose }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+      {recatStaple && (
+        <div className="recat-overlay" onClick={() => setRecatStaple(null)}>
+          <div className="recat-picker" onClick={e => e.stopPropagation()}>
+            <div className="sheet-title">Move "{recatStaple.name}"</div>
+            <div className="sheet-sub">Pick a category</div>
+            <div className="recat-options">
+              {STAPLE_GROUPS.map(g => (
+                <button key={g} className="recat-option" onClick={() => handleRecatStaple(g)}>{g}</button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </Sheet>

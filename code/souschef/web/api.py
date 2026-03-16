@@ -1942,6 +1942,39 @@ async def remove_regular(regular_id: int, request: Request):
     return {"ok": True}
 
 
+@router.post("/staples/recategorize")
+async def recategorize_staple(body: dict, request: Request):
+    """Change a staple's shopping group. Updates the source table and user override."""
+    user_id = request.state.user_id
+    conn = _conn()
+    name = body.get("name", "").strip()
+    item_type = body.get("type", "")  # 'regular' or 'pantry'
+    item_id = body.get("id")
+    group = body.get("shopping_group", "").strip()
+    if not name or not group or not item_id:
+        return {"ok": False}
+
+    # Update the source table
+    if item_type == "regular":
+        conn.execute(
+            text("UPDATE regulars SET shopping_group = :group WHERE id = :id AND user_id = :user_id"),
+            {"group": group, "id": item_id, "user_id": user_id},
+        )
+    elif item_type == "pantry":
+        # Pantry doesn't have shopping_group column, but user_item_groups handles it
+        pass
+
+    # Persist as user override for grocery list too
+    conn.execute(
+        text("""INSERT INTO user_item_groups (user_id, item_name, shopping_group)
+           VALUES (:user_id, :name, :group)
+           ON CONFLICT (user_id, item_name) DO UPDATE SET shopping_group = :group, updated_at = CURRENT_TIMESTAMP"""),
+        {"user_id": user_id, "name": name.lower(), "group": group},
+    )
+    conn.commit()
+    return {"ok": True, "shopping_group": group}
+
+
 @router.get("/grocery/suggestions")
 async def grocery_suggestions(request: Request):
     """Return all known item names for autocomplete (combined pool: ingredients + regulars + pantry)."""
