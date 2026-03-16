@@ -28,6 +28,7 @@ export default function GroceryPage({ sidebar = false }) {
   const [grocery, setGrocery] = useState(null)
   const [meals, setMeals] = useState(null)
   const [addText, setAddText] = useState('')
+  const [addDupe, setAddDupe] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -148,11 +149,12 @@ export default function GroceryPage({ sidebar = false }) {
 
   const handleAddSubmit = async (name) => {
     const trimmed = name.trim()
-    if (!trimmed) return
+    if (!trimmed || addDupe) return
     try {
       const result = await api.addGroceryItem(trimmed)
       setGrocery(result)
       setAddText('')
+      setAddDupe(false)
     } catch {
       // input stays so user can retry
     }
@@ -253,15 +255,19 @@ export default function GroceryPage({ sidebar = false }) {
       <div className="add-form">
         <AutocompleteInput
           value={addText}
-          onChange={setAddText}
+          onChange={(val) => {
+            setAddText(val)
+            setAddDupe(val.trim() && onListSet.has(val.trim().toLowerCase()))
+          }}
           onSubmit={handleAddSubmit}
           candidates={itemPool}
           exclude={onListSet}
           placeholder="Anything else while you're there?"
-          inputClassName="add-input"
+          inputClassName={`add-input${addDupe ? ' prefs-dupe' : ''}`}
         />
-        <button className="btn primary" onClick={() => addText.trim() && handleAddSubmit(addText)}>+</button>
+        <button className="btn primary" onClick={() => addText.trim() && handleAddSubmit(addText)} disabled={addDupe}>+</button>
       </div>
+      {addDupe && <div className="prefs-dupe-msg" style={{ marginTop: 4 }}>Already on your list</div>}
     </div>
   )
 

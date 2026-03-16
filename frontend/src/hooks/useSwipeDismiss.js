@@ -23,13 +23,10 @@ export default function useSwipeDismiss(onClose, threshold = 80) {
       sheetEl.current = sheet
       return
     }
-    // Walk up from the touch target — if any ancestor is scrollable, block dismiss
-    while (el && el !== sheet) {
-      if (el.scrollHeight > el.clientHeight + 1) {
-        startY.current = null
-        return
-      }
-      el = el.parentElement
+    // If the sheet itself is scrollable, only allow dismiss from non-content areas
+    if (sheet.scrollHeight > sheet.clientHeight + 1) {
+      startY.current = null
+      return
     }
     startY.current = e.touches[0].clientY
     sheetEl.current = sheet
