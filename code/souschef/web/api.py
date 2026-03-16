@@ -838,7 +838,7 @@ async def toggle_grocery_item(item_name: str, request: Request):
     else:
         checked = False
 
-    return {"name": item_name, "checked": checked}
+    return await get_grocery(request)
 
 
 @router.post("/grocery/skip/{item_name:path}")
