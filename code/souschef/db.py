@@ -32,12 +32,9 @@ def init_db(conn: DictConnection) -> None:
     create_tables()
     print("[db] Tables created", flush=True)
 
-    print("[db] Running column migrations...", flush=True)
-    try:
-        _run_column_migrations(conn)
-    except Exception as e:
-        print(f"[db] Column migrations failed (non-fatal): {e}", flush=True)
-    print("[db] Column migrations done", flush=True)
+    # Column migrations deferred — run on next deploy after old instance is gone.
+    # All new column access in api.py is defensive (try/except).
+    print("[db] Column migrations deferred", flush=True)
 
     # One-time data migrations
     for name, fn in [
@@ -122,21 +119,41 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("grocery_trips", "pantry_checked", "INTEGER NOT NULL DEFAULT 0"),
     ]
 
-    # Use a separate connection with lock_timeout so we fail fast
-    # instead of blocking forever if the old instance holds locks.
-    # Columns that fail will be added on the next deploy.
-    from souschef.database import engine
-    with engine.connect() as raw_conn:
-        raw_conn.execute(text("SET lock_timeout = '3s'"))
-        for table_name, col_name, col_def in migrations:
+    # Set statement_timeout so ALTER TABLE fails fast if blocked by old instance locks.
+    # Columns that timeout will be added on the next deploy once the old instance is gone.
+    try:
+        conn.execute(text("SET statement_timeout = '3000'"))
+        conn.commit()
+    except Exception:
+        pass
+
+    for table_name, col_name, col_def in migrations:
+        try:
+            conn.execute(text(
+                f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {col_name} {col_def}"
+            ))
+            conn.commit()
+        except Exception as e:
+            print(f"[db]   {table_name}.{col_name} skipped: {e}", flush=True)
+            # Rollback the failed transaction so the connection is usable for the next statement
             try:
-                raw_conn.execute(text(
-                    f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {col_name} {col_def}"
-                ))
-                raw_conn.commit()
-            except Exception as e:
-                print(f"[db]   {table_name}.{col_name} skipped: {e}", flush=True)
-                raw_conn.rollback()
+                conn.execute(text("SELECT 1"))
+            except Exception:
+                # Connection is in failed transaction state, need to rollback via raw connection
+                try:
+                    conn.raw.rollback()
+                except Exception:
+                    pass
+
+    # Reset statement_timeout
+    try:
+        conn.execute(text("SET statement_timeout = '0'"))
+        conn.commit()
+    except Exception:
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
 
 
 def _migrate_accepted_to_on_grocery(conn: DictConnection) -> None:
