@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../api/client'
 import Sheet from './Sheet'
 import MealPickerSheet from './MealPickerSheet'
-import BuildListFlow from './BuildListFlow'
 import SwapPrompt from './SwapPrompt'
 import SidePickerSheet from './SidePickerSheet'
 import MealIngredientsSheet from './MealIngredientsSheet'
@@ -29,7 +28,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const [actionDate, setActionDate] = useState(null) // date for action bottom sheet
   const [pickerDate, setPickerDate] = useState(null) // date for meal picker
   const [pickerMode, setPickerMode] = useState(null) // 'add' or 'replace'
-  const [showBuildFlow, setShowBuildFlow] = useState(false)
   const [swapPrompt, setSwapPrompt] = useState(null)
   const [loading, setLoading] = useState(true)
   const [dragFrom, setDragFrom] = useState(null)
@@ -189,18 +187,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     } catch { await load() }
   }
 
-  const handleBuildMyList = () => {
-    setShowBuildFlow(true)
-  }
-
-  const handleBuildFlowComplete = async () => {
-    setShowBuildFlow(false)
-    try {
-      const result = await api.getMeals()
-      setData(result)
-    } catch { /* data stays stale — user sees grocery tab next anyway */ }
-    if (onNavigate) onNavigate('grocery')
-  }
 
   const handleSwapConfirm = async (choices) => {
     try {
@@ -385,12 +371,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
         </Sheet>
       )}
 
-      {/* Floating Build My List FAB */}
-      {hasMeals && (
-        <button className="build-list-fab" onClick={handleBuildMyList}>
-          <span className="fab-icon">+</span> Build My List
-        </button>
-      )}
+
 
       {/* Plan footer */}
       <div className="plan-footer">
@@ -412,13 +393,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
         />
       )}
 
-      {/* Build List Flow */}
-      {showBuildFlow && (
-        <BuildListFlow
-          onComplete={handleBuildFlowComplete}
-          onClose={() => setShowBuildFlow(false)}
-        />
-      )}
 
       {/* Side picker sheet */}
       {sidePickerDate && (

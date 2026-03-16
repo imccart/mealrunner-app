@@ -73,12 +73,18 @@ export const api = {
   }),
   getGrocerySuggestions: () => request('/grocery/suggestions'),
   getGroceryTrips: () => request('/grocery/trips'),
-  getCarryover: () => request('/grocery/carryover'),
   getActiveTrip: () => request('/grocery/active-trip'),
-  buildMyList: (carryover = [], regulars = [], pantryItems = []) => request('/grocery/build', {
+  skipGroceryItem: (name) => request(`/grocery/skip/${encodeURIComponent(name)}`, { method: 'POST' }),
+  unskipGroceryItem: (name) => request(`/grocery/unskip/${encodeURIComponent(name)}`, { method: 'POST' }),
+  addRegulars: (selected) => request('/grocery/add-regulars', {
     method: 'POST',
-    body: JSON.stringify({ carryover, regulars, pantry_items: pantryItems }),
+    body: JSON.stringify({ selected }),
   }),
+  addPantryItems: (selected) => request('/grocery/add-pantry', {
+    method: 'POST',
+    body: JSON.stringify({ selected }),
+  }),
+  freshStartGrocery: () => request('/grocery/build', { method: 'POST' }),
 
   // Receipt
   getReceipt: () => request('/receipt'),

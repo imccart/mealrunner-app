@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import AutocompleteInput from './AutocompleteInput'
-import BuildListFlow from './BuildListFlow'
 import Sheet from './Sheet'
 import FeedbackFab from './FeedbackFab'
 
@@ -12,18 +11,6 @@ const GROUP_ORDER = [
   'Personal Care', 'Household', 'Cleaning', 'Pets', 'Other'
 ]
 
-function formatDateRange(start, end) {
-  if (!start || !end) return ''
-  const s = new Date(start + 'T00:00:00')
-  const e = new Date(end + 'T00:00:00')
-  const sMonth = s.toLocaleDateString('en-US', { month: 'short' })
-  const eMonth = e.toLocaleDateString('en-US', { month: 'short' })
-  if (sMonth === eMonth) {
-    return `${sMonth} ${s.getDate()} \u2013 ${e.getDate()}`
-  }
-  return `${sMonth} ${s.getDate()} \u2013 ${eMonth} ${e.getDate()}`
-}
-
 export default function GroceryPage({ sidebar = false }) {
   const [grocery, setGrocery] = useState(null)
   const [meals, setMeals] = useState(null)
@@ -32,12 +19,16 @@ export default function GroceryPage({ sidebar = false }) {
   const [collapsedGroups, setCollapsedGroups] = useState({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
-  const [recatItem, setRecatItem] = useState(null) // item name being recategorized
-  const [hideChecked, setHideChecked] = useState(false)
-  const [showBuildFlow, setShowBuildFlow] = useState(false)
-  const [bannerDismissed, setBannerDismissed] = useState(
-    () => localStorage.getItem('souschef_grocery_banner_seen') === 'true'
-  )
+  const [recatItem, setRecatItem] = useState(null)
+  const [hideDone, setHideDone] = useState(false)
+
+  // Inline prompt state
+  const [regularsData, setRegularsData] = useState(null)
+  const [regularsChecked, setRegularsChecked] = useState(new Set())
+  const [regularsExpanded, setRegularsExpanded] = useState(false)
+  const [pantryData, setPantryData] = useState(null)
+  const [pantryChecked, setPantryChecked] = useState(new Set())
+  const [pantryExpanded, setPantryExpanded] = useState(false)
 
   const load = async () => {
     try {
@@ -50,7 +41,6 @@ export default function GroceryPage({ sidebar = false }) {
     setLoading(false)
   }
 
-  // Load item pool for autocomplete
   const [itemPool, setItemPool] = useState([])
   useEffect(() => {
     api.getGrocerySuggestions().then(data => {
@@ -63,11 +53,11 @@ export default function GroceryPage({ sidebar = false }) {
   if (loading) return <><div className="loading">Gathering ingredients...</div><FeedbackFab page="grocery" /></>
   if (loadError) return <><div className="loading">Something went wrong loading your list. Try refreshing.</div><FeedbackFab page="grocery" /></>
 
-  const { items_by_group, checked, ordered, start_date, end_date } = grocery
+  const { items_by_group, checked, ordered, skipped, start_date, end_date, regulars_added, pantry_checked } = grocery
   const checkedSet = new Set((checked || []).map(n => n.toLowerCase()))
   const orderedSet = new Set((ordered || []).map(n => n.toLowerCase()))
+  const skippedSet = new Set((skipped || []).map(n => n.toLowerCase()))
 
-  // Items already on the list
   const onListSet = new Set()
   for (const group of Object.values(items_by_group)) {
     for (const item of group) {
@@ -75,26 +65,24 @@ export default function GroceryPage({ sidebar = false }) {
     }
   }
 
-  // Count totals per group and overall
   let totalItems = 0
-  let checkedCount = 0
+  let doneCount = 0
   const groupCounts = {}
   for (const [group, items] of Object.entries(items_by_group)) {
     let groupRemaining = 0
     for (const item of items) {
       totalItems++
       const nameLower = item.name.toLowerCase()
-      if (checkedSet.has(nameLower)) {
-        checkedCount++
+      if (checkedSet.has(nameLower) || skippedSet.has(nameLower)) {
+        doneCount++
       } else if (!orderedSet.has(nameLower)) {
         groupRemaining++
       }
     }
     groupCounts[group] = { total: items.length, remaining: groupRemaining }
   }
-  const remainingCount = totalItems - checkedCount
+  const remainingCount = totalItems - doneCount
 
-  // Sort groups by defined order
   const sortedGroups = Object.keys(items_by_group).sort((a, b) => {
     const ai = GROUP_ORDER.indexOf(a)
     const bi = GROUP_ORDER.indexOf(b)
@@ -103,15 +91,12 @@ export default function GroceryPage({ sidebar = false }) {
 
   const hasItems = sortedGroups.length > 0
 
-  // Auto-collapse groups where all items are checked or ordered
   const isGroupAllDone = (group) => {
     return groupCounts[group] && groupCounts[group].remaining === 0
   }
 
   const isGroupExpanded = (group) => {
-    // If user has explicitly toggled, respect that
     if (collapsedGroups[group] !== undefined) return !collapsedGroups[group]
-    // Auto-collapse if all done
     return !isGroupAllDone(group)
   }
 
@@ -123,16 +108,42 @@ export default function GroceryPage({ sidebar = false }) {
   const handleToggle = async (name) => {
     const prev = grocery
     const newChecked = new Set(checkedSet)
+    const newSkipped = new Set(skippedSet)
     if (newChecked.has(name.toLowerCase())) {
       newChecked.delete(name.toLowerCase())
     } else {
       newChecked.add(name.toLowerCase())
+      newSkipped.delete(name.toLowerCase())
     }
-    setGrocery({ ...grocery, checked: [...newChecked] })
+    setGrocery({ ...grocery, checked: [...newChecked], skipped: [...newSkipped] })
     try {
       await api.toggleGroceryItem(name)
     } catch {
-      setGrocery(prev) // rollback on failure
+      setGrocery(prev)
+    }
+  }
+
+  const handleSkip = async (name) => {
+    const prev = grocery
+    const newSkipped = new Set(skippedSet)
+    const newChecked = new Set(checkedSet)
+    if (newSkipped.has(name.toLowerCase())) {
+      newSkipped.delete(name.toLowerCase())
+      setGrocery({ ...grocery, skipped: [...newSkipped] })
+      try {
+        await api.unskipGroceryItem(name)
+      } catch {
+        setGrocery(prev)
+      }
+    } else {
+      newSkipped.add(name.toLowerCase())
+      newChecked.delete(name.toLowerCase())
+      setGrocery({ ...grocery, skipped: [...newSkipped], checked: [...newChecked] })
+      try {
+        await api.skipGroceryItem(name)
+      } catch {
+        setGrocery(prev)
+      }
     }
   }
 
@@ -160,33 +171,182 @@ export default function GroceryPage({ sidebar = false }) {
     }
   }
 
-  const showBanner = hasItems && !bannerDismissed
+  // Regulars prompt handlers
+  const handleRegularsExpand = async () => {
+    if (!regularsData) {
+      try {
+        const data = await api.getRegulars()
+        const active = (data.regulars || []).filter(r => r.active)
+        setRegularsData(active)
+        setRegularsChecked(new Set(active.map(r => r.name)))
+      } catch {
+        setRegularsData([])
+      }
+    }
+    setRegularsExpanded(true)
+  }
 
-  const handleDismissBanner = () => {
-    localStorage.setItem('souschef_grocery_banner_seen', 'true')
-    setBannerDismissed(true)
+  const handleRegularsSubmit = async () => {
+    try {
+      const result = await api.addRegulars([...regularsChecked])
+      setGrocery(result)
+    } catch {}
+    setRegularsExpanded(false)
+  }
+
+  const handleRegularsDismiss = async () => {
+    // Dismiss without adding — mark as handled with empty selection
+    try {
+      const result = await api.addRegulars([])
+      setGrocery(result)
+    } catch {}
+    setRegularsExpanded(false)
+  }
+
+  // Pantry prompt handlers
+  const handlePantryExpand = async () => {
+    if (!pantryData) {
+      try {
+        const data = await api.getPantry()
+        setPantryData(data.items || [])
+      } catch {
+        setPantryData([])
+      }
+    }
+    setPantryExpanded(true)
+  }
+
+  const handlePantrySubmit = async () => {
+    try {
+      const result = await api.addPantryItems([...pantryChecked])
+      setGrocery(result)
+    } catch {}
+    setPantryExpanded(false)
+  }
+
+  const handlePantryDismiss = async () => {
+    try {
+      const result = await api.addPantryItems([])
+      setGrocery(result)
+    } catch {}
+    setPantryExpanded(false)
+  }
+
+  // Inline prompt cards
+  const promptCards = (
+    <>
+      {!regulars_added && (
+        <div className="grocery-prompt-card">
+          {!regularsExpanded ? (
+            <button className="grocery-prompt-trigger" onClick={handleRegularsExpand}>
+              <span className="grocery-prompt-icon">{'\u{1F504}'}</span>
+              <span>Add your regulars</span>
+              <span className="grocery-prompt-arrow">{'\u203A'}</span>
+            </button>
+          ) : (
+            <div className="grocery-prompt-body">
+              <div className="grocery-prompt-title">Regulars</div>
+              <div className="grocery-prompt-desc">Uncheck anything you don't need this time.</div>
+              {regularsData && regularsData.length > 0 ? (
+                <div className="grocery-prompt-checklist">
+                  {regularsData.map(r => (
+                    <div
+                      key={r.id}
+                      className="grocery-prompt-check-item"
+                      onClick={() => {
+                        setRegularsChecked(prev => {
+                          const next = new Set(prev)
+                          next.has(r.name) ? next.delete(r.name) : next.add(r.name)
+                          return next
+                        })
+                      }}
+                    >
+                      <div className={`grocery-prompt-check ${regularsChecked.has(r.name) ? 'active' : ''}`}>
+                        {regularsChecked.has(r.name) && '\u2713'}
+                      </div>
+                      <span>{r.name}</span>
+                      {r.shopping_group && <span className="grocery-prompt-group">{r.shopping_group}</span>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grocery-prompt-empty">No active regulars yet.</div>
+              )}
+              <div className="grocery-prompt-actions">
+                <button className="grocery-prompt-dismiss" onClick={handleRegularsDismiss}>Not this time</button>
+                <button className="grocery-prompt-submit" onClick={handleRegularsSubmit}>
+                  Add to list {regularsChecked.size > 0 ? `(${regularsChecked.size})` : ''}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!pantry_checked && (
+        <div className="grocery-prompt-card">
+          {!pantryExpanded ? (
+            <button className="grocery-prompt-trigger" onClick={handlePantryExpand}>
+              <span className="grocery-prompt-icon">{'\u{1F3E0}'}</span>
+              <span>Running low on anything?</span>
+              <span className="grocery-prompt-arrow">{'\u203A'}</span>
+            </button>
+          ) : (
+            <div className="grocery-prompt-body">
+              <div className="grocery-prompt-title">Pantry check</div>
+              <div className="grocery-prompt-desc">Check anything you need to restock.</div>
+              {pantryData && pantryData.length > 0 ? (
+                <div className="grocery-prompt-checklist">
+                  {pantryData.map(p => (
+                    <div
+                      key={p.id}
+                      className="grocery-prompt-check-item"
+                      onClick={() => {
+                        setPantryChecked(prev => {
+                          const next = new Set(prev)
+                          next.has(p.name) ? next.delete(p.name) : next.add(p.name)
+                          return next
+                        })
+                      }}
+                    >
+                      <div className={`grocery-prompt-check ${pantryChecked.has(p.name) ? 'active' : ''}`}>
+                        {pantryChecked.has(p.name) && '\u2713'}
+                      </div>
+                      <span>{p.name}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grocery-prompt-empty">No pantry items yet. Add them in My Kitchen.</div>
+              )}
+              <div className="grocery-prompt-actions">
+                <button className="grocery-prompt-dismiss" onClick={handlePantryDismiss}>Skip</button>
+                <button className="grocery-prompt-submit" onClick={handlePantrySubmit}>
+                  Add to list {pantryChecked.size > 0 ? `(${pantryChecked.size})` : ''}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  )
+
+  const isItemHidden = (nameLower) => {
+    return hideDone && (checkedSet.has(nameLower) || skippedSet.has(nameLower))
   }
 
   const listContent = (
     <>
-      <div className="grocery-build-hint">
-        Ready to shop? Tap <strong>Build My List</strong> to add regulars and start your trip.
-      </div>
-      {hasItems && checkedCount > 0 && (
-        <button className="hide-checked-toggle" onClick={() => setHideChecked(h => !h)}>
-          {hideChecked ? 'Show checked' : 'Hide checked'} ({checkedCount})
+      {hasItems && doneCount > 0 && (
+        <button className="hide-checked-toggle" onClick={() => setHideDone(h => !h)}>
+          {hideDone ? `Show checked & skipped` : `Hide checked & skipped`} ({doneCount})
         </button>
-      )}
-      {showBanner && (
-        <div className="grocery-banner">
-          <span>This list was built from your meals, minus what's in your pantry and regulars.</span>
-          <button className="grocery-banner-dismiss" onClick={handleDismissBanner}>{'\u00D7'}</button>
-        </div>
       )}
       {!hasItems ? (
         <div className="empty-state">
           <div className="icon">{'\u{1F6D2}'}</div>
-          <p>No items yet. Tap the cart on a meal to add it, or use Build My List to add everything at once.</p>
+          <p>No items yet. Tap the cart icon on a meal to add its ingredients.</p>
         </div>
       ) : (
         sortedGroups.map(group => {
@@ -209,37 +369,54 @@ export default function GroceryPage({ sidebar = false }) {
                   <span className="group-left-count done">{'\u2713'} done</span>
                 )}
               </button>
-              {expanded && items.filter(item => !hideChecked || !checkedSet.has(item.name.toLowerCase())).map(item => {
+              {expanded && items.filter(item => !isItemHidden(item.name.toLowerCase())).map(item => {
                 const nameLower = item.name.toLowerCase()
                 const isChecked = checkedSet.has(nameLower)
                 const isOrdered = orderedSet.has(nameLower)
-                const stateClass = isChecked ? 'checked' : isOrdered ? 'ordered' : ''
+                const isSkipped = skippedSet.has(nameLower)
+                const stateClass = isChecked ? 'checked' : isOrdered ? 'ordered' : isSkipped ? 'skipped' : ''
                 return (
                   <div
                     key={item.name}
                     className={`grocery-item ${stateClass}`}
-                    onClick={() => !isOrdered && handleToggle(item.name)}
                   >
-                    <span className={`check ${stateClass}`}>
-                      {isChecked ? '\u2713' : isOrdered ? '\u2191' : ''}
-                    </span>
-                    <span className={`item-name ${isChecked ? 'done-text' : isOrdered ? 'ordered-text' : ''}`}>
-                      {item.name}
-                      {item.meal_count > 1 && (
-                        <span className="multi-badge">x{item.meal_count}</span>
-                      )}
-                    </span>
-                    {item.for_meals && item.for_meals.length > 0 && (
-                      <span className="item-meals">
-                        {item.for_meals.join(', ')}
-                        {isOrdered && ' \u00B7 ordered'}
-                      </span>
+                    {isOrdered ? (
+                      <>
+                        <span className="check ordered">{'\u2191'}</span>
+                        <span className="item-name ordered-text">
+                          {item.name}
+                          {item.meal_count > 1 && <span className="multi-badge">x{item.meal_count}</span>}
+                        </span>
+                        {item.for_meals && item.for_meals.length > 0 && (
+                          <span className="item-meals">{item.for_meals.join(', ')} {'\u00B7'} ordered</span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <span className={`item-name ${isChecked ? 'done-text' : isSkipped ? 'skipped-text' : ''}`}>
+                          {item.name}
+                          {item.meal_count > 1 && <span className="multi-badge">x{item.meal_count}</span>}
+                        </span>
+                        {item.for_meals && item.for_meals.length > 0 && (
+                          <span className="item-meals">{item.for_meals.join(', ')}</span>
+                        )}
+                        <div className="grocery-item-toggle">
+                          <button
+                            className={`toggle-seg bought ${isChecked ? 'active' : ''}`}
+                            onClick={() => handleToggle(item.name)}
+                          >Bought</button>
+                          <button
+                            className={`toggle-seg skip ${isSkipped ? 'active' : ''}`}
+                            onClick={() => handleSkip(item.name)}
+                          >Skip</button>
+                        </div>
+                        <button
+                          className="recat-btn"
+                          title="Move to different aisle"
+                          onClick={(e) => { e.stopPropagation(); setRecatItem(item.name) }}
+                        >{'\u2630'}</button>
+                      </>
                     )}
-                    <button
-                      className="recat-btn"
-                      title="Move to different aisle"
-                      onClick={(e) => { e.stopPropagation(); setRecatItem(item.name) }}
-                    >{'\u2630'}</button>
                   </div>
                 )
               })}
@@ -304,6 +481,7 @@ export default function GroceryPage({ sidebar = false }) {
         <>
           <div className="sidebar-card">
             {sidebarTitleBlock}
+            {promptCards}
             {listContent}
           </div>
           {addBar}
@@ -312,10 +490,8 @@ export default function GroceryPage({ sidebar = false }) {
         <>
           {mobileTitleBlock}
           {addBar}
+          {promptCards}
           {listContent}
-          <button className="build-list-fab" onClick={() => setShowBuildFlow(true)}>
-            <span className="fab-icon">+</span> Build My List
-          </button>
         </>
       )}
 
@@ -333,12 +509,6 @@ export default function GroceryPage({ sidebar = false }) {
             ))}
           </div>
         </Sheet>
-      )}
-      {showBuildFlow && (
-        <BuildListFlow onComplete={async () => {
-          setShowBuildFlow(false)
-          await load()
-        }} onClose={() => setShowBuildFlow(false)} />
       )}
       <FeedbackFab page="grocery" />
     </>

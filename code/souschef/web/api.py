@@ -564,7 +564,7 @@ def _build_trip_from_meals(conn, trip_id: int, mw, user_id: str) -> None:
 
 
 def _ensure_active_trip(conn, mw, user_id: str):
-    """Find or create an active trip. Trips persist until Build My List creates a new one."""
+    """Find or create an active trip. Trips persist until Fresh Start creates a new one."""
     trip = _get_active_trip(conn, user_id)
 
     if trip is None:
@@ -675,6 +675,7 @@ async def get_grocery(request: Request):
     items_by_group: dict[str, list[dict]] = {}
     checked_names: list[str] = []
     ordered_names: list[str] = []
+    skipped_names: list[str] = []
 
     for r in rows:
         group = r["shopping_group"] or "Other"
@@ -685,11 +686,14 @@ async def get_grocery(request: Request):
             "for_meals": for_meals,
             "meal_count": r["meal_count"],
             "source": r["source"],
+            "added_at": r["added_at"] if r["added_at"] else None,
         })
         if r["checked"]:
             checked_names.append(r["name"].lower())
         if r["ordered"]:
             ordered_names.append(r["name"].lower())
+        if r["skipped"]:
+            skipped_names.append(r["name"].lower())
 
     return {
         "start_date": mw.start_date,
@@ -697,6 +701,9 @@ async def get_grocery(request: Request):
         "items_by_group": items_by_group,
         "checked": checked_names,
         "ordered": ordered_names,
+        "skipped": skipped_names,
+        "regulars_added": bool(trip["regulars_added"]),
+        "pantry_checked": bool(trip["pantry_checked"]),
     }
 
 
@@ -775,8 +782,9 @@ async def toggle_grocery_item(item_name: str, request: Request):
     if row:
         new_checked = 0 if row["checked"] else 1
         if new_checked:
+            # Clear skipped state when marking as bought
             conn.execute(
-                text("UPDATE trip_items SET checked = 1, checked_at = CURRENT_TIMESTAMP WHERE id = :id"),
+                text("UPDATE trip_items SET checked = 1, checked_at = CURRENT_TIMESTAMP, skipped = 0, skipped_at = NULL WHERE id = :id"),
                 {"id": row["id"]},
             )
             # If checking off an item not ordered via Kroger, it's in-store
@@ -801,50 +809,138 @@ async def toggle_grocery_item(item_name: str, request: Request):
     return {"name": item_name, "checked": checked}
 
 
-@router.get("/grocery/carryover")
-async def get_carryover(request: Request):
-    """Check for unchecked items on the active trip (for carryover prompt)."""
+@router.post("/grocery/skip/{item_name:path}")
+async def skip_grocery_item(item_name: str, request: Request):
+    """Mark an item as skipped (don't need this time)."""
     user_id = request.state.user_id
     conn = _conn()
     trip = _get_active_trip(conn, user_id)
     if not trip:
-        return {"has_carryover": False, "items": []}
+        return await get_grocery(request)
 
-    rows = conn.execute(
-        text("""SELECT name, shopping_group FROM trip_items WHERE trip_id = :trip_id
-            AND (
-                (checked = 0 AND ordered = 0)
-                OR (ordered = 1 AND receipt_status = 'not_fulfilled')
-            )"""),
-        {"trip_id": trip["id"]},
-    ).fetchall()
+    conn.execute(
+        text("UPDATE trip_items SET skipped = 1, skipped_at = CURRENT_TIMESTAMP, checked = 0, checked_at = NULL WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
+        {"trip_id": trip["id"], "name": item_name},
+    )
+    conn.commit()
+    return await get_grocery(request)
 
-    items = [{"name": r["name"], "shopping_group": r["shopping_group"]} for r in rows]
-    return {"has_carryover": len(items) > 0, "items": items}
+
+@router.post("/grocery/unskip/{item_name:path}")
+async def unskip_grocery_item(item_name: str, request: Request):
+    """Unmark an item as skipped (return to active)."""
+    user_id = request.state.user_id
+    conn = _conn()
+    trip = _get_active_trip(conn, user_id)
+    if not trip:
+        return await get_grocery(request)
+
+    conn.execute(
+        text("UPDATE trip_items SET skipped = 0, skipped_at = NULL WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
+        {"trip_id": trip["id"], "name": item_name},
+    )
+    conn.commit()
+    return await get_grocery(request)
+
+
+@router.post("/grocery/add-regulars")
+async def add_regulars_to_grocery(body: dict, request: Request):
+    """Add selected regulars to the active trip. Records skipped regulars for learning."""
+    from souschef.planner import load_rolling_week
+    from souschef.regulars import list_regulars
+
+    user_id = request.state.user_id
+    selected = body.get("selected", [])
+    selected_lower = {n.lower() for n in selected}
+
+    conn = _conn()
+    mw = load_rolling_week(conn, user_id)
+    trip = _ensure_active_trip(conn, mw, user_id)
+
+    # Add selected regulars
+    for name in selected:
+        name_lower = name.lower()
+        group = _infer_item_group(conn, name_lower, user_id)
+        conn.execute(
+            text("""INSERT INTO trip_items
+               (trip_id, name, shopping_group, source, for_meals, meal_count)
+               VALUES (:trip_id, :name, :group, 'regular', '', 0)
+               ON CONFLICT DO NOTHING"""),
+            {"trip_id": trip["id"], "name": name_lower, "group": group},
+        )
+
+    # Record skipped regulars for learning
+    all_active_regulars = list_regulars(conn, user_id, active_only=True)
+    for reg in all_active_regulars:
+        if reg.name.lower() not in selected_lower:
+            group = reg.shopping_group or _infer_item_group(conn, reg.name.lower(), user_id)
+            conn.execute(
+                text("""INSERT INTO trip_items
+                   (trip_id, name, shopping_group, source, for_meals, meal_count, checked)
+                   VALUES (:trip_id, :name, :group, 'regular_skip', '', 0, 0)
+                   ON CONFLICT DO NOTHING"""),
+                {"trip_id": trip["id"], "name": reg.name.lower(), "group": group},
+            )
+
+    # Mark regulars as handled for this trip
+    conn.execute(
+        text("UPDATE grocery_trips SET regulars_added = 1 WHERE id = :id"),
+        {"id": trip["id"]},
+    )
+    conn.commit()
+
+    return await get_grocery(request)
+
+
+@router.post("/grocery/add-pantry")
+async def add_pantry_to_grocery(body: dict, request: Request):
+    """Add selected pantry items to the active trip."""
+    from souschef.planner import load_rolling_week
+
+    user_id = request.state.user_id
+    selected = body.get("selected", [])
+
+    conn = _conn()
+    mw = load_rolling_week(conn, user_id)
+    trip = _ensure_active_trip(conn, mw, user_id)
+
+    for name in selected:
+        name_lower = name.lower()
+        group = _infer_item_group(conn, name_lower, user_id)
+        conn.execute(
+            text("""INSERT INTO trip_items
+               (trip_id, name, shopping_group, source, for_meals, meal_count)
+               VALUES (:trip_id, :name, :group, 'pantry', '', 0)
+               ON CONFLICT DO NOTHING"""),
+            {"trip_id": trip["id"], "name": name_lower, "group": group},
+        )
+
+    # Mark pantry as handled for this trip
+    conn.execute(
+        text("UPDATE grocery_trips SET pantry_checked = 1 WHERE id = :id"),
+        {"id": trip["id"]},
+    )
+    conn.commit()
+
+    return await get_grocery(request)
 
 
 @router.post("/grocery/build")
 async def build_my_list(request: Request, body: dict = None):
-    """Build/update the grocery trip. Merges new items into existing trip, preserving checked state."""
+    """Reset grocery trip — completes old trip, creates new one from meals only."""
     from souschef.planner import load_rolling_week
     from souschef.planner import set_all_grocery
 
     user_id = request.state.user_id
-    body = body or {}
-    carryover_items = body.get("carryover", [])
-    regular_items = body.get("regulars", [])
-    pantry_items = body.get("pantry_items", [])
-
     conn = _conn()
     mw = load_rolling_week(conn, user_id)
 
     # First, toggle all meals to grocery list
     if mw.meals:
         set_all_grocery(conn, user_id, mw.start_date, mw.end_date, on=True)
-        # Refresh mw to pick up the on_grocery changes
         mw = load_rolling_week(conn, user_id)
 
-    # Complete previous trip and start a new cycle
+    # Complete previous trip
     existing_trip = _get_active_trip(conn, user_id)
     if existing_trip:
         conn.execute(
@@ -853,6 +949,7 @@ async def build_my_list(request: Request, body: dict = None):
         )
         conn.commit()
 
+    # Start fresh trip from meals only (no regulars, no pantry, no carryover)
     cursor = conn.execute(
         text("""INSERT INTO grocery_trips (trip_type, start_date, end_date, active, user_id)
            VALUES ('plan', :start_date, :end_date, 1, :user_id)
@@ -862,59 +959,6 @@ async def build_my_list(request: Request, body: dict = None):
     conn.commit()
     trip_id = cursor.fetchone()["id"]
     _build_trip_from_meals(conn, trip_id, mw, user_id)
-
-    # Add carryover items from previous trip
-    for name in carryover_items:
-        name_lower = name.lower()
-        group = _infer_item_group(conn, name_lower, user_id)
-        conn.execute(
-            text("""INSERT INTO trip_items
-               (trip_id, name, shopping_group, source, for_meals, meal_count)
-               VALUES (:trip_id, :name, :group, 'carryover', '', 0)
-               ON CONFLICT DO NOTHING"""),
-            {"trip_id": trip_id, "name": name_lower, "group": group},
-        )
-
-    # Add selected regulars
-    selected_regular_names = {n.lower() for n in regular_items}
-    for name in regular_items:
-        name_lower = name.lower()
-        group = _infer_item_group(conn, name_lower, user_id)
-        conn.execute(
-            text("""INSERT INTO trip_items
-               (trip_id, name, shopping_group, source, for_meals, meal_count)
-               VALUES (:trip_id, :name, :group, 'regular', '', 0)
-               ON CONFLICT DO NOTHING"""),
-            {"trip_id": trip_id, "name": name_lower, "group": group},
-        )
-
-    # Record skipped regulars (active regulars the user unchecked)
-    # Needed for learning: detect regulars consistently skipped across weeks
-    from souschef.regulars import list_regulars
-    all_active_regulars = list_regulars(conn, user_id, active_only=True)
-    for reg in all_active_regulars:
-        if reg.name.lower() not in selected_regular_names:
-            group = reg.shopping_group or _infer_item_group(conn, reg.name.lower(), user_id)
-            conn.execute(
-                text("""INSERT INTO trip_items
-                   (trip_id, name, shopping_group, source, for_meals, meal_count, checked)
-                   VALUES (:trip_id, :name, :group, 'regular_skip', '', 0, 0)
-                   ON CONFLICT DO NOTHING"""),
-                {"trip_id": trip_id, "name": reg.name.lower(), "group": group},
-            )
-
-    # Add selected pantry items (running low)
-    for name in pantry_items:
-        name_lower = name.lower()
-        group = _infer_item_group(conn, name_lower, user_id)
-        conn.execute(
-            text("""INSERT INTO trip_items
-               (trip_id, name, shopping_group, source, for_meals, meal_count)
-               VALUES (:trip_id, :name, :group, 'pantry', '', 0)
-               ON CONFLICT DO NOTHING"""),
-            {"trip_id": trip_id, "name": name_lower, "group": group},
-        )
-
     conn.commit()
 
     return await get_grocery(request)
