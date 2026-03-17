@@ -1655,7 +1655,7 @@ async def get_receipt(request: Request):
     }
 
 
-def _parse_receipt_by_type(receipt_type: str, content: str):
+def _parse_receipt_by_type(receipt_type: str, content: str, grocery_names: list[str] | None = None):
     """Internal: parse receipt content by type. Only called from trusted code paths."""
     from souschef.reconcile import (
         parse_receipt_text, parse_receipt_pdf, parse_receipt_image,
@@ -1664,7 +1664,7 @@ def _parse_receipt_by_type(receipt_type: str, content: str):
     if receipt_type == "pdf_path":
         return parse_receipt_pdf(content)
     elif receipt_type == "image_path":
-        return parse_receipt_image(content)
+        return parse_receipt_image(content, grocery_names=grocery_names)
     elif receipt_type == "eml_path":
         return parse_receipt_email(content)
     else:
@@ -1681,9 +1681,21 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
     if not trip:
         return {"ok": False, "error": "No active trip"}
 
+    # Gather grocery names for image receipts (enables single-call matching)
+    grocery_names = None
+    if receipt_type == "image_path":
+        try:
+            name_rows = conn.execute(
+                text("SELECT name FROM trip_items WHERE trip_id = :trip_id AND (ordered = 1 OR checked = 1)"),
+                {"trip_id": trip["id"]},
+            ).fetchall()
+            grocery_names = [r["name"] for r in name_rows]
+        except Exception:
+            pass
+
     # Parse receipt
     try:
-        receipt_items = _parse_receipt_by_type(receipt_type, content)
+        receipt_items = _parse_receipt_by_type(receipt_type, content, grocery_names=grocery_names)
     except Exception as e:
         logger.exception("Failed to parse receipt")
         return {"ok": False, "error": "Failed to parse receipt"}
@@ -1752,12 +1764,44 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         {"trip_id": trip["id"]},
     ).fetchall()
 
-    # Split items: ordered items (have UPCs) use diff_order, checked items use diff_grocery_list
+    # Check if receipt items have pre-matched grocery_match metadata (from image parser)
+    has_pre_matches = any(ri.get("grocery_match") for ri in new_receipt_items)
+
+    # Apply pre-matches from image parser before standard matching
+    if has_pre_matches:
+        trip_items_by_name = {r["name"].lower(): r for r in rows}
+        pre_matched_trip_names = set()
+        still_unmatched = []
+        for ri in new_receipt_items:
+            gm = ri.get("grocery_match", "")
+            if gm and gm.lower() in trip_items_by_name:
+                r = trip_items_by_name[gm.lower()]
+                conn.execute(
+                    text("""UPDATE trip_items SET
+                           receipt_item = :receipt_item, receipt_price = :receipt_price,
+                           receipt_upc = :receipt_upc, receipt_status = 'matched'
+                       WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
+                    {"receipt_item": ri.get("item") or ri.get("raw", ""),
+                     "receipt_price": ri.get("price"),
+                     "receipt_upc": ri.get("upc", ""),
+                     "trip_id": trip["id"], "name": gm},
+                )
+                pre_matched_trip_names.add(gm.lower())
+            else:
+                still_unmatched.append(ri)
+        # Update rows to exclude pre-matched items
+        rows = [r for r in rows if r["name"].lower() not in pre_matched_trip_names]
+        new_receipt_items = still_unmatched
+        total_matched = len(pre_matched_trip_names)
+        total_not_fulfilled = 0
+    else:
+        total_matched = 0
+        total_not_fulfilled = 0
+
+    # Split remaining items: ordered (have UPCs) use diff_order, checked use diff_grocery_list
     upc_rows = [r for r in rows if r["product_upc"]]
     name_rows = [r for r in rows if not r["product_upc"]]
     receipt_remaining = list(new_receipt_items)
-    total_matched = 0
-    total_not_fulfilled = 0
 
     # Pass 1: match ordered items by UPC
     if upc_rows:

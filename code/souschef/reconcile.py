@@ -22,8 +22,8 @@ def _get_client():
     return anthropic.Anthropic()  # falls back to ANTHROPIC_API_KEY env var
 
 
-def _ocr_receipt_image(image_path: str) -> str:
-    """Step 1: Use Claude Vision purely for OCR — extract raw text line by line."""
+def _load_image_for_api(image_path: str) -> tuple[str, str]:
+    """Load and prepare an image for the Claude API. Returns (base64_data, media_type)."""
     path = Path(image_path)
     if not path.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
@@ -51,9 +51,45 @@ def _ocr_receipt_image(image_path: str) -> str:
         img.save(buf, format="JPEG", quality=85)
         raw = buf.getvalue()
         media_type = "image/jpeg"
-    image_data = base64.standard_b64encode(raw).decode("utf-8")
+    return base64.standard_b64encode(raw).decode("utf-8"), media_type
 
+
+def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None) -> list[dict]:
+    """Parse a receipt image using Claude Vision.
+
+    If grocery_names is provided, returns pre-matched results via single-call pipeline.
+    Otherwise falls back to text-based parsing.
+    Returns list of {item, raw, qty, price}.
+    """
+    image_data, media_type = _load_image_for_api(image_path)
     client = _get_client()
+
+    grocery_context = ""
+    if grocery_names:
+        grocery_context = (
+            "\n\nSTEP 3: Match items to my grocery list ONLY when clearly the same product.\n"
+            f"Grocery list: {json.dumps(grocery_names)}\n\n"
+            "MATCHING RULES:\n"
+            "- Hot dog franks (e.g. NTHN ANG BF FRNKS) match 'hot dogs'\n"
+            "- BLPK BUNS match 'hot dog buns'\n"
+            "- CARROTS match 'carrot'\n"
+            "- BANANA ORGNC means Organic Bananas, NOT orange juice\n"
+            "- BREAD BUTTER WINE is a wine brand, NOT bread — it is an extra\n"
+            "- OM NACHOS GRANDE is an Oscar Mayer Lunchable, NOT tortilla chips — extra\n"
+            "- ST BCN CHS EGG BIT is Starbucks Egg Bites snack, NOT eggs — extra\n"
+            "- Frozen meals (Michelinas, Lunchables) do NOT match basic ingredients\n"
+            "- ORGNC means Organic, not Orange\n"
+            "- If unsure, put it in extras. Do NOT force matches.\n\n"
+            "Return ONLY valid JSON (no markdown, no explanation):\n"
+            '{"matched": [{"grocery_name": "...", "receipt_item": "...", "raw": "...", "price": 0.00}], '
+            '"extras": [{"receipt_item": "...", "raw": "...", "price": 0.00}]}'
+        )
+    else:
+        grocery_context = (
+            "\n\nReturn ONLY a valid JSON array (no markdown, no explanation). Each object:\n"
+            '{"item": "decoded name", "raw": "exact receipt text", "price": 0.00, "qty": 1}'
+        )
+
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=2048,
@@ -71,79 +107,54 @@ def _ocr_receipt_image(image_path: str) -> str:
                 {
                     "type": "text",
                     "text": (
-                        "Transcribe every line of text on this grocery receipt exactly as printed. "
-                        "Do NOT interpret, decode, or correct any abbreviations. "
-                        "Output each line on its own line, preserving the original text character for character. "
-                        "Include everything: store header, items, prices, savings lines, tax, totals, footer. "
-                        "If a character is unclear, use your best read of the actual character, but do NOT "
-                        "replace abbreviations with what you think the full word might be."
+                        "Read this grocery receipt and extract every purchased item.\n\n"
+                        "STEP 1: Identify item lines vs non-item lines.\n"
+                        "ITEM lines have: product name, then a price like 3.67, then a letter (B, T, or F).\n"
+                        "SKIP lines starting with SC (savings/discounts).\n"
+                        "SKIP lines like 1 @ 4/5.00 or weight lines (2.70 lb @ 0.69).\n"
+                        "SKIP TAX, BALANCE, TOTAL, KROGER PLUS CUSTOMER, payment info, store header.\n"
+                        "PC after an item name is a price code, not part of the product name.\n\n"
+                        "STEP 2: For each item, provide raw (exact receipt text), item/receipt_item "
+                        "(decoded name), and price.\n\n"
+                        "Common grocery receipt abbreviations: NTHN=Nathan's, BLPK=Ballpark, "
+                        "OM/OSCM=Oscar Mayer, ST=Starbucks, TYFR=Taylor Farms, MICHELINA=Michelina's, "
+                        "BF=Beef, FRNKS=Franks, CHS=Cheese, BCN=Bacon, ORGNC=Organic, STO=Store brand."
+                        + grocery_context
                     ),
                 },
             ],
         }],
     )
 
-    return message.content[0].text
+    result_text = message.content[0].text
+    parsed = _extract_json(result_text)
 
+    if grocery_names and isinstance(parsed, dict):
+        # Single-call pipeline returned {matched, extras} — flatten to item list
+        # with grocery_match metadata for _process_receipt to use
+        items = []
+        for m in parsed.get("matched", []):
+            items.append({
+                "item": m.get("receipt_item", m.get("item", "")),
+                "raw": m.get("raw", ""),
+                "price": m.get("price"),
+                "qty": m.get("qty", 1),
+                "grocery_match": m.get("grocery_name", ""),
+            })
+        for e in parsed.get("extras", []):
+            items.append({
+                "item": e.get("receipt_item", e.get("item", "")),
+                "raw": e.get("raw", ""),
+                "price": e.get("price"),
+                "qty": e.get("qty", 1),
+            })
+        return items
 
-# Patterns for lines to skip during structural parsing
-_SKIP_PATTERNS = [
-    re.compile(r"^\s*SC\s", re.IGNORECASE),                        # savings/coupon
-    re.compile(r"^\d+\s*@\s", re.IGNORECASE),                      # qty pricing (1 @ 4/5.00)
-    re.compile(r"^\d+\.\d+\s.*lb\s*@", re.IGNORECASE),             # weight pricing
-    re.compile(r"^\s*(TAX|BALANCE|TOTAL|SUBTOTAL)\b", re.IGNORECASE),
-    re.compile(r"KROGER\s+(PLUS|SAVINGS)", re.IGNORECASE),
-    re.compile(r"Age Restricted", re.IGNORECASE),
-    re.compile(r"SAVINGS", re.IGNORECASE),
-    re.compile(r"COUPON", re.IGNORECASE),
-    re.compile(r"^\s*$"),                                           # blank
-]
+    # Standard list of items
+    if isinstance(parsed, list):
+        return parsed
 
-# Item line: [optional WI/WT prefix] name [optional PC] price tax_code
-_ITEM_PATTERN = re.compile(
-    r"^(?:W[IT]\s+)?"       # optional WI or WT (weighed item) prefix
-    r"(.+?)"                # item name (non-greedy)
-    r"\s+(?:PC\s+)?"        # optional PC suffix
-    r"(\d+\.\d{2})"         # price
-    r"\s+([BTF])\s*$"       # tax code
-)
-
-
-def _parse_receipt_lines(ocr_text: str) -> list[dict]:
-    """Step 2: Structurally parse OCR text into items. Returns list of {item, price, qty}."""
-    items = []
-    for line in ocr_text.strip().split("\n"):
-        line = line.strip()
-
-        if any(pat.search(line) for pat in _SKIP_PATTERNS):
-            continue
-
-        m = _ITEM_PATTERN.match(line)
-        if m:
-            raw_name = m.group(1).strip()
-            price = float(m.group(2))
-            # Strip trailing PC if captured in name
-            raw_name = re.sub(r"\s+PC$", "", raw_name)
-            # Strip trailing numbers that are quantity indicators (e.g. "OH NACHOS GRANDE 1")
-            raw_name = re.sub(r"\s+\d+$", "", raw_name)
-            # Collapse multiple spaces (OCR artifact)
-            raw_name = re.sub(r"\s{2,}", " ", raw_name)
-            items.append({"item": raw_name, "raw": raw_name, "price": price, "qty": 1})
-
-    return items
-
-
-def parse_receipt_image(image_path: str) -> list[dict]:
-    """Parse a receipt image using two-step pipeline: OCR then structural parsing.
-
-    Returns list of {item, raw, qty, price}.
-    """
-    ocr_text = _ocr_receipt_image(image_path)
-    items = _parse_receipt_lines(ocr_text)
-    if not items:
-        # Fallback: if structural parsing found nothing, try the old text-based approach
-        return parse_receipt_text(ocr_text)
-    return items
+    return []
 
 
 def parse_receipt_text(text: str) -> list[dict]:
