@@ -501,9 +501,17 @@ export default function GroceryPage({ sidebar = false }) {
           <div className="icon">{'\u{1F6D2}'}</div>
           <p>No items yet. Tap the cart icon on a meal to add its ingredients.</p>
         </div>
+      ) : remainingCount === 0 ? (
+        <div className="empty-state">
+          <div className="icon">{'\u{1F389}'}</div>
+          <p>All done! Nothing left on the list.</p>
+        </div>
       ) : (
         sortedGroups.map(group => {
           const items = items_by_group[group]
+          const visibleItems = items.filter(item => !isItemHidden(item.name.toLowerCase()))
+          if (visibleItems.length === 0) return null
+
           const { remaining: groupLeft } = groupCounts[group]
           const expanded = isGroupExpanded(group)
           const allDone = isGroupAllDone(group)
@@ -522,7 +530,7 @@ export default function GroceryPage({ sidebar = false }) {
                   <span className="group-left-count done">{'\u2713'} done</span>
                 )}
               </button>
-              {expanded && items.filter(item => !isItemHidden(item.name.toLowerCase())).map(renderItem)}
+              {expanded && visibleItems.map(renderItem)}
             </div>
           )
         })
