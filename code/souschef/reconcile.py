@@ -87,21 +87,11 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
                         "EXACTLY as printed — do NOT decode abbreviations, do NOT guess what words mean.\n\n"
                         "ITEM lines have: abbreviated product name, then a price (like 3.67), "
                         "then usually a tax letter (B, T, or F).\n\n"
-                        "SKIP ALL of these — they are NOT purchased items:\n"
-                        "- KROGER SAVINGS, KROGER PLUS SAVINGS, YOUR SAVINGS, TOTAL SAVINGS\n"
-                        "- Any line starting with SC (savings/coupon discounts)\n"
-                        "- Negative prices (refunds/discounts like -1.00)\n"
-                        "- Lines like '1 @ 4/5.00' or weight lines ('2.70 lb @ 0.69')\n"
-                        "- TAX, BALANCE DUE, TOTAL, KROGER PLUS CUSTOMER, CHANGE\n"
-                        "- Payment lines (VISA, DEBIT, CREDIT, CASH)\n"
-                        "- Store header/footer, date, time, register number, cashier\n"
-                        "- 'PC' or 'MFG' after a product name is a code, not part of the name\n\n"
-                        "The word KROGER followed by SAVINGS is ALWAYS a discount line, never a product. "
-                        "Even if you read it as 'KROGER SMOKIES' or similar — it is KROGER SAVINGS.\n\n"
+                        "SKIP all non-item lines: savings/coupons (SC lines, SAVINGS, PLUS), "
+                        "negative prices, quantity/weight lines (@ or lb), "
+                        "TAX/TOTAL/BALANCE, payment lines, store header/footer.\n\n"
                         "Return ONLY a JSON array (no markdown). Each object:\n"
-                        '{"raw": "EXACT text as printed", "price": 3.67}\n\n'
-                        "Example: if the receipt says 'NTHN ANG BF FRNKS    4.99 B', return:\n"
-                        '{"raw": "NTHN ANG BF FRNKS", "price": 4.99}'
+                        '{"raw": "EXACT text as printed", "price": 3.67}'
                     ),
                 },
             ],
@@ -115,10 +105,10 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
 
     # Filter out non-item lines that OCR may have included
     _skip_patterns = re.compile(
-        r"(?i)(kroger\s*sav|kroger\s*plus|your\s*sav|total\s*sav|"
-        r"^sc\s|^tax\s|balance|"
+        r"(?i)(savings|your\s+sav|total\s+sav|"
+        r"^sc\s|^tax\b|balance\s*due|"
         r"visa|debit|credit|change\s*due|"
-        r"kroger\s*smok)",  # common OCR misread of "KROGER SAVINGS"
+        r"subtotal|total\b)",
     )
     filtered = []
     for item in ocr_items:
@@ -146,34 +136,16 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
 
     if grocery_names:
         decode_prompt = (
-            "I have raw text lines from a Kroger grocery receipt and my grocery shopping list. "
+            "I have raw text lines from a grocery receipt and my shopping list. "
             "For each receipt line:\n"
             "1. Decode the abbreviation into the full product name\n"
             "2. Decide if it matches something on my grocery list\n\n"
-            "Common Kroger abbreviations:\n"
-            "- NTHN = Nathan's, BLPK = Ballpark, OM/OSCM/OSCT = Oscar Mayer\n"
-            "- ST = Starbucks, TYFR = Taylor Farms, MICHELINA = Michelina's\n"
-            "- BF = Beef, FRNKS = Franks, CHS = Cheese, BCN = Bacon\n"
-            "- ORGNC = Organic, STO = Store brand, HNBRG = Hamburger\n"
-            "- LNCH/LNCHBL = Lunchable, PBLE = Portable\n"
-            "- BNS/BUN = Buns, SHCS = Sliced Cheese\n\n"
-            "MATCHING RULES — extremely strict, most items should NOT match:\n"
-            "- A match means: if I wrote this item on my grocery list, THIS is the exact "
-            "product I would grab off the shelf to fulfill it.\n"
-            "- 'hot dogs' = a package of hot dog franks (Nathan's, Oscar Mayer, etc.)\n"
-            "- 'hot dog buns' = a package of hot dog buns specifically, NOT hamburger buns, "
-            "NOT pretzel buns, NOT any other kind of bread/bun\n"
-            "- 'carrot' = a bag/bunch of carrots, NOT a product that happens to contain "
-            "the letters C-R-R in its abbreviation\n"
-            "- 'eggs' = a carton of eggs, NOT egg bites, NOT any prepared food with egg\n"
-            "- 'pickles' = a jar of pickles, NOT pickle-flavored anything\n"
-            "- 'bread' = a loaf of bread, NOT any baked good\n"
-            "- A product must BE the grocery item, not merely CONTAIN it as an ingredient\n"
-            "- Lunchables, frozen meals, snack items = NEVER match basic ingredients\n"
-            "- Pretzel buns, hamburger buns ≠ 'hot dog buns'\n"
-            "- Smokies, sausages ≠ 'hot dogs' (different product)\n"
-            "- When in doubt, set grocery_match to null. Most receipt items will NOT match.\n"
-            "- It is MUCH better to miss a match than to make a wrong match.\n\n"
+            "MATCHING RULE: A match means the receipt product IS the grocery list item. "
+            "If I wrote this on my shopping list, would I grab this exact product to fulfill it? "
+            "The product must be the same CATEGORY of food, not just share a word.\n\n"
+            "Most receipt items will NOT match anything on the list — that is expected. "
+            "Set grocery_match to null for anything you're not confident about. "
+            "A wrong match is much worse than a missed match.\n\n"
             f"Receipt lines: {json.dumps(raw_lines)}\n"
             f"Grocery list: {json.dumps(grocery_names)}\n\n"
             "Return ONLY valid JSON (no markdown):\n"
@@ -182,10 +154,7 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
         )
     else:
         decode_prompt = (
-            "Decode these Kroger grocery receipt abbreviations into full product names.\n\n"
-            "Common abbreviations: NTHN=Nathan's, BLPK=Ballpark, OM/OSCM/OSCT=Oscar Mayer, "
-            "ST=Starbucks, TYFR=Taylor Farms, BF=Beef, FRNKS=Franks, CHS=Cheese, "
-            "BCN=Bacon, ORGNC=Organic, STO=Store brand, HNBRG=Hamburger.\n\n"
+            "Decode these grocery receipt abbreviations into full product names.\n\n"
             f"Receipt lines: {json.dumps(raw_lines)}\n\n"
             "Return ONLY a JSON array (no markdown). Each object:\n"
             '{"raw": "exact receipt text", "decoded": "full product name"}'
@@ -565,20 +534,15 @@ def _ai_match(grocery_names: list[str], receipt_items: list[dict]) -> list[tuple
         messages=[{
             "role": "user",
             "content": (
-                "Match these abbreviated grocery receipt items to items on a grocery list. "
-                "Receipt items use heavy store abbreviations (e.g. NTHN=Nathan's, BLPK=Ballpark, "
-                "OSCM/OM=Oscar Mayer, ST=Starbucks, TYFR=Taylor Farms, MICHELINA=Michelina's, "
-                "BF=Beef, FRNKS=Franks, CHS=Cheese, BCN=Bacon, ORGNC=Organic, STO=Store brand). "
-                "A receipt item like 'NTHN ANG BF FRNKS' (Nathan's Angus Beef Franks) should match "
-                "'hot dogs' on the grocery list.\n\n"
+                "Match these grocery receipt items to items on a shopping list. "
+                "A match means the receipt product IS the shopping list item — same category of food. "
+                "Most items will NOT match. Only include matches you are very confident about. "
+                "Return [] if no matches.\n\n"
                 f"Grocery list: {json.dumps(grocery_names)}\n"
                 f"Receipt items: {json.dumps(receipt_descriptions)}\n\n"
-                "Return ONLY a JSON array. Each object should have:\n"
-                '- "grocery": the exact item name from the grocery list\n'
-                '- "receipt": the exact item from the receipt items list\n'
-                '- "decoded": your best guess at the full product name\n'
-                "Only include CONFIDENT matches. If unsure, leave it out. "
-                "Return [] if no matches."
+                "Return ONLY a JSON array. Each object:\n"
+                '{"grocery": "exact grocery list item", "receipt": "exact receipt item", '
+                '"decoded": "full product name"}'
             ),
         }],
     )
