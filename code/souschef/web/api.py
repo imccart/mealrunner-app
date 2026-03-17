@@ -530,12 +530,52 @@ def _infer_item_group(conn, name: str, user_id: str) -> str:
     return _infer_group(name)
 
 
+def _build_group_resolver(conn, user_id: str):
+    """Build a fast group resolver by pre-loading all lookup tables.
+
+    Returns a function: resolve(name) -> str that uses the same priority
+    as _infer_item_group but without per-item DB queries.
+    """
+    from souschef.regulars import _infer_group
+
+    # Load all user overrides
+    rows = conn.execute(
+        text("SELECT LOWER(item_name) AS item_name, shopping_group FROM user_item_groups WHERE user_id = :user_id"),
+        {"user_id": user_id},
+    ).fetchall()
+    overrides = {r["item_name"]: r["shopping_group"] for r in rows}
+
+    # Load all ingredient aisles
+    rows = conn.execute(text("SELECT LOWER(name) AS name, aisle FROM ingredients WHERE aisle != ''")).fetchall()
+    aisles = {r["name"]: r["aisle"] for r in rows}
+
+    # Load all regulars groups
+    rows = conn.execute(
+        text("SELECT LOWER(name) AS name, shopping_group FROM regulars WHERE user_id = :user_id AND shopping_group != ''"),
+        {"user_id": user_id},
+    ).fetchall()
+    reg_groups = {r["name"]: r["shopping_group"] for r in rows}
+
+    def resolve(name: str) -> str:
+        nl = name.strip().lower()
+        if nl in overrides:
+            return overrides[nl]
+        if nl in aisles:
+            return aisles[nl]
+        if nl in reg_groups:
+            return reg_groups[nl]
+        return _infer_group(nl)
+
+    return resolve
+
+
 def _build_trip_from_meals(conn, trip_id: int, mw, user_id: str) -> None:
     """Populate trip_items from current meal grocery build + saved extras."""
     from souschef.feedback import get_skips_for_meal, get_adds_for_meal
     from souschef.grocery import build_grocery_list, split_by_store
 
     grocery_meals = [m for m in mw.meals if m.on_grocery]
+    resolve = _build_group_resolver(conn, user_id)
 
     if grocery_meals:
         # Collect skip overrides for all meals on the plan
@@ -555,7 +595,7 @@ def _build_trip_from_meals(conn, trip_id: int, mw, user_id: str) -> None:
                 ):
                     continue
 
-                group = _infer_item_group(conn, item.ingredient_name.lower(), user_id)
+                group = resolve(item.ingredient_name)
                 for_meals = ",".join(item_meals) if item_meals else ""
                 conn.execute(
                     text("""INSERT INTO trip_items
@@ -618,6 +658,7 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
     from souschef.grocery import build_grocery_list, split_by_store
 
     grocery_meals = [m for m in mw.meals if m.on_grocery]
+    resolve = _build_group_resolver(conn, user_id)
 
     # Build fresh meal items
     fresh_meal_items: dict[str, dict] = {}
@@ -627,7 +668,7 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
         for items in by_store.values():
             for item in items:
                 name_lower = item.ingredient_name.lower()
-                group = _infer_item_group(conn, name_lower, user_id)
+                group = resolve(name_lower)
                 for_meals = ",".join(item.meals) if item.meals else ""
                 fresh_meal_items[name_lower] = {
                     "name": name_lower,
@@ -1878,12 +1919,13 @@ async def get_regulars(request: Request):
     user_id = request.state.user_id
     conn = _conn()
     regulars = list_regulars(conn, user_id, active_only=True)
+    resolve = _build_group_resolver(conn, user_id)
     return {
         "regulars": [
             {
                 "id": r.id,
                 "name": r.name,
-                "shopping_group": _infer_item_group(conn, r.name, user_id),
+                "shopping_group": resolve(r.name),
                 "store_pref": r.store_pref,
                 "active": r.active,
             }
@@ -2227,6 +2269,7 @@ async def get_pantry(request: Request):
     user_id = request.state.user_id
     conn = _conn()
     items = list_pantry(conn, user_id)
+    resolve = _build_group_resolver(conn, user_id)
     return {
         "items": [
             {
@@ -2235,7 +2278,7 @@ async def get_pantry(request: Request):
                 "name": p.ingredient_name,
                 "quantity": p.quantity,
                 "unit": p.unit,
-                "shopping_group": _infer_item_group(conn, p.ingredient_name, user_id),
+                "shopping_group": resolve(p.ingredient_name),
             }
             for p in items
         ]

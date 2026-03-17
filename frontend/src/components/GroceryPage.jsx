@@ -93,7 +93,6 @@ function SwipeableItem({ children, onSwipeRight, className }) {
 
 export default function GroceryPage({ sidebar = false }) {
   const [grocery, setGrocery] = useState(null)
-  const [meals, setMeals] = useState(null)
   const [addText, setAddText] = useState('')
   const [addDupe, setAddDupe] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState({})
@@ -112,9 +111,8 @@ export default function GroceryPage({ sidebar = false }) {
 
   const load = async () => {
     try {
-      const [g, m] = await Promise.all([api.getGrocery(), api.getMeals()])
+      const g = await api.getGrocery()
       setGrocery(g)
-      setMeals(m)
     } catch {
       setLoadError(true)
     }
@@ -186,75 +184,37 @@ export default function GroceryPage({ sidebar = false }) {
     setCollapsedGroups(prev => ({ ...prev, [group]: currentlyExpanded }))
   }
 
-  const handleBought = async (name) => {
+  // Unified handler for bought/have-it/skip actions
+  const handleItemAction = async (name, action) => {
     const prev = grocery
     const nl = name.toLowerCase()
-    const newChecked = new Set(checkedSet)
-    const newSkipped = new Set(skippedSet)
-    const newHaveIt = new Set(haveItSet)
-    if (newChecked.has(nl)) {
-      newChecked.delete(nl)
-    } else {
-      newChecked.add(nl)
-      newSkipped.delete(nl)
-      newHaveIt.delete(nl)
+    const sets = {
+      checked: new Set(checkedSet),
+      skipped: new Set(skippedSet),
+      have_it: new Set(haveItSet),
     }
-    setGrocery({ ...grocery, checked: [...newChecked], skipped: [...newSkipped], have_it: [...newHaveIt] })
-    try {
-      await api.toggleGroceryItem(name)
-    } catch {
-      setGrocery(prev)
-    }
-  }
 
-  const handleHaveIt = async (name) => {
-    const prev = grocery
-    const nl = name.toLowerCase()
-    const newHaveIt = new Set(haveItSet)
-    const newChecked = new Set(checkedSet)
-    const newSkipped = new Set(skippedSet)
-    if (newHaveIt.has(nl)) {
-      newHaveIt.delete(nl)
-    } else {
-      newHaveIt.add(nl)
-      newChecked.delete(nl)
-      newSkipped.delete(nl)
+    // Unskip is a special case — just remove from skipped
+    if (action === 'skip' && sets.skipped.has(nl)) {
+      sets.skipped.delete(nl)
+      setGrocery({ ...grocery, skipped: [...sets.skipped] })
+      try { await api.unskipGroceryItem(name) } catch { setGrocery(prev) }
+      return
     }
-    setGrocery({ ...grocery, have_it: [...newHaveIt], checked: [...newChecked], skipped: [...newSkipped] })
-    try {
-      await api.haveItGroceryItem(name)
-    } catch {
-      setGrocery(prev)
-    }
-  }
 
-  const handleSkip = async (name) => {
-    const prev = grocery
-    const nl = name.toLowerCase()
-    if (skippedSet.has(nl)) {
-      // Unskip: tap on skipped item to restore
-      const newSkipped = new Set(skippedSet)
-      newSkipped.delete(nl)
-      setGrocery({ ...grocery, skipped: [...newSkipped] })
-      try {
-        await api.unskipGroceryItem(name)
-      } catch {
-        setGrocery(prev)
-      }
+    // Toggle target set, clear the others
+    const keyMap = { bought: 'checked', have_it: 'have_it', skip: 'skipped' }
+    const targetKey = keyMap[action]
+    if (sets[targetKey].has(nl)) {
+      sets[targetKey].delete(nl)
     } else {
-      const newSkipped = new Set(skippedSet)
-      const newChecked = new Set(checkedSet)
-      const newHaveIt = new Set(haveItSet)
-      newSkipped.add(nl)
-      newChecked.delete(nl)
-      newHaveIt.delete(nl)
-      setGrocery({ ...grocery, skipped: [...newSkipped], checked: [...newChecked], have_it: [...newHaveIt] })
-      try {
-        await api.skipGroceryItem(name)
-      } catch {
-        setGrocery(prev)
-      }
+      sets[targetKey].add(nl)
+      Object.keys(sets).filter(k => k !== targetKey).forEach(k => sets[k].delete(nl))
     }
+    setGrocery({ ...grocery, checked: [...sets.checked], skipped: [...sets.skipped], have_it: [...sets.have_it] })
+
+    const apiCall = { bought: api.toggleGroceryItem, have_it: api.haveItGroceryItem, skip: api.skipGroceryItem }
+    try { await apiCall[action](name) } catch { setGrocery(prev) }
   }
 
   const handleRecategorize = async (group) => {
@@ -281,6 +241,13 @@ export default function GroceryPage({ sidebar = false }) {
     }
   }
 
+  const submitPrompt = async (apiFn, selected) => {
+    try {
+      const result = await apiFn(selected)
+      setGrocery(result)
+    } catch {}
+  }
+
   // Regulars prompt handlers
   const handleRegularsExpand = async () => {
     try {
@@ -296,18 +263,11 @@ export default function GroceryPage({ sidebar = false }) {
   }
 
   const handleRegularsSubmit = async () => {
-    try {
-      const result = await api.addRegulars([...regularsChecked])
-      setGrocery(result)
-    } catch {}
+    await submitPrompt(api.addRegulars, [...regularsChecked])
     setRegularsExpanded(false)
   }
-
   const handleRegularsDismiss = async () => {
-    try {
-      const result = await api.addRegulars([])
-      setGrocery(result)
-    } catch {}
+    await submitPrompt(api.addRegulars, [])
     setRegularsExpanded(false)
   }
 
@@ -324,23 +284,16 @@ export default function GroceryPage({ sidebar = false }) {
   }
 
   const handlePantrySubmit = async () => {
-    try {
-      const result = await api.addPantryItems([...pantryChecked])
-      setGrocery(result)
-    } catch {}
+    await submitPrompt(api.addPantryItems, [...pantryChecked])
     setPantryExpanded(false)
   }
-
   const handlePantryDismiss = async () => {
-    try {
-      const result = await api.addPantryItems([])
-      setGrocery(result)
-    } catch {}
+    await submitPrompt(api.addPantryItems, [])
     setPantryExpanded(false)
   }
 
   // Inline prompt cards — "prompt" = full card, "done" = compact row
-  const renderPromptCard = (state, expanded, label, doneLabel, onExpand, onSubmit, onDismiss, data, checkedSet, setChecked, groupField) => {
+  const renderPromptCard = ({ state, expanded, label, doneLabel, onExpand, onSubmit, onDismiss, data, checkedSet, setChecked, groupField }) => {
     if (expanded) {
       return (
         <div className="grocery-prompt-card">
@@ -418,18 +371,18 @@ export default function GroceryPage({ sidebar = false }) {
 
   const promptCards = (
     <>
-      {renderPromptCard(
-        regulars_state, regularsExpanded,
-        'Add your regulars', 'Regulars added',
-        handleRegularsExpand, handleRegularsSubmit, handleRegularsDismiss,
-        regularsData, regularsChecked, setRegularsChecked, 'shopping_group'
-      )}
-      {renderPromptCard(
-        pantry_state, pantryExpanded,
-        'Running low on anything?', 'Pantry checked',
-        handlePantryExpand, handlePantrySubmit, handlePantryDismiss,
-        pantryData, pantryChecked, setPantryChecked, null
-      )}
+      {renderPromptCard({
+        state: regulars_state, expanded: regularsExpanded,
+        label: 'Add your regulars', doneLabel: 'Regulars added',
+        onExpand: handleRegularsExpand, onSubmit: handleRegularsSubmit, onDismiss: handleRegularsDismiss,
+        data: regularsData, checkedSet: regularsChecked, setChecked: setRegularsChecked, groupField: 'shopping_group',
+      })}
+      {renderPromptCard({
+        state: pantry_state, expanded: pantryExpanded,
+        label: 'Running low on anything?', doneLabel: 'Pantry checked',
+        onExpand: handlePantryExpand, onSubmit: handlePantrySubmit, onDismiss: handlePantryDismiss,
+        data: pantryData, checkedSet: pantryChecked, setChecked: setPantryChecked, groupField: null,
+      })}
     </>
   )
 
@@ -471,7 +424,7 @@ export default function GroceryPage({ sidebar = false }) {
         <div
           key={item.name}
           className="grocery-item-row skipped"
-          onClick={() => handleSkip(item.name)}
+          onClick={() => handleItemAction(item.name, 'skip')}
         >
           <div className="grocery-item-top">
             <span className="item-name skipped-text">
@@ -505,18 +458,18 @@ export default function GroceryPage({ sidebar = false }) {
           <div className="grocery-item-actions">
             <button
               className="grocery-skip-btn"
-              onClick={() => handleSkip(item.name)}
+              onClick={() => handleItemAction(item.name, 'skip')}
               title="Don't need this time"
             >Nevermind</button>
             <div className="grocery-item-toggle">
               <button
                 className={`toggle-seg bought ${isChecked ? 'active' : ''}`}
-                onClick={() => handleBought(item.name)}
+                onClick={() => handleItemAction(item.name, 'bought')}
                 title="Picked up at the store"
               >Bought</button>
               <button
                 className={`toggle-seg have-it ${isHaveIt ? 'active' : ''}`}
-                onClick={() => handleHaveIt(item.name)}
+                onClick={() => handleItemAction(item.name, 'have_it')}
                 title="Already have it at home"
               >Have it</button>
             </div>
@@ -529,7 +482,7 @@ export default function GroceryPage({ sidebar = false }) {
       <SwipeableItem
         key={item.name}
         className={`grocery-item-row ${stateClass}`}
-        onSwipeRight={() => handleSkip(item.name)}
+        onSwipeRight={() => handleItemAction(item.name, 'skip')}
       >
         {itemContent}
       </SwipeableItem>
