@@ -78,11 +78,18 @@ def parse_receipt_image(image_path: str) -> list[dict]:
                     "text": (
                         "Parse this grocery receipt. Extract every purchased item as JSON.\n"
                         "Return ONLY a JSON array, no other text. Each object should have:\n"
-                        '- "item": the FULL interpreted product name — grocery receipts often use '
-                        'abbreviations like "ORG BNNNAS" for "Organic Bananas" or "GRK YGRT" for '
-                        '"Greek Yogurt". Decode these into clear, readable product names.\n'
+                        '- "item": the FULL interpreted product name. Grocery receipts use heavy '
+                        "abbreviations — you must decode them into the actual brand and product name. Examples:\n"
+                        '  "NTHN ANG BF FRNKS" → "Nathan\'s Angus Beef Franks"\n'
+                        '  "BLPK BUN" → "Ballpark Buns"\n'
+                        '  "KR CRTS CELLO" → "Kroger Carrots Cello Bag"\n'
+                        '  "ORG BNNNAS" → "Organic Bananas"\n'
+                        '  "GRK YGRT VNL" → "Greek Yogurt Vanilla"\n'
+                        '  "SM CRFT MAC CH" → "Smart Craft Mac and Cheese"\n'
+                        "  Always include the brand name if recognizable from the abbreviation.\n"
                         '- "qty": quantity (integer, default 1)\n'
                         '- "price": total price for that line item (float)\n'
+                        '- "upc": the UPC/barcode number if visible on the receipt (string, omit if not present)\n'
                         "Ignore subtotals, tax, totals, savings lines, store info, and payment lines.\n"
                         "If an item was voided or removed, skip it.\n"
                     ),
@@ -105,9 +112,13 @@ def parse_receipt_text(text: str) -> list[dict]:
             "content": (
                 "Parse this grocery receipt/order confirmation. Extract every purchased item as JSON.\n"
                 "Return ONLY a JSON array, no other text. Each object should have:\n"
-                '- "item": product name/description\n'
+                '- "item": the FULL interpreted product name. Decode receipt abbreviations into '
+                "actual brand and product names (e.g., \"NTHN ANG BF FRNKS\" → \"Nathan's Angus Beef Franks\", "
+                "\"BLPK BUN\" → \"Ballpark Buns\", \"KR CRTS CELLO\" → \"Kroger Carrots Cello Bag\"). "
+                "Always include the brand if recognizable.\n"
                 '- "qty": quantity (integer, default 1)\n'
                 '- "price": total price for that line item (float)\n'
+                '- "upc": the UPC/barcode number if present (string, omit if not)\n'
                 "Ignore subtotals, tax, totals, savings lines, store info, and headers.\n"
                 "If an item was substituted, include the substitution (what was actually received).\n\n"
                 f"Receipt:\n{text}"
