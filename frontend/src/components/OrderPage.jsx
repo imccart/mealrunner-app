@@ -252,6 +252,12 @@ export default function OrderPage() {
     try {
       const result = await api.submitOrder(selectedAccount || undefined)
       setSubmitResult(result)
+      if (result.ok) {
+        // Refresh order — submitted items will be filtered out
+        const data = await api.getOrder()
+        setOrder(data)
+        setActiveItem(null)
+      }
     } catch {
       setSubmitResult({ ok: false, error: 'Failed to submit order' })
     }
@@ -265,15 +271,19 @@ export default function OrderPage() {
   const totalCount = allItems.length
 
   if (totalCount === 0) {
+    const wasSent = submitResult?.ok
     return (
       <>
         <div className="page-header">
           <h2 className="screen-heading">Order</h2>
-          <div className="screen-sub">Select products for your list</div>
+          <div className="screen-sub">{wasSent ? 'Order sent' : 'Select products for your list'}</div>
         </div>
         <div className="empty-state">
-          <div className="icon">{'\u{1F6D2}'}</div>
-          <p>No unchecked items to order. Check off items you bought in-store on the Grocery tab first.</p>
+          <div className="icon">{wasSent ? '\u{1F6D2}\u{2728}' : '\u{1F6D2}'}</div>
+          <p>{wasSent
+            ? `Sent to ${storeName}! Check your Kroger app for updates.`
+            : 'No unchecked items to order. Check off items you bought in-store on the Grocery tab first.'
+          }</p>
         </div>
         <FeedbackFab page="order" />
       </>
