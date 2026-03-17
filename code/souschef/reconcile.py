@@ -22,15 +22,12 @@ def _get_client():
     return anthropic.Anthropic()  # falls back to ANTHROPIC_API_KEY env var
 
 
-def parse_receipt_image(image_path: str) -> list[dict]:
-    """Parse a receipt image using Claude vision. Returns list of {item, qty, price}."""
-    import anthropic
-
+def _ocr_receipt_image(image_path: str) -> str:
+    """Step 1: Use Claude Vision purely for OCR — extract raw text line by line."""
     path = Path(image_path)
     if not path.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
 
-    # Determine media type
     suffix = path.suffix.lower()
     media_types = {
         ".jpg": "image/jpeg",
@@ -43,13 +40,11 @@ def parse_receipt_image(image_path: str) -> list[dict]:
     if not media_type:
         raise ValueError(f"Unsupported image format: {suffix}")
 
-    # Resize if over 4MB to stay under Claude's 5MB limit
     raw = path.read_bytes()
     if len(raw) > 4 * 1024 * 1024:
         from PIL import Image
         import io
         img = Image.open(io.BytesIO(raw))
-        # Scale down keeping aspect ratio
         max_dim = 2000
         img.thumbnail((max_dim, max_dim), Image.LANCZOS)
         buf = io.BytesIO()
@@ -61,7 +56,7 @@ def parse_receipt_image(image_path: str) -> list[dict]:
     client = _get_client()
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=4096,
+        max_tokens=2048,
         messages=[{
             "role": "user",
             "content": [
@@ -76,40 +71,79 @@ def parse_receipt_image(image_path: str) -> list[dict]:
                 {
                     "type": "text",
                     "text": (
-                        "Parse this grocery store receipt image. Extract every purchased item as JSON.\n"
-                        "Return ONLY a JSON array, no other text.\n\n"
-                        "CRITICAL: Read the receipt text EXACTLY as printed. Do NOT guess or decode "
-                        "abbreviations — preserve the raw text character by character. For example, if "
-                        'the receipt says "TYFR SLAD KIT", write exactly "TYFR SLAD KIT", do NOT '
-                        'guess "Taylor Farms Salad Kit" or "Tylenol Salad Kit".\n\n'
-                        "Each object should have:\n"
-                        '- "raw": the EXACT text as printed on the receipt (verbatim, no interpretation)\n'
-                        '- "item": your best guess at the full product name (decode abbreviations here). '
-                        "Common grocery brand abbreviations: NTHN=Nathan's, BLPK=Ballpark, OM/OSCM=Oscar Mayer, "
-                        "ST=Starbucks, TYFR=Taylor Farms, PRSL=Fresh Express, KR/KRG=Kroger, GV=Great Value, "
-                        "MICHELINA=Michelina's, BCN=Bacon, CHS=Cheese, BF=Beef, FRNKS=Franks, "
-                        "ORGNC=Organic, STO=Store brand. If unsure, just clean up the raw text slightly.\n"
-                        '- "qty": quantity (integer, default 1)\n'
-                        '- "price": total price for that line item (float)\n'
-                        '- "upc": the UPC/barcode number if visible (string, omit if not present)\n\n'
-                        "SKIP these lines (they are NOT purchased items):\n"
-                        "- Lines starting with 'SC' or containing 'SAVINGS' or 'COUPON' (these are discounts)\n"
-                        "- Lines like 'X @ Y/Z.ZZ' or 'X.XX lb @ X.XX /lb' (quantity/weight pricing)\n"
-                        "- TAX, BALANCE, TOTAL, SUBTOTAL lines\n"
-                        "- KROGER PLUS CUSTOMER, loyalty card, payment method lines\n"
-                        "- Store name, address, phone number, cashier info\n"
-                        "- 'Age Restricted' lines\n"
-                        "- Any line that is clearly a discount amount (usually indented with SC prefix)\n\n"
-                        "The letter at the end of each price line (B, T, F) is a tax code — ignore it, "
-                        "it is not part of the item name. 'PC' appearing after item names is a price code marker, "
-                        "not part of the item name either.\n"
+                        "Transcribe every line of text on this grocery receipt exactly as printed. "
+                        "Do NOT interpret, decode, or correct any abbreviations. "
+                        "Output each line on its own line, preserving the original text character for character. "
+                        "Include everything: store header, items, prices, savings lines, tax, totals, footer. "
+                        "If a character is unclear, use your best read of the actual character, but do NOT "
+                        "replace abbreviations with what you think the full word might be."
                     ),
                 },
             ],
         }],
     )
 
-    return _extract_json(message.content[0].text)
+    return message.content[0].text
+
+
+# Patterns for lines to skip during structural parsing
+_SKIP_PATTERNS = [
+    re.compile(r"^\s*SC\s", re.IGNORECASE),                        # savings/coupon
+    re.compile(r"^\d+\s*@\s", re.IGNORECASE),                      # qty pricing (1 @ 4/5.00)
+    re.compile(r"^\d+\.\d+\s.*lb\s*@", re.IGNORECASE),             # weight pricing
+    re.compile(r"^\s*(TAX|BALANCE|TOTAL|SUBTOTAL)\b", re.IGNORECASE),
+    re.compile(r"KROGER\s+(PLUS|SAVINGS)", re.IGNORECASE),
+    re.compile(r"Age Restricted", re.IGNORECASE),
+    re.compile(r"SAVINGS", re.IGNORECASE),
+    re.compile(r"COUPON", re.IGNORECASE),
+    re.compile(r"^\s*$"),                                           # blank
+]
+
+# Item line: [optional WI/WT prefix] name [optional PC] price tax_code
+_ITEM_PATTERN = re.compile(
+    r"^(?:W[IT]\s+)?"       # optional WI or WT (weighed item) prefix
+    r"(.+?)"                # item name (non-greedy)
+    r"\s+(?:PC\s+)?"        # optional PC suffix
+    r"(\d+\.\d{2})"         # price
+    r"\s+([BTF])\s*$"       # tax code
+)
+
+
+def _parse_receipt_lines(ocr_text: str) -> list[dict]:
+    """Step 2: Structurally parse OCR text into items. Returns list of {item, price, qty}."""
+    items = []
+    for line in ocr_text.strip().split("\n"):
+        line = line.strip()
+
+        if any(pat.search(line) for pat in _SKIP_PATTERNS):
+            continue
+
+        m = _ITEM_PATTERN.match(line)
+        if m:
+            raw_name = m.group(1).strip()
+            price = float(m.group(2))
+            # Strip trailing PC if captured in name
+            raw_name = re.sub(r"\s+PC$", "", raw_name)
+            # Strip trailing numbers that are quantity indicators (e.g. "OH NACHOS GRANDE 1")
+            raw_name = re.sub(r"\s+\d+$", "", raw_name)
+            # Collapse multiple spaces (OCR artifact)
+            raw_name = re.sub(r"\s{2,}", " ", raw_name)
+            items.append({"item": raw_name, "raw": raw_name, "price": price, "qty": 1})
+
+    return items
+
+
+def parse_receipt_image(image_path: str) -> list[dict]:
+    """Parse a receipt image using two-step pipeline: OCR then structural parsing.
+
+    Returns list of {item, raw, qty, price}.
+    """
+    ocr_text = _ocr_receipt_image(image_path)
+    items = _parse_receipt_lines(ocr_text)
+    if not items:
+        # Fallback: if structural parsing found nothing, try the old text-based approach
+        return parse_receipt_text(ocr_text)
+    return items
 
 
 def parse_receipt_text(text: str) -> list[dict]:
@@ -356,9 +390,11 @@ def diff_grocery_list(grocery_names: list[str], receipt_items: list[dict]) -> di
     unmatched = []
 
     for r_item in receipt_items:
-        r_norm = _norm(r_item["item"])
+        # Use decoded item name for fuzzy matching, fall back to raw
+        r_text = r_item.get("item") or r_item.get("raw") or ""
+        r_norm = _norm(r_text)
         r_words = set(r_norm.split())
-        r_compact = _compact(r_item["item"])
+        r_compact = _compact(r_text)
 
         best_name = None
         best_score = 0
@@ -368,12 +404,19 @@ def diff_grocery_list(grocery_names: list[str], receipt_items: list[dict]) -> di
             g_compact = _compact(g_original)
 
             # Spaceless substring match: "lacroix" in "lacroixlimeflavored..."
-            if g_compact and g_compact in r_compact:
-                score = max(len(g_compact) / len(r_compact), 0.6)
-            elif r_compact and r_compact in g_compact:
-                score = max(len(r_compact) / len(g_compact), 0.6)
+            # Require grocery name covers at least 50% of the receipt text to avoid
+            # "bread" matching "breadbutterwine"
+            if g_compact and len(g_compact) >= 4 and g_compact in r_compact:
+                coverage = len(g_compact) / len(r_compact)
+                if coverage >= 0.5:
+                    score = max(coverage, 0.6)
+            elif r_compact and len(r_compact) >= 4 and r_compact in g_compact:
+                coverage = len(r_compact) / len(g_compact)
+                if coverage >= 0.5:
+                    score = max(coverage, 0.6)
             # Word subset match: "ground beef" words in "Kroger 93/7 Ground Beef Tray"
-            elif g_words and g_words.issubset(r_words):
+            # Require at least 2 grocery words to avoid single-word false positives
+            elif g_words and len(g_words) >= 2 and g_words.issubset(r_words):
                 score = max(len(g_words) / len(r_words), 0.6)
             else:
                 # Stem-aware overlap: "banana" matches "bananas"
@@ -383,7 +426,9 @@ def diff_grocery_list(grocery_names: list[str], receipt_items: list[dict]) -> di
                         if gw.startswith(rw) or rw.startswith(gw):
                             overlap += 1
                             break
-                total = max(len(g_words), 1)
+                # Use the larger word count as denominator to penalize partial matches
+                # e.g. "eggs" (1 word) matching 1 of 5 receipt words = 0.2, not 1.0
+                total = max(len(g_words), len(r_words), 1)
                 score = overlap / total
 
             if score > best_score:
@@ -416,11 +461,13 @@ def diff_grocery_list(grocery_names: list[str], receipt_items: list[dict]) -> di
 
 
 def _ai_match(grocery_names: list[str], receipt_items: list[dict]) -> list[tuple[str, dict]]:
-    """Use Claude to match ambiguous receipt items to grocery list names."""
-    import json
+    """Use Claude to match ambiguous receipt items to grocery list names.
 
+    Receipt items may be raw abbreviations (e.g. 'NTHN ANG BF FRNKS') that need
+    to be decoded to match against simple grocery names (e.g. 'hot dogs').
+    """
     client = _get_client()
-    receipt_descriptions = [r["item"] for r in receipt_items]
+    receipt_descriptions = [r.get("raw") or r["item"] for r in receipt_items]
 
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -428,12 +475,19 @@ def _ai_match(grocery_names: list[str], receipt_items: list[dict]) -> list[tuple
         messages=[{
             "role": "user",
             "content": (
-                "Match receipt items to grocery list items. Receipt items use store abbreviations "
-                "(e.g. 'PUB ALMONDS SLCD' = sliced almonds, 'NESTLE BAKING COCO' = baking cocoa).\n\n"
+                "Match these abbreviated grocery receipt items to items on a grocery list. "
+                "Receipt items use heavy store abbreviations (e.g. NTHN=Nathan's, BLPK=Ballpark, "
+                "OSCM/OM=Oscar Mayer, ST=Starbucks, TYFR=Taylor Farms, MICHELINA=Michelina's, "
+                "BF=Beef, FRNKS=Franks, CHS=Cheese, BCN=Bacon, ORGNC=Organic, STO=Store brand). "
+                "A receipt item like 'NTHN ANG BF FRNKS' (Nathan's Angus Beef Franks) should match "
+                "'hot dogs' on the grocery list.\n\n"
                 f"Grocery list: {json.dumps(grocery_names)}\n"
                 f"Receipt items: {json.dumps(receipt_descriptions)}\n\n"
-                "Return ONLY a JSON array of matches: [{\"grocery\": \"item from grocery list\", "
-                "\"receipt\": \"item from receipt\"}]. Only include confident matches. "
+                "Return ONLY a JSON array. Each object should have:\n"
+                '- "grocery": the exact item name from the grocery list\n'
+                '- "receipt": the exact item from the receipt items list\n'
+                '- "decoded": your best guess at the full product name\n'
+                "Only include CONFIDENT matches. If unsure, leave it out. "
                 "Return [] if no matches."
             ),
         }],
@@ -446,13 +500,19 @@ def _ai_match(grocery_names: list[str], receipt_items: list[dict]) -> list[tuple
     # Map receipt descriptions back to full receipt item dicts
     receipt_by_name = {}
     for r in receipt_items:
-        receipt_by_name.setdefault(r["item"], r)
+        key = r.get("raw") or r["item"]
+        receipt_by_name.setdefault(key, r)
 
     results = []
     for pair in pairs:
         g_name = pair.get("grocery", "")
         r_name = pair.get("receipt", "")
         if g_name in grocery_names and r_name in receipt_by_name:
-            results.append((g_name, receipt_by_name[r_name]))
+            # Store the decoded name in the receipt item for display
+            r_item = receipt_by_name[r_name]
+            decoded = pair.get("decoded", "")
+            if decoded:
+                r_item["item"] = decoded
+            results.append((g_name, r_item))
 
     return results
