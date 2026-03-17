@@ -1785,7 +1785,6 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         "ok": True,
         "matched": total_matched,
         "not_fulfilled": total_not_fulfilled,
-        "extra_items": extra_items,
     }
 
 
