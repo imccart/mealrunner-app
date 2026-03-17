@@ -1620,14 +1620,25 @@ async def get_receipt(request: Request):
     unresolved = [i for i in items if (i["checked"] or i["ordered"]) and not i["receipt_status"]]
 
     # Fetch ratings for reconciled items (matched + substituted)
-    from souschef.kroger import get_product_ratings
+    from souschef.kroger import get_product_ratings, _make_product_key
     for item in matched + substituted:
         upc = item.get("receipt_upc") or item.get("product_upc") or ""
-        if upc:
-            ratings = get_product_ratings(conn, upc, user_id)
-            item["rating"] = ratings["your_rating"]
-        else:
-            item["rating"] = 0
+        brand = item.get("product_brand") or ""
+        desc = item.get("receipt_item") or item.get("product_name") or ""
+        pk = _make_product_key(upc, brand, desc)
+        item["product_key"] = pk
+        ratings = get_product_ratings(conn, upc, user_id, product_key=pk)
+        item["rating"] = ratings["your_rating"]
+
+    # Fetch extra items (unmatched receipt items)
+    try:
+        extras_rows = conn.execute(
+            text("SELECT item_name, price, upc, brand FROM receipt_extra_items WHERE trip_id = :trip_id ORDER BY id"),
+            {"trip_id": trip["id"]},
+        ).fetchall()
+        extras = [{"item_name": r["item_name"], "price": r["price"], "upc": r["upc"], "brand": r["brand"]} for r in extras_rows]
+    except Exception:
+        extras = []
 
     return {
         "has_trip": True,
@@ -1640,6 +1651,7 @@ async def get_receipt(request: Request):
         "substituted": substituted,
         "not_fulfilled": not_fulfilled,
         "unresolved": unresolved,
+        "extras": extras,
     }
 
 
@@ -1698,6 +1710,24 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         {"data": json.dumps(all_receipts), "id": trip["id"]},
     )
 
+    # Dedup: find receipt items already matched in prior uploads
+    already_matched_rows = conn.execute(
+        text("""SELECT LOWER(receipt_item) AS ri FROM trip_items
+           WHERE trip_id = :trip_id AND receipt_status IN ('matched', 'substituted') AND receipt_item != ''"""),
+        {"trip_id": trip["id"]},
+    ).fetchall()
+    already_matched_names = {r["ri"] for r in already_matched_rows}
+
+    # Filter out previously matched receipt items
+    new_receipt_items = []
+    previously_matched = 0
+    for ri in receipt_items:
+        ri_name = (ri.get("item") or "").lower().strip()
+        if ri_name and ri_name in already_matched_names:
+            previously_matched += 1
+        else:
+            new_receipt_items.append(ri)
+
     # Get trip items that still need matching (unresolved or not_fulfilled from prior receipt)
     rows = conn.execute(
         text("""SELECT * FROM trip_items WHERE trip_id = :trip_id
@@ -1710,7 +1740,7 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
     # Split items: ordered items (have UPCs) use diff_order, checked items use diff_grocery_list
     upc_rows = [r for r in rows if r["product_upc"]]
     name_rows = [r for r in rows if not r["product_upc"]]
-    receipt_remaining = list(receipt_items)
+    receipt_remaining = list(new_receipt_items)
     total_matched = 0
     total_not_fulfilled = 0
 
@@ -1761,10 +1791,13 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
             )
         total_matched += len(diff2["matched"])
 
+        # Remaining receipt items after pass 2
+        matched_grocery_names = {m["grocery_name"].lower() for m in diff2["matched"]}
+        receipt_remaining = diff2.get("added", [])
+
         # Name-only items not on receipt
-        matched_names = {m["grocery_name"].lower() for m in diff2["matched"]}
         for r in name_rows:
-            if r["name"].lower() not in matched_names:
+            if r["name"].lower() not in matched_grocery_names:
                 conn.execute(
                     text("UPDATE trip_items SET receipt_status = 'not_fulfilled' WHERE id = :id"),
                     {"id": r["id"]},
@@ -1779,13 +1812,52 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
             )
             total_not_fulfilled += 1
 
+    # Auto-save preferences for matched items
+    from souschef.kroger import save_preference, KrogerProduct, _make_product_key
+    all_matched_items = conn.execute(
+        text("""SELECT name, receipt_item, receipt_upc, product_upc, product_brand
+           FROM trip_items WHERE trip_id = :trip_id AND receipt_status = 'matched'"""),
+        {"trip_id": trip["id"]},
+    ).fetchall()
+    for mi in all_matched_items:
+        receipt_name = mi["receipt_item"] or mi["name"]
+        upc = mi["receipt_upc"] or mi["product_upc"] or ""
+        brand = mi["product_brand"] or ""
+        try:
+            pref_product = KrogerProduct(
+                product_id="", upc=upc, description=receipt_name,
+                brand=brand, size="",
+            )
+            save_preference(conn, user_id, mi["name"].lower(), pref_product, source="receipt")
+        except Exception:
+            pass
+
+    # Save unmatched receipt items as extras
+    if receipt_remaining:
+        for ri in receipt_remaining:
+            try:
+                conn.execute(
+                    text("""INSERT INTO receipt_extra_items (trip_id, item_name, price, upc, brand)
+                       VALUES (:trip_id, :item_name, :price, :upc, :brand)"""),
+                    {"trip_id": trip["id"], "item_name": ri.get("item", ""),
+                     "price": ri.get("price"), "upc": ri.get("upc", ""),
+                     "brand": ri.get("brand", "")},
+                )
+            except Exception:
+                pass
+
     conn.commit()
 
-    return {
+    result = {
         "ok": True,
         "matched": total_matched,
         "not_fulfilled": total_not_fulfilled,
     }
+    if previously_matched > 0:
+        result["previously_matched"] = previously_matched
+    if receipt_remaining:
+        result["extras"] = len(receipt_remaining)
+    return result
 
 
 @router.post("/receipt/upload")
@@ -1893,18 +1965,26 @@ async def resolve_receipt_item(body: dict, request: Request):
 
 @router.post("/product/rate")
 async def rate_product_endpoint(body: dict, request: Request):
-    """Rate a product: {upc, rating (1=up, -1=down, 0=clear), product_description?}"""
-    from souschef.kroger import rate_product
+    """Rate a product: {upc, rating, product_description?, brand?, product_key?}"""
+    from souschef.kroger import rate_product, _make_product_key
 
     user_id = request.state.user_id
     upc = body.get("upc", "").strip()
     rating = body.get("rating")
-    if not upc or rating not in (1, -1, 0):
-        return {"ok": False, "error": "upc and rating (1, -1, or 0) required"}
+    brand = body.get("brand", "").strip()
+    product_key = body.get("product_key", "").strip()
+    desc = body.get("product_description", "").strip()
+
+    # Compute product_key if not provided
+    if not product_key:
+        product_key = _make_product_key(upc, brand, desc)
+
+    if not product_key or rating not in (1, -1, 0):
+        return {"ok": False, "error": "product identifier and rating (1, -1, or 0) required"}
 
     conn = _conn()
-    rate_product(conn, upc, rating, body.get("product_description", ""), user_id)
-    return {"ok": True, "upc": upc, "rating": rating}
+    rate_product(conn, upc, rating, desc, user_id, brand=brand, product_key=product_key)
+    return {"ok": True, "product_key": product_key, "rating": rating}
 
 
 # ── Regulars ─────────────────────────────────────────────

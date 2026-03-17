@@ -53,11 +53,13 @@ export default function ReceiptPage() {
   }
 
   const handleRate = async (item, rating) => {
-    const upc = item.receipt_upc || item.product_upc
-    if (!upc) return
+    const upc = item.receipt_upc || item.product_upc || ''
     const desc = item.receipt_item || item.product_name || item.name
+    const productKey = item.product_key || ''
+    const brand = item.product_brand || ''
+    if (!upc && !productKey && !desc) return
     try {
-      await api.rateProduct(upc, rating, desc)
+      await api.rateProduct(upc, rating, desc, { brand, productKey })
       loadReceipt()
     } catch { /* ignore */ }
   }
@@ -117,6 +119,8 @@ export default function ReceiptPage() {
           {!uploading && uploadResult && uploadResult.ok && (
             <div className="submit-success">
               Matched {uploadResult.matched} item{uploadResult.matched !== 1 ? 's' : ''}
+              {uploadResult.previously_matched > 0 && ` (${uploadResult.previously_matched} previously matched)`}
+              {uploadResult.extras > 0 && ` · ${uploadResult.extras} extra`}
             </div>
           )}
         </div>
@@ -169,20 +173,18 @@ export default function ReceiptPage() {
                   {item.receipt_price != null && <span> · {formatPrice(item.receipt_price)}</span>}
                 </div>
               </div>
-              {(item.receipt_upc || item.product_upc) && (
-                <div className="receipt-rating">
-                  <button
-                    className={`receipt-rate-btn up${item.rating === 1 ? ' active' : ''}`}
-                    onClick={() => handleRate(item, item.rating === 1 ? 0 : 1)}
-                    title="Thumbs up"
-                  >{'\u{1F44D}'}</button>
-                  <button
-                    className={`receipt-rate-btn down${item.rating === -1 ? ' active' : ''}`}
-                    onClick={() => handleRate(item, item.rating === -1 ? 0 : -1)}
-                    title="Thumbs down"
-                  >{'\u{1F44E}'}</button>
-                </div>
-              )}
+              <div className="receipt-rating">
+                <button
+                  className={`receipt-rate-btn up${item.rating === 1 ? ' active' : ''}`}
+                  onClick={() => handleRate(item, item.rating === 1 ? 0 : 1)}
+                  title="Thumbs up"
+                >{'\u{1F44D}'}</button>
+                <button
+                  className={`receipt-rate-btn down${item.rating === -1 ? ' active' : ''}`}
+                  onClick={() => handleRate(item, item.rating === -1 ? 0 : -1)}
+                  title="Thumbs down"
+                >{'\u{1F44E}'}</button>
+              </div>
             </div>
           ))}
         </div>
@@ -211,20 +213,18 @@ export default function ReceiptPage() {
                   </div>
                 )}
               </div>
-              {(item.receipt_upc || item.product_upc) && (
-                <div className="receipt-rating">
-                  <button
-                    className={`receipt-rate-btn up${item.rating === 1 ? ' active' : ''}`}
-                    onClick={() => handleRate(item, item.rating === 1 ? 0 : 1)}
-                    title="Thumbs up"
-                  >{'\u{1F44D}'}</button>
-                  <button
-                    className={`receipt-rate-btn down${item.rating === -1 ? ' active' : ''}`}
-                    onClick={() => handleRate(item, item.rating === -1 ? 0 : -1)}
-                    title="Thumbs down"
-                  >{'\u{1F44E}'}</button>
-                </div>
-              )}
+              <div className="receipt-rating">
+                <button
+                  className={`receipt-rate-btn up${item.rating === 1 ? ' active' : ''}`}
+                  onClick={() => handleRate(item, item.rating === 1 ? 0 : 1)}
+                  title="Thumbs up"
+                >{'\u{1F44D}'}</button>
+                <button
+                  className={`receipt-rate-btn down${item.rating === -1 ? ' active' : ''}`}
+                  onClick={() => handleRate(item, item.rating === -1 ? 0 : -1)}
+                  title="Thumbs down"
+                >{'\u{1F44E}'}</button>
+              </div>
               <div className="receipt-item-actions">
                 <button
                   className="receipt-resolve-btn accept"
@@ -278,6 +278,30 @@ export default function ReceiptPage() {
                 >
                   Don't need it
                 </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Extra items — purchased but not on grocery list */}
+      {receipt.extras && receipt.extras.length > 0 && (
+        <div className="receipt-section">
+          <div
+            className="receipt-section-label collapsible"
+            onClick={() => toggleSection('extras')}
+          >
+            <span>{collapsedSections.extras ? '\u25B6' : '\u25BC'} Also purchased ({receipt.extras.length})</span>
+          </div>
+          {!collapsedSections.extras && receipt.extras.map((item, i) => (
+            <div key={i} className="receipt-item extra">
+              <div className="receipt-item-info">
+                <div className="receipt-item-name">{item.item_name}</div>
+                <div className="receipt-item-meta">
+                  {item.brand && <span>{item.brand}</span>}
+                  {item.brand && item.price != null && <span> · </span>}
+                  {item.price != null && <span>{formatPrice(item.price)}</span>}
+                </div>
               </div>
             </div>
           ))}

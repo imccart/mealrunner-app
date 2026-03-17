@@ -100,6 +100,10 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("grocery_trips", "pantry_checked_at", "TEXT"),
         ("trip_items", "quantity", "INTEGER NOT NULL DEFAULT 1"),
         ("trip_items", "submitted_at", "TEXT"),
+        ("product_preferences", "brand", "TEXT NOT NULL DEFAULT ''"),
+        ("product_preferences", "product_key", "TEXT NOT NULL DEFAULT ''"),
+        ("product_ratings", "brand", "TEXT NOT NULL DEFAULT ''"),
+        ("product_ratings", "product_key", "TEXT NOT NULL DEFAULT ''"),
     ]
 
     for table_name, col_name, col_def in migrations:
@@ -114,6 +118,52 @@ def _run_column_migrations(conn: DictConnection) -> None:
                 conn.raw.rollback()
             except Exception:
                 pass
+
+    # Create receipt_extra_items table if missing
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS receipt_extra_items (
+                id SERIAL PRIMARY KEY,
+                trip_id INTEGER NOT NULL REFERENCES grocery_trips(id),
+                item_name TEXT NOT NULL,
+                price FLOAT,
+                upc TEXT NOT NULL DEFAULT '',
+                brand TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   receipt_extra_items table skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+    # Backfill product_key from upc where missing
+    try:
+        conn.execute(text(
+            "UPDATE product_preferences SET product_key = upc WHERE product_key = '' AND upc != ''"
+        ))
+        conn.commit()
+    except Exception:
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+    try:
+        conn.execute(text(
+            "UPDATE product_ratings SET product_key = upc WHERE product_key = '' AND upc != ''"
+        ))
+        conn.commit()
+    except Exception:
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+    # Swap unique constraints: old (search_term, upc) / (user_id, upc) → new product_key-based
+    _migrate_product_key_constraints(conn)
 
 
 def _migrate_accepted_to_on_grocery(conn: DictConnection) -> None:
@@ -134,11 +184,12 @@ def _migrate_ratings_to_table(conn: DictConnection) -> None:
         )).fetchall()
         for r in rows:
             try:
+                pk = r["upc"] or ""
                 conn.execute(text(
-                    """INSERT INTO product_ratings (user_id, upc, product_description, rating)
-                       VALUES ('default', :upc, :desc, :rating)
-                       ON CONFLICT (user_id, upc) DO NOTHING"""
-                ), {"upc": r["upc"], "desc": r["product_description"], "rating": r["rating"]})
+                    """INSERT INTO product_ratings (user_id, upc, product_description, rating, product_key)
+                       VALUES ('default', :upc, :desc, :rating, :pk)
+                       ON CONFLICT (user_id, product_key) DO NOTHING"""
+                ), {"upc": r["upc"], "desc": r["product_description"], "rating": r["rating"], "pk": pk})
             except Exception:
                 pass
     except Exception:
@@ -581,6 +632,78 @@ def _migrate_sides_to_junction(conn: DictConnection) -> None:
             conn.execute(text(
                 "INSERT INTO meal_sides (meal_id, side_recipe_id, side_name, position) VALUES (:meal_id, :sid, :sname, 0)"
             ), {"meal_id": r["id"], "sid": side_recipe_id, "sname": side_name})
+
+
+def _migrate_product_key_constraints(conn: DictConnection) -> None:
+    """Swap old unique constraints to product_key-based ones (idempotent)."""
+    # Drop old constraint on product_preferences (search_term, upc)
+    try:
+        rows = conn.execute(text("""
+            SELECT con.conname
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            WHERE rel.relname = 'product_preferences'
+              AND con.contype = 'u'
+        """)).fetchall()
+        for row in rows:
+            name = row["conname"]
+            # Drop old constraints that are NOT the new one
+            if "product_key" not in name:
+                conn.execute(text(f'ALTER TABLE product_preferences DROP CONSTRAINT IF EXISTS "{name}"'))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   product_preferences constraint drop skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+    # Drop old constraint on product_ratings (user_id, upc)
+    try:
+        rows = conn.execute(text("""
+            SELECT con.conname
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            WHERE rel.relname = 'product_ratings'
+              AND con.contype = 'u'
+        """)).fetchall()
+        for row in rows:
+            name = row["conname"]
+            if "product_key" not in name:
+                conn.execute(text(f'ALTER TABLE product_ratings DROP CONSTRAINT IF EXISTS "{name}"'))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   product_ratings constraint drop skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+    # Create new constraints
+    try:
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS product_preferences_user_search_key "
+            "ON product_preferences(user_id, search_term, product_key)"
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   product_preferences new constraint skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+    try:
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS product_ratings_user_key "
+            "ON product_ratings(user_id, product_key)"
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   product_ratings new constraint skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
 
 
 # ── Seed Data ─────────────────────────────────────────────

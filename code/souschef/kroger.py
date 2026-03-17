@@ -16,6 +16,13 @@ from sqlalchemy import text
 
 from souschef.database import DictConnection
 
+def _make_product_key(upc: str = "", brand: str = "", description: str = "") -> str:
+    """Create a stable product identifier. Uses UPC if available, else brand|description."""
+    if upc:
+        return upc
+    return f"{brand.lower().strip()}|{description.lower().strip()}"
+
+
 _CONFIG_DIR = Path.home() / ".souschef"
 _CREDS_FILE = _CONFIG_DIR / "kroger_credentials.json"
 _USER_TOKEN_FILE = _CONFIG_DIR / "kroger_user_token.json"
@@ -321,7 +328,7 @@ def get_preferred_products(conn: DictConnection, user_id: str, search_term: str,
     Returns up to `limit` distinct products from the last 3 orders.
     """
     rows = conn.execute(
-        text("""SELECT upc, product_description, size, source, last_picked, order_id
+        text("""SELECT upc, product_description, size, source, last_picked, order_id, brand, product_key
            FROM product_preferences
            WHERE user_id = :user_id AND search_term = :search_term
            ORDER BY last_picked DESC"""),
@@ -330,22 +337,22 @@ def get_preferred_products(conn: DictConnection, user_id: str, search_term: str,
     if not rows:
         return []
 
-    # Deduplicate by UPC, keeping most recent entry per product
-    seen_upcs: set[str] = set()
+    # Deduplicate by product_key, keeping most recent entry per product
+    seen_keys: set[str] = set()
     unique: list[dict] = []
     for r in rows:
-        if r["upc"] not in seen_upcs:
-            seen_upcs.add(r["upc"])
+        pk = r["product_key"] or r["upc"] or ""
+        if pk and pk not in seen_keys:
+            seen_keys.add(pk)
             d = dict(r)
-            # Look up rating from product_ratings
-            ratings = get_product_ratings(conn, d["upc"], user_id)
+            ratings = get_product_ratings(conn, r["upc"], user_id, product_key=pk)
             d["rating"] = ratings["your_rating"]
             unique.append(d)
 
     # Sort: thumbs-up first, then neutral, then thumbs-down; within each tier: recency, selection > receipt
     source_rank = {"picked": 0, "receipt": 1}
     unique.sort(key=lambda r: (
-        -(r.get("rating", 0)),  # thumbs up (1) first, neutral (0), thumbs down (-1) last
+        -(r.get("rating", 0)),
         r["last_picked"],
         -source_rank.get(r["source"], 2),
     ), reverse=True)
@@ -356,7 +363,7 @@ def get_preferred_products(conn: DictConnection, user_id: str, search_term: str,
             product_id="",
             upc=r["upc"],
             description=r["product_description"],
-            brand="",
+            brand=r.get("brand", ""),
             size=r["size"],
         )
         p.rating = r.get("rating", 0)
@@ -373,63 +380,76 @@ def get_preferred_product(conn: DictConnection, user_id: str, search_term: str) 
 def save_preference(conn: DictConnection, user_id: str, search_term: str, product: KrogerProduct,
                     source: str = "picked", order_id: str = "") -> None:
     """Save or update a product preference for a search term."""
+    product_key = _make_product_key(product.upc, product.brand, product.description)
     conn.execute(
-        text("""INSERT INTO product_preferences (user_id, search_term, upc, product_description, size, source, order_id)
-           VALUES (:user_id, :search_term, :upc, :product_description, :size, :source, :order_id)
-           ON CONFLICT(search_term, upc) DO UPDATE SET
+        text("""INSERT INTO product_preferences
+               (user_id, search_term, upc, product_description, size, source, order_id, brand, product_key)
+           VALUES (:user_id, :search_term, :upc, :product_description, :size, :source, :order_id, :brand, :product_key)
+           ON CONFLICT(user_id, search_term, product_key) DO UPDATE SET
                product_description = excluded.product_description,
                size = excluded.size,
                times_picked = product_preferences.times_picked + 1,
                last_picked = CURRENT_TIMESTAMP,
                source = excluded.source,
-               order_id = excluded.order_id"""),
+               order_id = excluded.order_id,
+               upc = CASE WHEN excluded.upc != '' THEN excluded.upc ELSE product_preferences.upc END"""),
         {"user_id": user_id, "search_term": search_term.lower(), "upc": product.upc,
          "product_description": product.description, "size": product.size,
-         "source": source, "order_id": order_id},
+         "source": source, "order_id": order_id,
+         "brand": product.brand, "product_key": product_key},
     )
     conn.commit()
 
 
 def rate_product(conn: DictConnection, upc: str, rating: int,
-                 product_description: str = "", user_id: str = "default") -> None:
+                 product_description: str = "", user_id: str = "default",
+                 brand: str = "", product_key: str = "") -> None:
     """Rate a product: 1 = thumbs up, -1 = thumbs down, 0 = remove rating."""
+    pk = product_key or _make_product_key(upc, brand, product_description)
     if rating == 0:
         conn.execute(
-            text("DELETE FROM product_ratings WHERE user_id = :user_id AND upc = :upc"),
-            {"user_id": user_id, "upc": upc},
+            text("DELETE FROM product_ratings WHERE user_id = :user_id AND product_key = :pk"),
+            {"user_id": user_id, "pk": pk},
         )
     else:
         conn.execute(
-            text("""INSERT INTO product_ratings (user_id, upc, product_description, rating)
-               VALUES (:user_id, :upc, :product_description, :rating)
-               ON CONFLICT(user_id, upc) DO UPDATE SET
+            text("""INSERT INTO product_ratings (user_id, upc, product_description, rating, brand, product_key)
+               VALUES (:user_id, :upc, :product_description, :rating, :brand, :pk)
+               ON CONFLICT(user_id, product_key) DO UPDATE SET
                    rating = excluded.rating,
                    updated_at = CURRENT_TIMESTAMP"""),
             {"user_id": user_id, "upc": upc,
-             "product_description": product_description, "rating": rating},
+             "product_description": product_description, "rating": rating,
+             "brand": brand, "pk": pk},
         )
     conn.commit()
 
 
-def get_product_ratings(conn: DictConnection, upc: str, user_id: str = "default") -> dict:
+def get_product_ratings(conn: DictConnection, upc: str, user_id: str = "default",
+                        product_key: str = "") -> dict:
     """Get rating summary for a product. Returns {your_rating, up_count, down_count}."""
-    your = conn.execute(
-        text("SELECT rating FROM product_ratings WHERE user_id = :user_id AND upc = :upc"),
-        {"user_id": user_id, "upc": upc},
-    ).fetchone()
+    pk = product_key or upc
+    if pk:
+        your = conn.execute(
+            text("SELECT rating FROM product_ratings WHERE user_id = :user_id AND product_key = :pk"),
+            {"user_id": user_id, "pk": pk},
+        ).fetchone()
 
-    counts = conn.execute(
-        text("""SELECT
-               SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) AS up_count,
-               SUM(CASE WHEN rating = -1 THEN 1 ELSE 0 END) AS down_count
-           FROM product_ratings WHERE upc = :upc"""),
-        {"upc": upc},
-    ).fetchone()
+        counts = conn.execute(
+            text("""SELECT
+                   SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) AS up_count,
+                   SUM(CASE WHEN rating = -1 THEN 1 ELSE 0 END) AS down_count
+               FROM product_ratings WHERE product_key = :pk"""),
+            {"pk": pk},
+        ).fetchone()
+    else:
+        your = None
+        counts = None
 
     return {
         "your_rating": your["rating"] if your else 0,
-        "up_count": counts["up_count"] or 0,
-        "down_count": counts["down_count"] or 0,
+        "up_count": counts["up_count"] or 0 if counts else 0,
+        "down_count": counts["down_count"] or 0 if counts else 0,
     }
 
 
@@ -448,7 +468,7 @@ def get_product_history(conn: DictConnection, search_term: str,
 
     if has_receipt:
         rows = conn.execute(
-            text("""SELECT p.upc, p.product_description, p.size, p.times_picked, p.last_picked, p.source
+            text("""SELECT p.upc, p.product_description, p.size, p.times_picked, p.last_picked, p.source, p.brand, p.product_key
                FROM product_preferences p
                WHERE p.user_id = :user_id AND p.search_term = :search_term AND p.source = 'receipt'
                ORDER BY p.last_picked DESC"""),
@@ -456,7 +476,7 @@ def get_product_history(conn: DictConnection, search_term: str,
         ).fetchall()
     else:
         rows = conn.execute(
-            text("""SELECT p.upc, p.product_description, p.size, p.times_picked, p.last_picked, p.source
+            text("""SELECT p.upc, p.product_description, p.size, p.times_picked, p.last_picked, p.source, p.brand, p.product_key
                FROM product_preferences p
                WHERE p.user_id = :user_id AND p.search_term = :search_term
                ORDER BY p.last_picked DESC"""),
@@ -466,7 +486,8 @@ def get_product_history(conn: DictConnection, search_term: str,
     results = []
     for r in rows:
         d = dict(r)
-        ratings = get_product_ratings(conn, d["upc"], user_id)
+        pk = d.get("product_key") or d["upc"]
+        ratings = get_product_ratings(conn, d["upc"], user_id, product_key=pk)
         d.update(ratings)
         results.append(d)
     return results

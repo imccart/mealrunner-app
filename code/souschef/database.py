@@ -185,7 +185,9 @@ product_preferences = Table(
     Column("source", Text, nullable=False, server_default=text("'picked'")),
     Column("order_id", Text, nullable=False, server_default=text("''")),
     Column("rating", Integer, nullable=False, server_default=text("0")),
-    UniqueConstraint("search_term", "upc"),
+    Column("brand", Text, nullable=False, server_default=text("''")),
+    Column("product_key", Text, nullable=False, server_default=text("''")),
+    UniqueConstraint("user_id", "search_term", "product_key"),
 )
 
 product_ratings = Table(
@@ -197,7 +199,9 @@ product_ratings = Table(
     Column("rating", Integer, nullable=False),
     Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
     Column("updated_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
-    UniqueConstraint("user_id", "upc"),
+    Column("brand", Text, nullable=False, server_default=text("''")),
+    Column("product_key", Text, nullable=False, server_default=text("''")),
+    UniqueConstraint("user_id", "product_key"),
 )
 
 regulars = Table(
@@ -360,6 +364,17 @@ community_data = Table(
     Column("data_type", Text, nullable=False),
     Column("subject", Text, nullable=False),
     Column("suggested_value", Text, nullable=False),
+    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
+receipt_extra_items = Table(
+    "receipt_extra_items", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("trip_id", Integer, ForeignKey("grocery_trips.id"), nullable=False),
+    Column("item_name", Text, nullable=False),
+    Column("price", Float),
+    Column("upc", Text, nullable=False, server_default=text("''")),
+    Column("brand", Text, nullable=False, server_default=text("''")),
     Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
 )
 
