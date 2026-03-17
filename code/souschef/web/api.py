@@ -1810,13 +1810,16 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
 
         for m in diff["matched"]:
             r = m["receipt"]
+            # UPC match = exact product; name match = different UPC = substitution
+            status = "matched" if m.get("match") == "upc" else "substituted"
             conn.execute(
                 text("""UPDATE trip_items SET
                        receipt_item = :receipt_item, receipt_price = :receipt_price, receipt_upc = :receipt_upc,
-                       receipt_status = 'matched'
+                       receipt_status = :status
                    WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
                 {"receipt_item": r.get("item", ""), "receipt_price": r.get("price"),
                  "receipt_upc": r.get("upc", ""),
+                 "status": status,
                  "trip_id": trip["id"], "name": m["submitted"]["item"]},
             )
         total_matched += len(diff["matched"])
