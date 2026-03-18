@@ -632,6 +632,18 @@ main {
   color: var(--green);
 }
 
+.drag-handle {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tan);
+  touch-action: none;
+  cursor: grab;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .add-meal-row {
   background: #FFFAF8;
   border: 1px dashed var(--accent-light);

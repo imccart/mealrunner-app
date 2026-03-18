@@ -38,7 +38,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const [erasing, setErasing] = useState(false)
 
   // Touch drag refs
-  const touchTimer = useRef(null)
   const touchDragFrom = useRef(null)
   const didDrag = useRef(false)
   const rowsRef = useRef(null)
@@ -61,23 +60,17 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     if (data && onLoad) onLoad(data)
   }, [data, onLoad])
 
-  // Touch drag handlers
-  const handleTouchStart = useCallback((e, date) => {
-    didDrag.current = false
-    touchTimer.current = setTimeout(() => {
-      touchDragFrom.current = date
-      didDrag.current = true
-      setDragFrom(date)
-      if (navigator.vibrate) navigator.vibrate(50)
-    }, 400)
+  // Drag handle touch handlers
+  const handleGripStart = useCallback((e, date) => {
+    e.stopPropagation()
+    touchDragFrom.current = date
+    didDrag.current = true
+    setDragFrom(date)
+    if (navigator.vibrate) navigator.vibrate(50)
   }, [])
 
-  const handleTouchMove = useCallback((e) => {
-    if (!touchDragFrom.current) {
-      // If finger moves before long-press fires, cancel it
-      clearTimeout(touchTimer.current)
-      return
-    }
+  const handleGripMove = useCallback((e) => {
+    if (!touchDragFrom.current) return
     e.preventDefault()
     const touch = e.touches[0]
     const el = document.elementFromPoint(touch.clientX, touch.clientY)
@@ -92,8 +85,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     }
   }, [])
 
-  const handleTouchEnd = useCallback(async (e) => {
-    clearTimeout(touchTimer.current)
+  const handleGripEnd = useCallback(async (e) => {
     if (!touchDragFrom.current) return
 
     const touch = e.changedTouches[0]
@@ -115,7 +107,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     }
     touchDragFrom.current = null
     setDragFrom(null)
-    e.preventDefault()
   }, [])
 
   if (loading) return <><div className="loading">Setting the table...</div><FeedbackFab page="plan" /></>
@@ -308,9 +299,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
               style={{ '--row-index': idx }}
               className={`meal-row ${today ? 'today' : ''} ${onList ? 'on-list' : ''} ${isDragging ? 'dragging' : ''}`}
               onClick={() => handleMealTap(date)}
-              onTouchStart={(e) => handleTouchStart(e, date)}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
             >
               <div className="meal-day">{day_short}</div>
               <div className="meal-info">
@@ -325,6 +313,18 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                     title={meal.on_grocery ? 'On list' : 'Add to list'}
                   >{meal.on_grocery ? '\u2713' : '\u{1F6D2}'}</button>
                 )}
+                <div
+                  className="drag-handle"
+                  onTouchStart={(e) => handleGripStart(e, date)}
+                  onTouchMove={handleGripMove}
+                  onTouchEnd={handleGripEnd}
+                >
+                  <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+                    <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
+                    <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+                    <circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/>
+                  </svg>
+                </div>
               </div>
             </div>
           )
