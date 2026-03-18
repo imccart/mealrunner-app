@@ -4025,6 +4025,11 @@ main {
   border-radius: 0 10px 10px 0;
 }
 
+.fav-brand {
+  color: var(--brown);
+  font-size: 13px;
+}
+
 .staple-type-prompt {
   display: flex;
   align-items: center;

@@ -2217,6 +2217,34 @@ async def rate_product_endpoint(body: dict, request: Request):
     return {"ok": True, "product_key": product_key, "rating": rating}
 
 
+@router.get("/product/favorites")
+async def get_favorites(request: Request):
+    """Get all rated products for the current user."""
+    user_id = request.state.user_id
+    conn = _conn()
+    rows = conn.execute(
+        text(
+            "SELECT id, upc, product_description, brand, product_key, rating, updated_at "
+            "FROM product_ratings WHERE user_id = :uid AND rating != 0 "
+            "ORDER BY rating DESC, updated_at DESC"
+        ),
+        {"uid": user_id},
+    ).fetchall()
+    return {
+        "items": [
+            {
+                "id": r["id"],
+                "upc": r["upc"],
+                "description": r["product_description"],
+                "brand": r["brand"],
+                "product_key": r["product_key"],
+                "rating": r["rating"],
+            }
+            for r in rows
+        ]
+    }
+
+
 # ── Regulars ─────────────────────────────────────────────
 
 

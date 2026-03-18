@@ -107,6 +107,7 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ name, status }),
   }),
+  getFavorites: () => request('/product/favorites'),
   rateProduct: (upc, rating, productDescription, { brand, productKey } = {}) => request('/product/rate', {
     method: 'POST',
     body: JSON.stringify({

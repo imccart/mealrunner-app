@@ -24,6 +24,9 @@ export default function MyKitchenSheet({ onClose }) {
   const [recatStaple, setRecatStaple] = useState(null) // { name, type, id }
   const [pendingStaple, setPendingStaple] = useState(null) // name waiting for type choice
 
+  // Favorites state
+  const [favorites, setFavorites] = useState(null)
+
   // Detail view state
   const [detailIngredients, setDetailIngredients] = useState(null)
   const [detailAddText, setDetailAddText] = useState('')
@@ -34,6 +37,7 @@ export default function MyKitchenSheet({ onClose }) {
     api.getRegulars().then(data => setRegulars(data.regulars)).catch(() => setRegulars([]))
     api.getPantry().then(data => setPantry(data.items)).catch(() => setPantry([]))
     api.getGrocerySuggestions().then(data => setAllIngredients(data.suggestions)).catch(() => {})
+    api.getFavorites().then(data => setFavorites(data.items)).catch(() => setFavorites([]))
   }, [])
 
   // Load ingredients when entering detail view
@@ -184,6 +188,23 @@ export default function MyKitchenSheet({ onClose }) {
     }
   }
 
+  const handleRemoveFavorite = async (item) => {
+    try {
+      await api.rateProduct(item.upc, 0, item.description, { brand: item.brand, productKey: item.product_key })
+      setFavorites(prev => (prev || []).filter(f => f.product_key !== item.product_key))
+    } catch { /* ignore */ }
+  }
+
+  const handleFlipRating = async (item) => {
+    const newRating = item.rating === 1 ? -1 : 1
+    try {
+      await api.rateProduct(item.upc, newRating, item.description, { brand: item.brand, productKey: item.product_key })
+      setFavorites(prev => (prev || []).map(f =>
+        f.product_key === item.product_key ? { ...f, rating: newRating } : f
+      ))
+    } catch { /* ignore */ }
+  }
+
   // Build unified staples list
   const STAPLE_GROUPS = [
     'Produce', 'Meat', 'Dairy & Eggs', 'Bread & Bakery',
@@ -285,7 +306,7 @@ export default function MyKitchenSheet({ onClose }) {
       <div className="sheet-title">My Kitchen</div>
 
       <div className="kitchen-tabs">
-        {['meals', 'sides', 'staples'].map(tab => (
+        {['meals', 'sides', 'staples', 'favorites'].map(tab => (
           <button
             key={tab}
             className={`kitchen-tab${activeTab === tab ? ' active' : ''}`}
@@ -442,6 +463,68 @@ export default function MyKitchenSheet({ onClose }) {
           )}
         </div>
       )}
+      {activeTab === 'favorites' && (
+        <div className="kitchen-tab-content">
+          <div className="prefs-section-hint">Products you've rated while shopping.</div>
+          {favorites === null ? (
+            <div className="prefs-section-hint">Loading...</div>
+          ) : favorites.length === 0 ? (
+            <div className="prefs-section-hint">No rated products yet. Rate items on the Receipt page after a shopping trip.</div>
+          ) : (
+            <>
+              {favorites.some(f => f.rating === 1) && (
+                <div>
+                  <div className="prefs-list-group">{'\uD83D\uDC4D'} Thumbs up</div>
+                  <div className="prefs-list">
+                    {favorites.filter(f => f.rating === 1).map(f => (
+                      <div key={f.product_key} className="prefs-list-item">
+                        <span className="prefs-list-name">
+                          {f.description || f.product_key}
+                          {f.brand && <span className="fav-brand"> — {f.brand}</span>}
+                        </span>
+                        <div className="staple-toggle-pair">
+                          <button className="staple-toggle active" onClick={() => {}}>
+                            {'\uD83D\uDC4D'}
+                          </button>
+                          <button className="staple-toggle" onClick={() => handleFlipRating(f)}>
+                            {'\uD83D\uDC4E'}
+                          </button>
+                        </div>
+                        <button className="prefs-remove" onClick={() => handleRemoveFavorite(f)}>{'\u00D7'}</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {favorites.some(f => f.rating === -1) && (
+                <div>
+                  <div className="prefs-list-group">{'\uD83D\uDC4E'} Thumbs down</div>
+                  <div className="prefs-list">
+                    {favorites.filter(f => f.rating === -1).map(f => (
+                      <div key={f.product_key} className="prefs-list-item">
+                        <span className="prefs-list-name">
+                          {f.description || f.product_key}
+                          {f.brand && <span className="fav-brand"> — {f.brand}</span>}
+                        </span>
+                        <div className="staple-toggle-pair">
+                          <button className="staple-toggle" onClick={() => handleFlipRating(f)}>
+                            {'\uD83D\uDC4D'}
+                          </button>
+                          <button className="staple-toggle active" onClick={() => {}}>
+                            {'\uD83D\uDC4E'}
+                          </button>
+                        </div>
+                        <button className="prefs-remove" onClick={() => handleRemoveFavorite(f)}>{'\u00D7'}</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {recatStaple && (
         <div className="recat-overlay" onClick={() => setRecatStaple(null)}>
           <div className="recat-picker" onClick={e => e.stopPropagation()}>
