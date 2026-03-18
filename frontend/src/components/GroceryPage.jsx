@@ -503,10 +503,8 @@ export default function GroceryPage({ sidebar = false }) {
         </div>
       ) : remainingCount === 0 ? (
         <div className="empty-state">
-          <div className="closed-sign">
-            <div className="closed-sign-hole" />
-            <div className="closed-sign-text">Kitchen's closed</div>
-          </div>
+          <div className="icon"><BentSpoonIcon size={32} /></div>
+          <p>Nothing left to grab.</p>
         </div>
       ) : (
         sortedGroups.map(group => {
