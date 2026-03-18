@@ -41,6 +41,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const touchDragFrom = useRef(null)
   const didDrag = useRef(false)
   const rowsRef = useRef(null)
+  const ghostRef = useRef(null)
 
   const [loadError, setLoadError] = useState(false)
 
@@ -67,13 +68,35 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     didDrag.current = true
     setDragFrom(date)
     if (navigator.vibrate) navigator.vibrate(50)
+
+    // Create floating ghost of the row
+    const row = e.target.closest('.meal-row')
+    if (row) {
+      const rect = row.getBoundingClientRect()
+      const clone = row.cloneNode(true)
+      clone.className = 'meal-row drag-ghost'
+      clone.style.width = rect.width + 'px'
+      clone.style.left = rect.left + 'px'
+      clone.style.top = rect.top + 'px'
+      document.body.appendChild(clone)
+      ghostRef.current = { el: clone, offsetY: e.touches[0].clientY - rect.top }
+    }
   }, [])
 
   const handleGripMove = useCallback((e) => {
     if (!touchDragFrom.current) return
     e.preventDefault()
     const touch = e.touches[0]
+
+    // Move ghost
+    if (ghostRef.current) {
+      ghostRef.current.el.style.top = (touch.clientY - ghostRef.current.offsetY) + 'px'
+    }
+
+    // Highlight drop target (hide ghost briefly so elementFromPoint hits the row behind it)
+    if (ghostRef.current) ghostRef.current.el.style.pointerEvents = 'none'
     const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    if (ghostRef.current) ghostRef.current.el.style.pointerEvents = ''
     const row = el?.closest('.meal-row, .add-meal-row')
     if (rowsRef.current) {
       rowsRef.current.querySelectorAll('.touch-drop-hover').forEach(
@@ -105,6 +128,13 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
         n => n.classList.remove('touch-drop-hover')
       )
     }
+
+    // Remove ghost
+    if (ghostRef.current) {
+      ghostRef.current.el.remove()
+      ghostRef.current = null
+    }
+
     touchDragFrom.current = null
     setDragFrom(null)
   }, [])
