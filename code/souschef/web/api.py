@@ -457,8 +457,24 @@ async def get_candidates(date: str, request: Request):
 # ── Grocery (trip-based) ──────────────────────────────────
 
 
+def _parse_ts(ts_str):
+    """Parse an ISO timestamp string to a timezone-aware datetime, or None."""
+    from datetime import datetime, timezone
+    if not ts_str:
+        return None
+    try:
+        t = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        return t
+    except (ValueError, TypeError):
+        return None
+
+
 def _stale_prompt_state(conn, trip) -> str:
     """Detect whether unchecked grocery items are likely leftovers from a shopping trip.
+
+    Items added AFTER the most recent shopping event are never considered stale.
 
     Triggers:
     - 50% of items checked off within any 1-hour window, AND 1+ hour since last check-off
@@ -488,7 +504,6 @@ def _stale_prompt_state(conn, trip) -> str:
     if not rows:
         return "hidden"
 
-    total = len(rows)
     unchecked = [r for r in rows if not r["checked"] and not r["skipped"] and not r["have_it"]]
     if not unchecked:
         return "hidden"  # nothing stale
@@ -497,58 +512,56 @@ def _stale_prompt_state(conn, trip) -> str:
     if not done_items:
         # Nothing checked off yet — check age-based trigger
         for r in unchecked:
-            try:
-                added = datetime.fromisoformat((r["added_at"] or "").replace("Z", "+00:00"))
-                if added.tzinfo is None:
-                    added = added.replace(tzinfo=timezone.utc)
-                if (now - added) > timedelta(days=10):
-                    return "prompt"
-            except (ValueError, TypeError):
-                pass
+            added = _parse_ts(r["added_at"])
+            if added and (now - added) > timedelta(days=10):
+                return "prompt"
         return "hidden"
 
     # Collect timestamps of all check-off actions
     done_times = []
     for r in done_items:
         for col in ("checked_at", "skipped_at", "have_it_at"):
-            try:
-                ts_str = r[col]
-                if ts_str:
-                    t = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                    if t.tzinfo is None:
-                        t = t.replace(tzinfo=timezone.utc)
-                    done_times.append(t)
-            except (ValueError, TypeError, KeyError):
-                pass
+            t = _parse_ts(r[col] if col in r.keys() else None)
+            if t:
+                done_times.append(t)
 
     if not done_times:
         return "hidden"
 
-    # Trigger: receipt uploaded with matches but unchecked items remain
+    most_recent = max(done_times)
+
+    # Filter out items added AFTER the last shopping event — they're not stale
+    stale_candidates = []
+    for r in unchecked:
+        added = _parse_ts(r["added_at"])
+        if not added or added <= most_recent:
+            stale_candidates.append(r)
+
+    if not stale_candidates:
+        return "hidden"  # all unchecked items are post-shopping additions
+
+    # Trigger: receipt uploaded with matches but stale candidates remain
     try:
         if trip["receipt_parsed_at"]:
             has_matches = any(r["receipt_status"] in ("matched", "substituted") for r in rows)
             if has_matches:
-                receipt_at = datetime.fromisoformat(trip["receipt_parsed_at"].replace("Z", "+00:00"))
-                if receipt_at.tzinfo is None:
-                    receipt_at = receipt_at.replace(tzinfo=timezone.utc)
-                if (now - receipt_at) > timedelta(hours=1):
+                receipt_at = _parse_ts(trip["receipt_parsed_at"])
+                if receipt_at and (now - receipt_at) > timedelta(hours=1):
                     return "prompt"
     except (KeyError, ValueError, TypeError):
         pass
 
-    # Trigger: order submitted but unchecked items remain
+    # Trigger: order submitted but stale candidates remain
     submitted = [r for r in rows if r["submitted_at"]]
     if submitted:
         return "prompt"
 
     # Trigger: 50% checked off within a 1-hour window, AND 1+ hour since last check-off
-    most_recent = max(done_times)
     since_last = now - most_recent
     if since_last < timedelta(hours=1):
         return "hidden"  # still shopping
 
-    # Check if 50% were done within any 1-hour window
+    total = len(rows)
     done_times.sort()
     threshold = total * 0.5
     for i, t_start in enumerate(done_times):
@@ -557,16 +570,11 @@ def _stale_prompt_state(conn, trip) -> str:
         if count_in_window >= threshold:
             return "prompt"
 
-    # Trigger: items older than 10 days
-    for r in unchecked:
-        try:
-            added = datetime.fromisoformat((r["added_at"] or "").replace("Z", "+00:00"))
-            if added.tzinfo is None:
-                added = added.replace(tzinfo=timezone.utc)
-            if (now - added) > timedelta(days=10):
-                return "prompt"
-        except (ValueError, TypeError):
-            pass
+    # Trigger: stale candidates older than 10 days
+    for r in stale_candidates:
+        added = _parse_ts(r["added_at"])
+        if added and (now - added) > timedelta(days=10):
+            return "prompt"
 
     return "hidden"
 
@@ -592,6 +600,50 @@ def _prompt_state(trip, flag_col: str, ts_col: str) -> str:
         if age > timedelta(days=3):
             return "prompt"
         return "done"
+    except (KeyError, Exception):
+        return "prompt"
+
+
+def _regulars_prompt_state(conn, trip) -> str:
+    """Return 'prompt', 'done', or 'hidden' for the regulars prompt.
+
+    Shows the regulars prompt only when BOTH:
+    - 3+ days since regulars were last offered (or never offered), AND
+    - New meal-sourced items exist that were added after regulars_added_at
+    """
+    from datetime import datetime, timedelta, timezone
+
+    try:
+        if not trip["regulars_added"]:
+            # Never acted on — show prompt only if there are meal-sourced items
+            meal_items = conn.execute(
+                text("SELECT COUNT(*) as cnt FROM trip_items WHERE trip_id = :tid AND source = 'meal'"),
+                {"tid": trip["id"]},
+            ).fetchone()
+            return "prompt" if meal_items["cnt"] > 0 else "hidden"
+
+        ts_str = trip["regulars_added_at"] if "regulars_added_at" in trip.keys() else None
+        if not ts_str:
+            return "done"
+
+        acted_at = _parse_ts(ts_str)
+        if not acted_at:
+            return "done"
+
+        age = datetime.now(timezone.utc) - acted_at
+        if age <= timedelta(days=3):
+            return "done"
+
+        # 3+ days old — check if new meal-sourced items were added since
+        new_meal_items = conn.execute(
+            text("SELECT COUNT(*) as cnt FROM trip_items WHERE trip_id = :tid AND source = 'meal' AND added_at > :since"),
+            {"tid": trip["id"], "since": ts_str},
+        ).fetchone()
+        if new_meal_items["cnt"] > 0:
+            return "prompt"
+        return "done"
+    except (KeyError, Exception):
+        return "hidden"
     except (KeyError, Exception):
         return "prompt"
 
@@ -882,13 +934,40 @@ async def get_grocery(request: Request):
             pass
 
     stale_state = _stale_prompt_state(conn, trip)
-    # Collect unchecked item names for the stale prompt
+    # Collect unchecked item names for the stale prompt, excluding post-shopping additions
     stale_items = []
     if stale_state == "prompt":
+        # Find the last shopping event time to filter out newer items
+        done_rows = conn.execute(
+            text("SELECT checked_at, skipped_at, have_it_at FROM trip_items WHERE trip_id = :tid AND (checked = 1 OR skipped = 1 OR have_it = 1)"),
+            {"tid": trip["id"]},
+        ).fetchall()
+        all_done_times = []
+        for dr in done_rows:
+            for col in ("checked_at", "skipped_at", "have_it_at"):
+                t = _parse_ts(dr[col] if col in dr.keys() else None)
+                if t:
+                    all_done_times.append(t)
+        last_shop = max(all_done_times) if all_done_times else None
+
+        item_added_at = {}
+        if last_shop:
+            added_rows = conn.execute(
+                text("SELECT LOWER(name) as nl, added_at FROM trip_items WHERE trip_id = :tid"),
+                {"tid": trip["id"]},
+            ).fetchall()
+            for ar in added_rows:
+                item_added_at[ar["nl"]] = _parse_ts(ar["added_at"])
+
         for group_items in items_by_group.values():
             for item in group_items:
                 nl = item["name"].lower()
                 if nl not in checked_names and nl not in skipped_names and nl not in have_it_names and nl not in ordered_names:
+                    # Skip items added after the last shopping event
+                    if last_shop and nl in item_added_at:
+                        added = item_added_at[nl]
+                        if added and added > last_shop:
+                            continue
                     stale_items.append(item["name"])
 
     return {
@@ -899,7 +978,7 @@ async def get_grocery(request: Request):
         "ordered": ordered_names,
         "skipped": skipped_names,
         "have_it": have_it_names,
-        "regulars_state": _prompt_state(trip, "regulars_added", "regulars_added_at"),
+        "regulars_state": _regulars_prompt_state(conn, trip),
         "pantry_state": _prompt_state(trip, "pantry_checked", "pantry_checked_at"),
         "stale_state": stale_state,
         "stale_items": stale_items,
