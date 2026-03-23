@@ -988,19 +988,35 @@ async def toggle_grocery_item(item_name: str, request: Request):
 
 @router.delete("/grocery/item/{item_name:path}")
 async def remove_grocery_item(item_name: str, request: Request):
-    """Remove an item from the active trip entirely."""
+    """Remove an item from the active trip. Marks meal-sourced items as skipped
+    instead of deleting so they don't get re-added by refresh."""
     user_id = request.state.user_id
     conn = _conn()
     trip = _get_active_trip(conn, user_id)
     if not trip:
-        return await get_grocery(request)
+        return {"ok": True}
 
-    conn.execute(
-        text("DELETE FROM trip_items WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
+    # For meal-sourced items, mark as checked (effectively removed but won't be re-added)
+    # For extras/regulars, delete outright
+    row = conn.execute(
+        text("SELECT id, source FROM trip_items WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
         {"trip_id": trip["id"], "name": item_name},
-    )
+    ).fetchone()
+
+    if row:
+        if row["source"] == "meal":
+            # Mark as have_it so refresh doesn't re-add and item disappears from list
+            conn.execute(
+                text("UPDATE trip_items SET have_it = 1, have_it_at = CURRENT_TIMESTAMP WHERE id = :id"),
+                {"id": row["id"]},
+            )
+        else:
+            conn.execute(
+                text("DELETE FROM trip_items WHERE id = :id"),
+                {"id": row["id"]},
+            )
     conn.commit()
-    return await get_grocery(request)
+    return {"ok": True}
 
 
 @router.post("/grocery/have-it/{item_name:path}")
