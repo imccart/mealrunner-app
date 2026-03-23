@@ -151,13 +151,13 @@ export default function ReceiptPage() {
   const hasReconciled = receipt.matched.length > 0 || receipt.substituted.length > 0
   const hasUnresolved = receipt.unresolved.length > 0
 
-  // Group purchases by date for the past purchases view
-  const purchasesByDate = {}
+  // Group purchases by week for the past purchases view
+  const purchasesByWeek = {}
   if (purchases) {
     for (const p of purchases) {
-      const d = p.date ? p.date.slice(0, 10) : 'Unknown'
-      if (!purchasesByDate[d]) purchasesByDate[d] = []
-      purchasesByDate[d].push(p)
+      const weekLabel = p.date ? getWeekLabel(p.date.slice(0, 10)) : 'Unknown'
+      if (!purchasesByWeek[weekLabel]) purchasesByWeek[weekLabel] = []
+      purchasesByWeek[weekLabel].push(p)
     }
   }
 
@@ -227,9 +227,9 @@ export default function ReceiptPage() {
           ) : purchases.length === 0 ? (
             <div className="prefs-section-hint">No purchase history yet.</div>
           ) : (
-            Object.entries(purchasesByDate).map(([date, items]) => (
-              <div key={date} className="purchase-date-group">
-                <div className="purchase-date-label">{formatDate(date)}</div>
+            Object.entries(purchasesByWeek).map(([week, items]) => (
+              <div key={week} className="purchase-date-group">
+                <div className="purchase-date-label">{week}</div>
                 {items.map((item, i) => (
                   <PurchaseItem key={`${item.name}-${i}`} item={item} onRate={handleRate} />
                 ))}
@@ -399,11 +399,16 @@ export default function ReceiptPage() {
   )
 }
 
-function formatDate(dateStr) {
-  if (!dateStr || dateStr === 'Unknown') return 'Unknown date'
+function getWeekLabel(dateStr) {
+  if (!dateStr || dateStr === 'Unknown') return 'Unknown'
   try {
     const d = new Date(dateStr + 'T00:00:00')
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    // Get Monday of that week
+    const day = d.getDay()
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+    const monday = new Date(d)
+    monday.setDate(diff)
+    return 'Week of ' + monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   } catch {
     return dateStr
   }

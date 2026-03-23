@@ -3,6 +3,18 @@ import { api } from '../api/client'
 import Sheet from './Sheet'
 import AutocompleteInput from './AutocompleteInput'
 
+function _getWeekLabel(dateStr) {
+  if (!dateStr || dateStr === 'Unknown') return 'Unknown'
+  try {
+    const d = new Date(dateStr + 'T00:00:00')
+    const day = d.getDay()
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+    const monday = new Date(d)
+    monday.setDate(diff)
+    return 'Week of ' + monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  } catch { return dateStr }
+}
+
 export default function MyKitchenSheet({ onClose }) {
   const [activeTab, setActiveTab] = useState('meals')
   const [detailRecipe, setDetailRecipe] = useState(null)
@@ -468,39 +480,51 @@ export default function MyKitchenSheet({ onClose }) {
             <div className="prefs-section-hint">No purchase history yet. Upload a receipt after a shopping trip.</div>
           ) : (
             <div className="prefs-list">
-              {purchases.map((p, i) => {
-                const desc = p.receipt_item || p.product_name || p.name
-                const brand = p.product_brand || p.brand || ''
-                const price = p.receipt_price ?? p.product_price
-                return (
-                  <div key={`${p.product_key || p.name}-${i}`} className="prefs-list-item history-item">
-                    <div className="history-item-info">
-                      <span className="prefs-list-name">{desc}</span>
-                      {desc !== p.name && <div className="history-item-detail">{p.name}</div>}
-                      <div className="history-item-meta">
-                        {brand && <span>{brand}</span>}
-                        {brand && price != null && <span> · </span>}
-                        {price != null && <span>${price.toFixed(2)}</span>}
-                        {p.date && <span> · {p.date.slice(0, 10)}</span>}
-                      </div>
-                    </div>
-                    <div className="staple-toggle-pair">
-                      <button
-                        className={`staple-toggle${p.rating === 1 ? ' active' : ''}`}
-                        onClick={() => handleRatePurchase(p, p.rating === 1 ? 0 : 1)}
-                      >
-                        {'\uD83D\uDC4D'}
-                      </button>
-                      <button
-                        className={`staple-toggle${p.rating === -1 ? ' active' : ''}`}
-                        onClick={() => handleRatePurchase(p, p.rating === -1 ? 0 : -1)}
-                      >
-                        {'\uD83D\uDC4E'}
-                      </button>
-                    </div>
+              {(() => {
+                const byWeek = {}
+                for (const p of purchases) {
+                  const wk = p.date ? _getWeekLabel(p.date.slice(0, 10)) : 'Unknown'
+                  if (!byWeek[wk]) byWeek[wk] = []
+                  byWeek[wk].push(p)
+                }
+                return Object.entries(byWeek).map(([week, items]) => (
+                  <div key={week}>
+                    <div className="prefs-list-group">{week}</div>
+                    {items.map((p, i) => {
+                      const desc = p.receipt_item || p.product_name || p.name
+                      const brand = p.product_brand || p.brand || ''
+                      const price = p.receipt_price ?? p.product_price
+                      return (
+                        <div key={`${p.product_key || p.name}-${i}`} className="prefs-list-item history-item">
+                          <div className="history-item-info">
+                            <span className="prefs-list-name">{desc}</span>
+                            {desc !== p.name && <div className="history-item-detail">{p.name}</div>}
+                            <div className="history-item-meta">
+                              {brand && <span>{brand}</span>}
+                              {brand && price != null && <span> · </span>}
+                              {price != null && <span>${price.toFixed(2)}</span>}
+                            </div>
+                          </div>
+                          <div className="staple-toggle-pair">
+                            <button
+                              className={`staple-toggle${p.rating === 1 ? ' active' : ''}`}
+                              onClick={() => handleRatePurchase(p, p.rating === 1 ? 0 : 1)}
+                            >
+                              {'\uD83D\uDC4D'}
+                            </button>
+                            <button
+                              className={`staple-toggle${p.rating === -1 ? ' active' : ''}`}
+                              onClick={() => handleRatePurchase(p, p.rating === -1 ? 0 : -1)}
+                            >
+                              {'\uD83D\uDC4E'}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                )
-              })}
+                ))
+              })()}
             </div>
           )}
         </div>
