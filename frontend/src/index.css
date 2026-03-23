@@ -4848,8 +4848,8 @@ main {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   padding: 32px 24px;
+  padding-bottom: 140px; /* room for Clippy */
 }
 
 .onboarding-card {
@@ -4858,70 +4858,76 @@ main {
   text-align: center;
 }
 
+.onboarding-step { text-align: left; }
+
 .onboarding-logo {
   font-family: 'Playfair Display', serif;
   font-size: 32px;
   font-weight: 600;
   color: var(--dark);
   margin-bottom: 8px;
+  text-align: center;
 }
+.onboarding-logo em { color: var(--accent); font-style: italic; }
 
-.onboarding-logo em {
-  color: var(--accent);
-  font-style: italic;
-}
-
-.onboarding-subtitle {
-  color: var(--text-muted);
-  font-size: 14px;
-  margin-bottom: 32px;
+.onboarding-welcome-text {
+  font-size: 16px;
+  color: var(--brown);
+  line-height: 1.6;
+  margin-bottom: 16px;
   font-weight: 300;
+  text-align: center;
+}
+.onboarding-welcome-time {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  text-align: center;
 }
 
 .onboarding-step-title {
   font-family: 'Playfair Display', serif;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
   color: var(--dark);
   margin-bottom: 6px;
 }
-
 .onboarding-step-desc {
   font-size: 14px;
   color: var(--text-muted);
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   font-weight: 300;
+  line-height: 1.5;
+}
+.onboarding-step-hint {
+  font-size: 12px;
+  color: var(--text-light);
+  font-style: italic;
+  margin-bottom: 12px;
 }
 
+/* Progress dots */
 .onboarding-dots {
   display: flex;
   justify-content: center;
   gap: 8px;
   margin-bottom: 28px;
 }
-
 .onboarding-dot {
-  width: 8px;
-  height: 8px;
+  width: 8px; height: 8px;
   border-radius: 50%;
   background: var(--tan);
   transition: background 0.2s;
 }
+.onboarding-dot.active { background: var(--accent); }
+.onboarding-dot.done { background: var(--green); }
 
-.onboarding-dot.active {
-  background: var(--accent);
-}
-
-.onboarding-dot.done {
-  background: var(--green);
-}
-
+/* Input rows */
 .onboarding-input-row {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
 }
-
 .onboarding-input {
   flex: 1;
   border: 1.5px solid var(--tan);
@@ -4933,66 +4939,19 @@ main {
   outline: none;
   color: var(--dark);
 }
+.onboarding-input:focus { border-color: var(--accent); }
 
-.onboarding-input:focus {
-  border-color: var(--accent);
-}
-
-.onboarding-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-  justify-content: center;
-}
-
-.onboarding-pill {
-  background: white;
-  border: 1px solid var(--tan);
-  border-radius: 20px;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-family: 'DM Sans', sans-serif;
-  color: var(--dark);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.onboarding-pill.active {
-  border-color: var(--green);
-  background: var(--green-light);
-  color: var(--green);
-}
-
-.onboarding-pill .remove {
-  font-size: 14px;
-  color: var(--text-muted);
-}
-
-.onboarding-pill .remove:hover {
-  color: var(--accent);
-}
-
+/* Recipe columns */
 .onboarding-recipe-columns {
   display: flex;
   gap: 24px;
   text-align: left;
   margin-bottom: 16px;
 }
-
 @media (max-width: 767px) {
-  .onboarding-recipe-columns {
-    flex-direction: column;
-  }
+  .onboarding-recipe-columns { flex-direction: column; }
 }
-
-.onboarding-recipe-section {
-  flex: 1;
-  min-width: 0;
-}
-
+.onboarding-recipe-section { flex: 1; min-width: 0; }
 .onboarding-section-label {
   font-family: 'Playfair Display', serif;
   font-size: 15px;
@@ -5003,7 +4962,8 @@ main {
   letter-spacing: 0.5px;
 }
 
-.onboarding-grid {
+/* Tile grid (meals/sides) */
+.onboarding-tile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px;
@@ -5011,42 +4971,58 @@ main {
   max-height: 45vh;
   overflow-y: auto;
 }
-
-.onboarding-grid-item {
-  padding: 10px 12px;
+.onboarding-tile {
   border-radius: 8px;
   border: 1.5px solid var(--tan);
   background: white;
+  transition: all 0.15s;
+  overflow: hidden;
+}
+.onboarding-tile:hover { border-color: var(--brown); }
+.onboarding-tile.selected {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.onboarding-tile.custom { border-style: dashed; }
+.onboarding-tile-btn {
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
   font-family: 'DM Sans', sans-serif;
   font-size: 13px;
   color: var(--dark);
   cursor: pointer;
-  transition: all 0.15s;
   text-align: center;
 }
-
-.onboarding-grid-item:hover {
-  border-color: var(--brown);
-}
-
-.onboarding-grid-item.selected {
-  border-color: var(--green);
-  background: var(--green-light);
-  color: var(--green);
+.onboarding-tile.selected .onboarding-tile-btn {
+  color: var(--accent);
   font-weight: 600;
 }
-
-.onboarding-grid-item.custom {
-  border-style: dashed;
+.onboarding-tile-preview {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 10px 8px;
+  line-height: 1.4;
 }
 
+/* Checklists (staples/regulars) */
 .onboarding-checklist {
   text-align: left;
-  max-height: 40vh;
+  max-height: 45vh;
   overflow-y: auto;
   margin-bottom: 16px;
 }
-
+.onboarding-category { margin-bottom: 8px; }
+.onboarding-category-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding: 8px 0 4px;
+  border-bottom: 1px solid var(--tan);
+}
 .onboarding-check-item {
   display: flex;
   align-items: center;
@@ -5056,56 +5032,27 @@ main {
   font-size: 14px;
   border-bottom: 1px solid var(--warm-white);
 }
+.onboarding-check-item .regular-check { width: 20px; height: 20px; }
 
-.onboarding-check-item .regular-check {
-  width: 20px;
-  height: 20px;
+/* Time survey */
+.onboarding-time-survey {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--tan);
 }
-
-.onboarding-btn-row {
-  display: flex;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.onboarding-btn {
-  flex: 1;
-  padding: 12px;
-  border-radius: 8px;
-  font-family: 'DM Sans', sans-serif;
+.onboarding-time-label {
   font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.onboarding-btn.primary {
-  background: var(--accent);
-  color: white;
-  border: none;
-  box-shadow: 0 2px 8px rgba(212,98,58,0.25);
-}
-
-.onboarding-btn.primary:hover { background: #C0562F; }
-.onboarding-btn.primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.onboarding-btn.secondary {
-  background: var(--warm-white);
   color: var(--dark);
-  border: 1px solid var(--tan);
+  margin-bottom: 10px;
+  font-weight: 500;
 }
-
-.onboarding-btn.secondary:hover { border-color: var(--brown); }
-
-.onboarding-mode-pills {
+.onboarding-time-options {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 16px;
-  justify-content: center;
 }
-
-.onboarding-mode-pill {
-  padding: 8px 18px;
+.onboarding-time-btn {
+  padding: 8px 14px;
   border-radius: 20px;
   font-size: 13px;
   font-family: 'DM Sans', sans-serif;
@@ -5115,12 +5062,202 @@ main {
   color: var(--dark);
   transition: all 0.15s;
 }
-
-.onboarding-mode-pill.active {
+.onboarding-time-btn.selected {
   border-color: var(--accent);
   background: var(--accent-bg);
   color: var(--accent);
   font-weight: 600;
+}
+
+/* Store setup */
+.onboarding-store-connected {
+  text-align: center;
+  padding: 16px 0;
+}
+.onboarding-store-check {
+  font-size: 32px;
+  color: var(--green);
+  margin-bottom: 8px;
+}
+.onboarding-store-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  text-align: left;
+}
+.onboarding-store-item {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border: 1.5px solid var(--tan);
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+}
+.onboarding-store-item:hover { border-color: var(--accent); }
+
+/* Tour cards */
+.onboarding-tour-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0;
+}
+.onboarding-tour-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: white;
+  border: 1px solid var(--tan);
+  opacity: 0.3;
+  transform: translateY(8px);
+  transition: all 0.3s ease;
+}
+.onboarding-tour-card.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.onboarding-tour-icon { font-size: 24px; flex-shrink: 0; }
+.onboarding-tour-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--dark);
+}
+.onboarding-tour-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Buttons */
+.onboarding-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+.onboarding-btn-spacer { flex: 1; }
+.onboarding-btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.onboarding-btn.primary {
+  background: var(--accent);
+  color: white;
+  border: none;
+  box-shadow: 0 2px 8px rgba(212,98,58,0.25);
+}
+.onboarding-btn.primary:hover { background: #C0562F; }
+.onboarding-btn.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.onboarding-btn.secondary {
+  background: var(--warm-white);
+  color: var(--dark);
+  border: 1px solid var(--tan);
+}
+.onboarding-btn.secondary:hover { border-color: var(--brown); }
+.onboarding-skip {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+}
+.onboarding-skip:hover { color: var(--brown); }
+
+/* Clippy guide */
+.clippy-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 100;
+  pointer-events: none;
+}
+.clippy-bubble {
+  background: white;
+  border: 1.5px solid var(--brown);
+  border-radius: 12px;
+  padding: 10px 14px;
+  max-width: 260px;
+  font-size: 13px;
+  color: var(--dark);
+  line-height: 1.5;
+  position: relative;
+  pointer-events: auto;
+}
+.clippy-bubble-tail {
+  position: absolute;
+  bottom: -8px;
+  right: 24px;
+  width: 14px;
+  height: 8px;
+  background: white;
+  border-right: 1.5px solid var(--brown);
+  border-bottom: 1.5px solid var(--brown);
+  transform: rotate(45deg);
+  transform-origin: top left;
+}
+.clippy-character {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+}
+.clippy-img {
+  width: 80px;
+  height: auto;
+  animation: clippy-wobble 3s ease-in-out infinite;
+}
+.clippy-wave { animation: clippy-wave 1s ease; }
+.mouse-img {
+  width: 48px;
+  height: auto;
+  position: absolute;
+  bottom: 0;
+  right: -10px;
+  animation: mouse-peek 0.5s ease forwards;
+}
+.mouse-img.mouse-scurry {
+  animation: mouse-scurry 1.5s ease-in forwards;
+}
+@keyframes clippy-wobble {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(2deg); }
+  75% { transform: rotate(-2deg); }
+}
+@keyframes clippy-wave {
+  0% { transform: rotate(0deg); }
+  30% { transform: rotate(-8deg); }
+  60% { transform: rotate(4deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes mouse-peek {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes mouse-scurry {
+  0% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(120vw); opacity: 0; }
+}
+
+@media (max-width: 640px) {
+  .clippy-container { bottom: 12px; right: 12px; }
+  .clippy-img { width: 60px; }
+  .clippy-bubble { max-width: 200px; font-size: 12px; }
+  .mouse-img { width: 36px; }
 }
 
 /* ── Household Invite Prompt ──────────── */

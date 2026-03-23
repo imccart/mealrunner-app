@@ -199,6 +199,19 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ meal_ids: mealIds, side_ids: sideIds, custom_meals: customMeals, custom_sides: customSides }),
   }),
+  getOnboardingStaples: () => request('/onboarding/staples'),
+  saveOnboardingStaples: (names) => request('/onboarding/save-staples', {
+    method: 'POST',
+    body: JSON.stringify({ names }),
+  }),
+  saveOnboardingRegulars: (names) => request('/onboarding/save-regulars', {
+    method: 'POST',
+    body: JSON.stringify({ names }),
+  }),
+  saveTimeBaseline: (value) => request('/onboarding/time-baseline', {
+    method: 'POST',
+    body: JSON.stringify({ value }),
+  }),
 
   // Learning
   getLearningSuggestions: () => request('/learning/suggestions'),

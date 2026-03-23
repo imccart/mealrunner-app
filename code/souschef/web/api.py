@@ -2938,7 +2938,7 @@ async def add_meal_to_pool(body: dict, request: Request):
 
 @router.get("/onboarding/library")
 async def get_onboarding_library(request: Request):
-    """Return library meals and sides for onboarding picker."""
+    """Return library meals and sides with ingredients for onboarding picker."""
     conn = _conn()
     meals = conn.execute(
         text("SELECT id, name FROM recipes WHERE user_id = '__library__' AND recipe_type = 'meal' ORDER BY name"),
@@ -2946,10 +2946,87 @@ async def get_onboarding_library(request: Request):
     sides = conn.execute(
         text("SELECT id, name FROM recipes WHERE user_id = '__library__' AND recipe_type = 'side' ORDER BY name"),
     ).fetchall()
+
+    # Load ingredients for each recipe
+    def _get_ingredients(recipe_id):
+        rows = conn.execute(
+            text("""SELECT i.name FROM recipe_ingredients ri
+               JOIN ingredients i ON i.id = ri.ingredient_id
+               WHERE ri.recipe_id = :rid ORDER BY i.name"""),
+            {"rid": recipe_id},
+        ).fetchall()
+        return [r["name"] for r in rows]
+
     return {
-        "meals": [{"id": r["id"], "name": r["name"]} for r in meals],
-        "sides": [{"id": r["id"], "name": r["name"]} for r in sides],
+        "meals": [{"id": r["id"], "name": r["name"], "ingredients": _get_ingredients(r["id"])} for r in meals],
+        "sides": [{"id": r["id"], "name": r["name"], "ingredients": _get_ingredients(r["id"])} for r in sides],
     }
+
+
+@router.get("/onboarding/staples")
+async def get_onboarding_staples(request: Request):
+    """Return pantry staple items grouped by aisle for onboarding checklist."""
+    conn = _conn()
+    rows = conn.execute(
+        text("SELECT id, name, aisle FROM ingredients WHERE is_pantry_staple = 1 ORDER BY aisle, name"),
+    ).fetchall()
+    return {"staples": [{"id": r["id"], "name": r["name"], "aisle": r["aisle"]} for r in rows]}
+
+
+@router.post("/onboarding/save-staples")
+async def save_onboarding_staples(body: dict, request: Request):
+    """Bulk-add staple items to user's pantry."""
+    from souschef.pantry import add_pantry_item
+
+    user_id = request.state.user_id
+    conn = _conn()
+    names = body.get("names", [])
+    for name in names:
+        name = name.strip()
+        if not name:
+            continue
+        try:
+            add_pantry_item(conn, user_id, name, 1.0, "count")
+        except Exception:
+            pass
+    conn.commit()
+    return {"ok": True, "count": len(names)}
+
+
+@router.post("/onboarding/save-regulars")
+async def save_onboarding_regulars(body: dict, request: Request):
+    """Bulk-add regular items for user."""
+    from souschef.regulars import add_regular
+
+    user_id = request.state.user_id
+    conn = _conn()
+    names = body.get("names", [])
+    for name in names:
+        name = name.strip()
+        if not name:
+            continue
+        try:
+            group = _infer_item_group(conn, name, user_id)
+            add_regular(conn, user_id, name, group)
+        except Exception:
+            pass
+    conn.commit()
+    return {"ok": True, "count": len(names)}
+
+
+@router.post("/onboarding/time-baseline")
+async def save_time_baseline(body: dict, request: Request):
+    """Save user's pre-souschef time estimate for value reporting."""
+    user_id = request.state.user_id
+    conn = _conn()
+    value = body.get("value", "")
+    conn.execute(
+        text("""INSERT INTO settings (user_id, key, value) VALUES (:uid, 'onboarding_time_baseline', :val)
+           ON CONFLICT (user_id, key) DO UPDATE SET value = :val"""),
+        {"uid": user_id, "val": value},
+    )
+    conn.commit()
+    return {"ok": True}
 
 
 @router.post("/onboarding/select-recipes")
