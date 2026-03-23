@@ -16,6 +16,37 @@ from sqlalchemy import text
 
 from souschef.database import DictConnection
 
+
+# ── Token encryption ──────────────────────────────────────
+
+_ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
+
+
+def _encrypt_token(plaintext: str) -> str:
+    """Encrypt a token for DB storage. Returns plaintext if no key configured."""
+    if not _ENCRYPTION_KEY or not plaintext:
+        return plaintext
+    try:
+        from cryptography.fernet import Fernet
+        f = Fernet(_ENCRYPTION_KEY.encode())
+        return f.encrypt(plaintext.encode()).decode()
+    except Exception:
+        return plaintext
+
+
+def _decrypt_token(ciphertext: str) -> str:
+    """Decrypt a token from DB. Returns as-is if not encrypted or no key configured."""
+    if not _ENCRYPTION_KEY or not ciphertext:
+        return ciphertext
+    try:
+        from cryptography.fernet import Fernet
+        f = Fernet(_ENCRYPTION_KEY.encode())
+        return f.decrypt(ciphertext.encode()).decode()
+    except Exception:
+        # Not encrypted (plaintext from before encryption was enabled) — return as-is
+        return ciphertext
+
+
 def _make_product_key(upc: str = "", brand: str = "", description: str = "") -> str:
     """Create a stable product identifier. Uses UPC if available, else brand|description."""
     if upc:
@@ -675,6 +706,9 @@ def get_user_token_from_db(conn: DictConnection, user_id: str) -> str | None:
     if not row:
         return None
 
+    access_token = _decrypt_token(row["access_token"])
+    refresh_token = _decrypt_token(row["refresh_token"])
+
     # Check if still valid (expires_at is ISO timestamp)
     from datetime import datetime, timezone
     try:
@@ -683,13 +717,13 @@ def get_user_token_from_db(conn: DictConnection, user_id: str) -> str | None:
             expires = expires.replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
         if now < expires:
-            return row["access_token"]
+            return access_token
     except (ValueError, TypeError):
         pass
 
     # Try refresh
     try:
-        new_data = refresh_kroger_token(row["refresh_token"])
+        new_data = refresh_kroger_token(refresh_token)
         expires_in = new_data.get("expires_in", 1800)
         from datetime import timedelta
         new_expires = datetime.now(timezone.utc) + timedelta(seconds=expires_in - 60)
@@ -698,8 +732,8 @@ def get_user_token_from_db(conn: DictConnection, user_id: str) -> str | None:
                 SET access_token = :at, refresh_token = :rt, expires_at = :exp, updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = :uid"""),
             {
-                "at": new_data["access_token"],
-                "rt": new_data.get("refresh_token", row["refresh_token"]),
+                "at": _encrypt_token(new_data["access_token"]),
+                "rt": _encrypt_token(new_data.get("refresh_token", refresh_token)),
                 "exp": new_expires.isoformat(),
                 "uid": user_id,
             },

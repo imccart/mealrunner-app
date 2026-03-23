@@ -224,28 +224,19 @@ def _claim_default_data(conn, user_id: str) -> None:
 
 # ── Auth Endpoints ───────────────────────────────────────
 
-_login_attempts: dict[str, list[float]] = {}  # {email: [timestamps]}
-_LOGIN_MAX = 3
-_LOGIN_WINDOW = 900  # 15 minutes
-
-
 @app.post("/api/auth/login")
 async def auth_login(body: dict):
     """Send a magic link to the given email (if whitelisted)."""
-    import time as _time
+    from souschef.web.api import _check_throttle
 
     email = body.get("email", "").strip().lower()
     if not email:
         return {"ok": False, "error": "Email required"}
 
-    # Rate limit: max 3 attempts per email per 15 minutes
-    now = _time.time()
-    attempts = _login_attempts.get(email, [])
-    attempts = [t for t in attempts if now - t < _LOGIN_WINDOW]
-    if len(attempts) >= _LOGIN_MAX:
+    # Rate limit: max 3 attempts per email per 15 minutes (DB-backed)
+    throttled = _check_throttle(email, "magic_link", 3, 900)
+    if throttled:
         return {"ok": False, "error": "Too many login attempts. Please try again later."}
-    attempts.append(now)
-    _login_attempts[email] = attempts
 
     conn = get_connection()
     try:
@@ -417,7 +408,8 @@ async def kroger_callback(code: str = "", state: str = "", error: str = ""):
         expires_in = token_data.get("expires_in", 1800)
         expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in - 60)).isoformat()
 
-        # Store tokens
+        # Store tokens (encrypted)
+        from souschef.kroger import _encrypt_token
         conn.execute(
             text("""INSERT INTO user_kroger_tokens (user_id, access_token, refresh_token, expires_at, scope)
                 VALUES (:uid, :at, :rt, :exp, :scope)
@@ -429,8 +421,8 @@ async def kroger_callback(code: str = "", state: str = "", error: str = ""):
                     updated_at = CURRENT_TIMESTAMP"""),
             {
                 "uid": user_id,
-                "at": token_data["access_token"],
-                "rt": token_data.get("refresh_token", ""),
+                "at": _encrypt_token(token_data["access_token"]),
+                "rt": _encrypt_token(token_data.get("refresh_token", "")),
                 "exp": expires_at,
                 "scope": token_data.get("scope", ""),
             },

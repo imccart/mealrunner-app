@@ -147,6 +147,26 @@ def _run_column_migrations(conn: DictConnection) -> None:
             except Exception:
                 pass
 
+    # Create rate_limits table if missing
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS rate_limits (
+                id SERIAL PRIMARY KEY,
+                endpoint TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                window_start TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(endpoint, user_id)
+            )
+        """))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   rate_limits table skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
     # Create receipt_extra_items table if missing
     try:
         conn.execute(text("""
@@ -1023,6 +1043,31 @@ def ensure_db(db_path: str | None = None) -> DictConnection:
                 conn.raw.rollback()
             except Exception:
                 pass
+        # Encrypt any plaintext Kroger tokens (one-time migration)
+        try:
+            import os
+            if os.environ.get("ENCRYPTION_KEY"):
+                from souschef.kroger import _encrypt_token, _decrypt_token
+                token_rows = conn.execute(text("SELECT user_id, access_token, refresh_token FROM user_kroger_tokens")).fetchall()
+                for tr in token_rows:
+                    at = tr["access_token"]
+                    rt = tr["refresh_token"]
+                    # If decrypt returns the same value AND it doesn't look like a Fernet token,
+                    # it's plaintext — encrypt it
+                    if at and not at.startswith("gAAAAA"):
+                        conn.execute(
+                            text("UPDATE user_kroger_tokens SET access_token = :at, refresh_token = :rt WHERE user_id = :uid"),
+                            {"at": _encrypt_token(at), "rt": _encrypt_token(rt), "uid": tr["user_id"]},
+                        )
+                conn.commit()
+                print("[db] Kroger token encryption migration done", flush=True)
+        except Exception as e:
+            print(f"[db] Token encryption migration skipped: {e}", flush=True)
+            try:
+                conn.raw.rollback()
+            except Exception:
+                pass
+
         # Refresh FDA violation data in background thread (non-blocking startup)
         import threading
         def _background_fda_refresh():

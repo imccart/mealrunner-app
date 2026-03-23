@@ -19,28 +19,54 @@ def _conn():
     return ensure_db()
 
 
-# ── Per-user rate limiting for expensive endpoints ────────
-
-import time as _throttle_time
-
-_user_request_log: dict[str, list[float]] = {}  # {"endpoint:user_id": [timestamps]}
+# ── Per-user rate limiting (DB-backed, persists across deploys) ────────
 
 
 def _check_throttle(user_id: str, endpoint: str, max_requests: int, window_seconds: int):
-    """Return a 429 JSONResponse if the user exceeds the rate limit, else None."""
-    key = f"{endpoint}:{user_id}"
-    now = _throttle_time.time()
-    timestamps = _user_request_log.get(key, [])
-    # Prune old entries
-    timestamps = [t for t in timestamps if now - t < window_seconds]
-    if len(timestamps) >= max_requests:
-        _user_request_log[key] = timestamps
-        return JSONResponse(
-            status_code=429,
-            content={"ok": False, "error": "Too many requests, please try again later"},
+    """Return a 429 JSONResponse if the user exceeds the rate limit, else None.
+    Uses DB-backed counters that persist across deploys."""
+    from datetime import datetime, timezone, timedelta
+
+    conn = _conn()
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(seconds=window_seconds)
+
+    row = conn.execute(
+        text("SELECT id, count, window_start FROM rate_limits WHERE endpoint = :ep AND user_id = :uid"),
+        {"ep": endpoint, "uid": user_id},
+    ).fetchone()
+
+    if row:
+        try:
+            ws = datetime.fromisoformat(row["window_start"].replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            ws = cutoff  # treat invalid as expired
+        if ws < cutoff:
+            # Window expired — reset
+            conn.execute(
+                text("UPDATE rate_limits SET count = 1, window_start = :ws WHERE id = :id"),
+                {"ws": now.isoformat(), "id": row["id"]},
+            )
+            conn.commit()
+            return None
+        if row["count"] >= max_requests:
+            return JSONResponse(
+                status_code=429,
+                content={"ok": False, "error": "Too many requests, please try again later"},
+            )
+        conn.execute(
+            text("UPDATE rate_limits SET count = count + 1 WHERE id = :id"),
+            {"id": row["id"]},
         )
-    timestamps.append(now)
-    _user_request_log[key] = timestamps
+        conn.commit()
+        return None
+
+    # First request — insert
+    conn.execute(
+        text("INSERT INTO rate_limits (endpoint, user_id, count, window_start) VALUES (:ep, :uid, 1, :ws) ON CONFLICT DO NOTHING"),
+        {"ep": endpoint, "uid": user_id, "ws": now.isoformat()},
+    )
+    conn.commit()
     return None
 
 
@@ -1597,7 +1623,10 @@ async def select_product(body: dict, request: Request):
     user_id = request.state.user_id
     item_name = body.get("item_name")
     product = body.get("product")
-    quantity = body.get("quantity", 1)
+    try:
+        quantity = max(1, min(24, int(body.get("quantity", 1))))
+    except (TypeError, ValueError):
+        quantity = 1
     if not item_name or not product:
         return {"ok": False, "error": "item_name and product required"}
 
@@ -3359,6 +3388,12 @@ async def invite_to_household(body: dict, request: Request):
     from souschef.web.auth import get_household_id, send_magic_link_email, find_or_create_user, create_magic_link
 
     real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+
+    # Rate limit: max 5 invites per user per hour
+    throttled = _check_throttle(real_user_id, "household_invite", 5, 3600)
+    if throttled:
+        return throttled
+
     email = body.get("email", "").strip().lower()
     if not email:
         return {"ok": False, "error": "Email required"}
@@ -3404,6 +3439,12 @@ async def invite_to_household(body: dict, request: Request):
 async def invite_to_beta(body: dict, request: Request):
     """Invite someone to try souschef (separate account, no household sharing)."""
     from souschef.web.auth import find_or_create_user, create_magic_link, send_magic_link_email
+
+    # Rate limit: max 5 invites per user per hour
+    user_id = request.state.user_id
+    throttled = _check_throttle(user_id, "beta_invite", 5, 3600)
+    if throttled:
+        return throttled
 
     email = body.get("email", "").strip().lower()
     if not email:

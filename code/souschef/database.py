@@ -289,6 +289,16 @@ trip_items = Table(
     UniqueConstraint("trip_id", "name"),
 )
 
+rate_limits = Table(
+    "rate_limits", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("endpoint", Text, nullable=False),
+    Column("user_id", Text, nullable=False),
+    Column("count", Integer, nullable=False, server_default=text("0")),
+    Column("window_start", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    UniqueConstraint("endpoint", "user_id"),
+)
+
 learning_dismissed = Table(
     "learning_dismissed", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
