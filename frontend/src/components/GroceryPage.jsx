@@ -416,27 +416,29 @@ export default function GroceryPage({ sidebar = false }) {
     // Hide checked/have_it/removed items — they go to "recently checked" section
     if (isDone) return null
 
-    const handleTap = () => {
+    const handleToggle = (e) => {
+      e.stopPropagation()
       setSelectedItem(isSelected ? null : item.name)
       setEditingNote(null)
     }
 
     const itemContent = (
       <>
-        <div className="grocery-item-top" onClick={handleTap}>
+        <div className="grocery-item-top">
           <span className="item-name">
             {item.name}
             {item.meal_count > 1 && <span className="multi-badge">x{item.meal_count}</span>}
           </span>
           {isOrdered && <span className="ordered-badge">{'\u2191'} ordered</span>}
+          <button className="grocery-expand-btn" onClick={handleToggle} title="Actions">{'\u2630'}</button>
         </div>
-        {item.notes && !isSelected && (
-          <div className="grocery-note" onClick={handleTap}>
+        {item.notes && (
+          <div className="grocery-note">
             {item.notes}
           </div>
         )}
         {hasMeals && (
-          <div className="grocery-item-meals" onClick={handleTap}>
+          <div className="grocery-item-meals">
             <span className="item-meals">{item.for_meals.join(', ')}</span>
           </div>
         )}

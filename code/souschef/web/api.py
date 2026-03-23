@@ -2067,11 +2067,15 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         matched_grocery_names = {m["grocery_name"].lower() for m in diff2["matched"]}
         receipt_remaining = diff2.get("unmatched", [])
 
-        # Items not matched in pass 2 — mark as not_fulfilled
+        # Items not matched — reset to active so they can be re-ordered
+        _not_fulfilled_sql = """UPDATE trip_items SET receipt_status = 'not_fulfilled',
+               ordered = 0, submitted_at = NULL,
+               product_upc = '', product_name = '', product_brand = '',
+               product_size = '', product_price = NULL, product_image = ''"""
         for r in name_rows:
             if r["name"].lower() not in matched_grocery_names:
                 conn.execute(
-                    text("UPDATE trip_items SET receipt_status = 'not_fulfilled' WHERE id = :id"),
+                    text(_not_fulfilled_sql + " WHERE id = :id"),
                     {"id": r["id"]},
                 )
                 total_not_fulfilled += 1
@@ -2079,23 +2083,25 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         for uname in upc_unmatched_names:
             if uname.lower() not in matched_grocery_names:
                 conn.execute(
-                    text("""UPDATE trip_items SET receipt_status = 'not_fulfilled'
-                       WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
+                    text(_not_fulfilled_sql + " WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
                     {"trip_id": trip["id"], "name": uname},
                 )
                 total_not_fulfilled += 1
     elif all_name_candidates:
-        # No receipt items left — all unmatched items are not fulfilled
+        # No receipt items left — all unmatched items reset to active
+        _not_fulfilled_sql = """UPDATE trip_items SET receipt_status = 'not_fulfilled',
+               ordered = 0, submitted_at = NULL,
+               product_upc = '', product_name = '', product_brand = '',
+               product_size = '', product_price = NULL, product_image = ''"""
         for r in name_rows:
             conn.execute(
-                text("UPDATE trip_items SET receipt_status = 'not_fulfilled' WHERE id = :id"),
+                text(_not_fulfilled_sql + " WHERE id = :id"),
                 {"id": r["id"]},
             )
             total_not_fulfilled += 1
         for uname in upc_unmatched_names:
             conn.execute(
-                text("""UPDATE trip_items SET receipt_status = 'not_fulfilled'
-                   WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
+                text(_not_fulfilled_sql + " WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
                 {"trip_id": trip["id"], "name": uname},
             )
             total_not_fulfilled += 1
@@ -2234,9 +2240,11 @@ async def resolve_receipt_item(body: dict, request: Request):
         return JSONResponse(status_code=400, content={"ok": False, "error": f"Invalid status '{status}'. Must be one of: {', '.join(sorted(ALLOWED_STATUSES))}"})
 
     if status == "recover":
-        # Put item back on the active grocery list (un-order it)
+        # Put item back on the active grocery list (un-order it, clear submitted so it can be re-ordered)
         conn.execute(
-            text("""UPDATE trip_items SET ordered = 0, receipt_status = ''
+            text("""UPDATE trip_items SET ordered = 0, submitted_at = NULL, receipt_status = '',
+                   product_upc = '', product_name = '', product_brand = '', product_size = '',
+                   product_price = NULL, product_image = ''
                WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
             {"trip_id": trip["id"], "name": name},
         )
@@ -2251,6 +2259,16 @@ async def resolve_receipt_item(body: dict, request: Request):
         conn.execute(
             text("""UPDATE trip_items SET receipt_status = 'matched',
                    checked = 1, checked_at = CURRENT_TIMESTAMP, ordered = 0
+               WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
+            {"trip_id": trip["id"], "name": name},
+        )
+    elif status == "not_fulfilled":
+        # Reset to active so item can be re-ordered
+        conn.execute(
+            text("""UPDATE trip_items SET receipt_status = 'not_fulfilled',
+                   ordered = 0, submitted_at = NULL,
+                   product_upc = '', product_name = '', product_brand = '',
+                   product_size = '', product_price = NULL, product_image = ''
                WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
             {"trip_id": trip["id"], "name": name},
         )

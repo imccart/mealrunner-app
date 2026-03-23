@@ -1298,10 +1298,7 @@ main {
 }
 
 .grocery-item-row.selected {
-  background: var(--warm-white);
-  border-radius: 8px;
-  padding: 10px 8px;
-  margin: 0 -8px;
+  /* no background shift — just expand the action bar below */
 }
 
 .ordered-badge {
@@ -1313,6 +1310,18 @@ main {
   flex-shrink: 0;
   font-weight: 500;
 }
+
+.grocery-expand-btn {
+  background: none;
+  border: none;
+  color: var(--text-light);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.grocery-expand-btn:hover { color: var(--text-muted); }
 
 .grocery-action-bar {
   display: flex;
@@ -3869,7 +3878,9 @@ main {
 @media (min-width: 1024px) {
   .receipt-upload,
   .receipt-section,
-  .receipt-footer { max-width: 640px; }
+  .receipt-footer,
+  .past-toggle,
+  .past-purchases { max-width: 640px; }
 }
 
 /* ── Preferences Sheet ────────────────── */
