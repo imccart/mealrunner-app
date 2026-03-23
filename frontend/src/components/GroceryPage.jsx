@@ -99,6 +99,7 @@ export default function GroceryPage({ sidebar = false }) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [recatItem, setRecatItem] = useState(null)
+  const [selectedItem, setSelectedItem] = useState(null)
   const [editingNote, setEditingNote] = useState(null)
   const [noteText, setNoteText] = useState('')
   const [showRecent, setShowRecent] = useState(false)
@@ -409,108 +410,72 @@ export default function GroceryPage({ sidebar = false }) {
     const isHaveIt = haveItSet.has(nameLower)
     const isRemoved = removedSet.has(nameLower)
     const isDone = isChecked || isHaveIt || isRemoved
-    const stateClass = isChecked ? 'checked' : isHaveIt ? 'have-it' : isOrdered ? 'ordered' : ''
     const hasMeals = item.for_meals && item.for_meals.length > 0
+    const isSelected = selectedItem === item.name
 
-    if (isOrdered) {
-      return (
-        <div key={item.name} className="grocery-item-row ordered">
-          <div className="grocery-item-top">
-            <span className="check ordered">{'\u2191'}</span>
-            <span className="item-name ordered-text">
-              {item.name}
-              {item.meal_count > 1 && <span className="multi-badge">x{item.meal_count}</span>}
-            </span>
-          </div>
-          {hasMeals && (
-            <div className="grocery-item-bottom">
-              <span className="item-meals">{item.for_meals.join(', ')} {'\u00B7'} ordered</span>
-            </div>
-          )}
-        </div>
-      )
-    }
-
-    // Hide checked/have_it items — they go to "recently checked" section
+    // Hide checked/have_it/removed items — they go to "recently checked" section
     if (isDone) return null
+
+    const handleTap = () => {
+      setSelectedItem(isSelected ? null : item.name)
+      setEditingNote(null)
+    }
 
     const itemContent = (
       <>
-        <div className="grocery-item-top">
-          {isDone && <span className="check done">{'\u2713'}</span>}
-          <span className={`item-name ${isDone ? 'done-text' : ''}`}>
+        <div className="grocery-item-top" onClick={handleTap}>
+          <span className="item-name">
             {item.name}
             {item.meal_count > 1 && <span className="multi-badge">x{item.meal_count}</span>}
           </span>
-          <button
-            className="recat-btn"
-            title="Move to different aisle"
-            onClick={(e) => { e.stopPropagation(); setRecatItem(item.name) }}
-          >{'\u2630'}</button>
+          {isOrdered && <span className="ordered-badge">{'\u2191'} ordered</span>}
         </div>
-        {editingNote === item.name ? (
-          <input
-            type="text"
-            className="note-input grocery-note-input"
-            placeholder="Add a note..."
-            value={noteText}
-            autoFocus
-            onChange={(e) => setNoteText(e.target.value)}
-            onBlur={() => {
-              if (noteText !== (item.notes || '')) {
-                api.updateGroceryNote(item.name, noteText).then(result => setGrocery(result)).catch(() => {})
-              }
-              setEditingNote(null)
-            }}
-            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur() }}
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : item.notes ? (
-          <div
-            className="grocery-note"
-            onClick={(e) => { e.stopPropagation(); setEditingNote(item.name); setNoteText(item.notes || '') }}
-          >
+        {item.notes && !isSelected && (
+          <div className="grocery-note" onClick={handleTap}>
             {item.notes}
           </div>
-        ) : null}
-        <div className="grocery-item-bottom">
-          {hasMeals && (
+        )}
+        {hasMeals && (
+          <div className="grocery-item-meals" onClick={handleTap}>
             <span className="item-meals">{item.for_meals.join(', ')}</span>
-          )}
-          <div className="grocery-item-actions">
-            {!item.notes && (
-              <button
-                className="grocery-note-btn"
-                onClick={(e) => { e.stopPropagation(); setEditingNote(item.name); setNoteText('') }}
-                title="Add a note"
-              >{'\u{270E}'}</button>
-            )}
-            <button
-              className="grocery-remove-x"
-              onClick={() => handleItemAction(item.name, 'remove')}
-              title="Remove from list"
-            >{'\u00D7'}</button>
-            <div className="grocery-item-toggle">
-              <button
-                className={`toggle-seg bought ${isChecked ? 'active' : ''}`}
-                onClick={() => handleItemAction(item.name, 'bought')}
-                title="Picked up at the store"
-              >Bought</button>
-              <button
-                className={`toggle-seg have-it ${isHaveIt ? 'active' : ''}`}
-                onClick={() => handleItemAction(item.name, 'have_it')}
-                title="Already have it at home"
-              >Have it</button>
-            </div>
           </div>
-        </div>
+        )}
+        {isSelected && (
+          <>
+            {editingNote === item.name ? (
+              <input
+                type="text"
+                className="note-input grocery-note-input"
+                placeholder="Add a note..."
+                value={noteText}
+                autoFocus
+                onChange={(e) => setNoteText(e.target.value)}
+                onBlur={() => {
+                  if (noteText !== (item.notes || '')) {
+                    api.updateGroceryNote(item.name, noteText).then(result => setGrocery(result)).catch(() => {})
+                  }
+                  setEditingNote(null)
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur() }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : null}
+            <div className="grocery-action-bar">
+              <button className="grocery-action-btn-item" onClick={() => handleItemAction(item.name, 'bought')}>Bought</button>
+              <button className="grocery-action-btn-item" onClick={() => handleItemAction(item.name, 'have_it')}>Have it</button>
+              <button className="grocery-action-btn-item" onClick={(e) => { e.stopPropagation(); setEditingNote(item.name); setNoteText(item.notes || '') }}>Note</button>
+              <button className="grocery-action-btn-item" onClick={(e) => { e.stopPropagation(); setRecatItem(item.name) }}>Move</button>
+              <button className="grocery-action-btn-item remove" onClick={() => handleItemAction(item.name, 'remove')}>{'\u00D7'}</button>
+            </div>
+          </>
+        )}
       </>
     )
 
     return (
       <SwipeableItem
         key={item.name}
-        className={`grocery-item-row ${stateClass}`}
+        className={`grocery-item-row${isSelected ? ' selected' : ''}`}
         onSwipeRight={() => handleItemAction(item.name, 'remove')}
       >
         {itemContent}

@@ -1293,44 +1293,52 @@ main {
   padding: 4px 8px;
 }
 
-.grocery-item-bottom {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  padding-left: 0;
+.grocery-item-meals {
+  margin-top: 2px;
 }
 
-.grocery-item-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
+.grocery-item-row.selected {
+  background: var(--warm-white);
+  border-radius: 8px;
+  padding: 10px 8px;
+  margin: 0 -8px;
 }
 
-.grocery-note-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 14px;
-  cursor: pointer;
-  padding: 2px 4px;
-  -webkit-tap-highlight-color: transparent;
-}
-.grocery-note-btn:hover { color: var(--accent); }
-
-.grocery-remove-x {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 18px;
-  font-family: 'DM Sans', sans-serif;
-  cursor: pointer;
+.ordered-badge {
+  font-size: 10px;
+  color: var(--accent);
+  background: #FFF3E0;
   padding: 2px 6px;
-  line-height: 1;
+  border-radius: 8px;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.grocery-action-bar {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.grocery-action-btn-item {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  border: 1.5px solid var(--tan);
+  border-radius: 6px;
+  background: white;
+  color: var(--dark);
+  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.grocery-remove-x:hover { color: var(--accent); }
+.grocery-action-btn-item:hover { border-color: var(--accent); color: var(--accent); }
+.grocery-action-btn-item.remove {
+  color: var(--text-muted);
+  font-size: 16px;
+  padding: 4px 10px;
+  line-height: 1;
+}
 
 .grocery-item-undo {
   margin-left: auto;
@@ -1745,13 +1753,9 @@ main {
   margin-top: 4px;
 }
 
-/* Compact toggle in sidebar */
-.col-grocery .grocery-item-actions { gap: 6px; }
-.col-grocery .grocery-remove-x { font-size: 14px; padding: 1px 3px; }
-.col-grocery .toggle-seg {
-  font-size: 10px;
-  padding: 2px 7px;
-}
+/* Compact action bar in sidebar */
+.col-grocery .grocery-action-bar { gap: 4px; }
+.col-grocery .grocery-action-btn-item { font-size: 10px; padding: 4px 8px; }
 
 /* Compact prompt cards in sidebar */
 .col-grocery .grocery-prompt-card {
@@ -2038,25 +2042,7 @@ main {
 
 /* ── Ordered item state ────────────────── */
 
-.grocery-item-row.ordered {
-  cursor: default;
-}
-
-.grocery-item-row .check.ordered {
-  background: var(--accent-bg);
-  border-color: var(--accent-light);
-  color: var(--accent);
-  font-size: 9px;
-}
-
-.item-name.done-text {
-  text-decoration: line-through;
-  color: var(--text-light);
-}
-
-.item-name.ordered-text {
-  color: var(--text-muted);
-}
+/* ordered styles removed — ordered is now just a badge */
 
 /* ── Carryover Sheet ───────────────────── */
 

@@ -302,7 +302,7 @@ export default function MyKitchenSheet({ onClose }) {
       <div className="sheet-title">My Kitchen</div>
 
       <div className="kitchen-tabs">
-        {['meals', 'sides', 'staples', 'history'].map(tab => (
+        {['meals', 'sides', 'staples', 'ratings'].map(tab => (
           <button
             key={tab}
             className={`kitchen-tab${activeTab === tab ? ' active' : ''}`}
@@ -459,7 +459,7 @@ export default function MyKitchenSheet({ onClose }) {
           )}
         </div>
       )}
-      {activeTab === 'history' && (
+      {activeTab === 'ratings' && (
         <div className="kitchen-tab-content">
           <div className="prefs-section-hint">Products you've purchased. Rate them after you've tried them.</div>
           {purchases === null ? (

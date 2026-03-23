@@ -2018,6 +2018,7 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
     receipt_remaining = list(new_receipt_items)
 
     # Pass 1: match ordered items by UPC
+    upc_unmatched_names = []  # submitted items that failed UPC + fuzzy match — get a second chance
     if upc_rows:
         submitted = [{"upc": r["product_upc"], "product": r["product_name"], "item": r["name"]} for r in upc_rows]
         diff = diff_order(submitted, receipt_remaining)
@@ -2038,21 +2039,16 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
             )
         total_matched += len(diff["matched"])
 
-        for r in diff["removed"]:
-            conn.execute(
-                text("""UPDATE trip_items SET receipt_status = 'not_fulfilled'
-                   WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
-                {"trip_id": trip["id"], "name": r.get("item", r.get("product", ""))},
-            )
-        total_not_fulfilled += len(diff["removed"])
+        # Don't mark as not_fulfilled yet — give them a second chance via grocery list matching
+        upc_unmatched_names = [r.get("item", r.get("product", "")) for r in diff["removed"]]
 
         # Remaining receipt items for pass 2
         receipt_remaining = diff.get("added", [])
 
-    # Pass 2: match checked items by name
-    if name_rows and receipt_remaining:
-        grocery_names = [r["name"] for r in name_rows]
-        diff2 = diff_grocery_list(grocery_names, receipt_remaining)
+    # Pass 2: match by grocery name (includes name-only items + UPC items that failed pass 1)
+    all_name_candidates = [r["name"] for r in name_rows] + upc_unmatched_names
+    if all_name_candidates and receipt_remaining:
+        diff2 = diff_grocery_list(all_name_candidates, receipt_remaining)
 
         for m in diff2["matched"]:
             r = m["receipt"]
@@ -2071,7 +2067,7 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         matched_grocery_names = {m["grocery_name"].lower() for m in diff2["matched"]}
         receipt_remaining = diff2.get("unmatched", [])
 
-        # Name-only items not on receipt
+        # Items not matched in pass 2 — mark as not_fulfilled
         for r in name_rows:
             if r["name"].lower() not in matched_grocery_names:
                 conn.execute(
@@ -2079,12 +2075,28 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                     {"id": r["id"]},
                 )
                 total_not_fulfilled += 1
-    elif name_rows:
-        # No receipt items left — all name-only items are not fulfilled
+        # UPC items that also failed pass 2
+        for uname in upc_unmatched_names:
+            if uname.lower() not in matched_grocery_names:
+                conn.execute(
+                    text("""UPDATE trip_items SET receipt_status = 'not_fulfilled'
+                       WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
+                    {"trip_id": trip["id"], "name": uname},
+                )
+                total_not_fulfilled += 1
+    elif all_name_candidates:
+        # No receipt items left — all unmatched items are not fulfilled
         for r in name_rows:
             conn.execute(
                 text("UPDATE trip_items SET receipt_status = 'not_fulfilled' WHERE id = :id"),
                 {"id": r["id"]},
+            )
+            total_not_fulfilled += 1
+        for uname in upc_unmatched_names:
+            conn.execute(
+                text("""UPDATE trip_items SET receipt_status = 'not_fulfilled'
+                   WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
+                {"trip_id": trip["id"], "name": uname},
             )
             total_not_fulfilled += 1
 
@@ -2235,10 +2247,10 @@ async def resolve_receipt_item(body: dict, request: Request):
             {"trip_id": trip["id"], "name": name},
         )
     elif status == "matched":
-        # Confirming a match also checks it off the grocery list
+        # Confirming a match checks it off the grocery list and clears ordered
         conn.execute(
             text("""UPDATE trip_items SET receipt_status = 'matched',
-                   checked = 1, checked_at = CURRENT_TIMESTAMP
+                   checked = 1, checked_at = CURRENT_TIMESTAMP, ordered = 0
                WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
             {"trip_id": trip["id"], "name": name},
         )
