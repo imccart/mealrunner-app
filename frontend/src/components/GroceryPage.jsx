@@ -589,16 +589,16 @@ export default function GroceryPage({ sidebar = false }) {
     const s = new Date(start_date + 'T00:00:00')
     const month = s.toLocaleDateString('en-US', { month: 'short' })
     const day = s.getDate()
-    const itemText = `${remainingCount} item${remainingCount !== 1 ? 's' : ''} left`
+    const itemText = `${totalActive} item${totalActive !== 1 ? 's' : ''} left`
     return `${month} ${day} trip \u00B7 ${itemText}`
   }
 
   const sidebarTitleBlock = (
     <div className="sidebar-title">
       <span>Grocery List</span>
-      {remainingCount > 0 && (
+      {totalActive > 0 && (
         <span className="count-badge">
-          {remainingCount} item{remainingCount !== 1 ? 's' : ''} left
+          {totalActive} item{totalActive !== 1 ? 's' : ''} left
         </span>
       )}
     </div>
