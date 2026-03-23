@@ -521,6 +521,8 @@ def _stale_prompt_state(conn, trip) -> str:
     if not unchecked:
         return "hidden"  # nothing stale
 
+    # Only "bought" items count as shopping signals — "have it" is pre-shopping triage
+    bought_items = [r for r in rows if r["checked"]]
     done_items = [r for r in rows if r["checked"] or r["skipped"] or r["have_it"]]
     if not done_items:
         # Nothing checked off yet — check age-based trigger
@@ -530,18 +532,18 @@ def _stale_prompt_state(conn, trip) -> str:
                 return "prompt"
         return "hidden"
 
-    # Collect timestamps of all check-off actions
-    done_times = []
+    # Collect timestamps of all check-off actions (for filtering post-shopping additions)
+    all_done_times = []
     for r in done_items:
         for col in ("checked_at", "skipped_at", "have_it_at"):
             t = _parse_ts(r[col] if col in r.keys() else None)
             if t:
-                done_times.append(t)
+                all_done_times.append(t)
 
-    if not done_times:
+    if not all_done_times:
         return "hidden"
 
-    most_recent = max(done_times)
+    most_recent = max(all_done_times)
 
     # Filter out items added AFTER the last shopping event — they're not stale
     stale_candidates = []
@@ -569,19 +571,26 @@ def _stale_prompt_state(conn, trip) -> str:
     if submitted:
         return "prompt"
 
-    # Trigger: 50% checked off within a 1-hour window, AND 1+ hour since last check-off
-    since_last = now - most_recent
-    if since_last < timedelta(hours=1):
-        return "hidden"  # still shopping
+    # Trigger: 50% BOUGHT within a 1-hour window, AND 1+ hour since last buy
+    # "Have it" does NOT count — that's pre-shopping triage, not a grocery run
+    bought_times = []
+    for r in bought_items:
+        t = _parse_ts(r["checked_at"] if "checked_at" in r.keys() else None)
+        if t:
+            bought_times.append(t)
 
-    total = len(rows)
-    done_times.sort()
-    threshold = total * 0.5
-    for i, t_start in enumerate(done_times):
-        window_end = t_start + timedelta(hours=1)
-        count_in_window = sum(1 for t in done_times[i:] if t <= window_end)
-        if count_in_window >= threshold:
-            return "prompt"
+    if bought_times:
+        most_recent_buy = max(bought_times)
+        since_last_buy = now - most_recent_buy
+        if since_last_buy >= timedelta(hours=1):
+            total = len(rows)
+            bought_times.sort()
+            threshold = total * 0.5
+            for i, t_start in enumerate(bought_times):
+                window_end = t_start + timedelta(hours=1)
+                count_in_window = sum(1 for t in bought_times[i:] if t <= window_end)
+                if count_in_window >= threshold:
+                    return "prompt"
 
     # Trigger: stale candidates older than 10 days
     for r in stale_candidates:
