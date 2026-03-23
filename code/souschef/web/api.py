@@ -1311,10 +1311,16 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
         ).fetchall()
         pref_scores = {r["upc"]: dict(r) for r in pref_score_rows}
 
+    from souschef.brands import get_parent_company
+    from souschef.violations import get_company_violations
+
     pref_list = []
     for p in prefs:
         sc = pref_scores.get(p.upc, {})
-        pref_list.append({
+        parent = get_parent_company(p.brand, conn) if p.brand else "We're not sure"
+        violation_key = p.brand.strip() if parent == "Same as brand" else parent
+        violations = get_company_violations(conn, violation_key) if violation_key not in ("We're not sure",) else None
+        pref_item = {
             "upc": p.upc,
             "name": p.description,
             "brand": p.brand,
@@ -1325,7 +1331,11 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
             "promo_price": sc.get("promo_price"),
             "nova": sc.get("nova_group"),
             "nutriscore": sc.get("nutriscore", ""),
-        })
+            "parent_company": parent,
+        }
+        if violations:
+            pref_item["violations"] = violations
+        pref_list.append(pref_item)
 
     # Search Kroger
     try:
