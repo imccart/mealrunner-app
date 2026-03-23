@@ -172,33 +172,6 @@ export default function ReceiptPage() {
         </div>
       </div>
 
-      {/* Previous purchases toggle — like past meals */}
-      <button
-        className="past-toggle"
-        onClick={() => { setShowPast(v => !v); if (!showPast) loadPurchases() }}
-      >
-        {showPast ? 'Hide' : 'Show'} previous purchases
-      </button>
-
-      {showPast && (
-        <div className="past-purchases">
-          {purchases === null ? (
-            <div className="loading">Loading...</div>
-          ) : purchases.length === 0 ? (
-            <div className="prefs-section-hint">No purchase history yet.</div>
-          ) : (
-            Object.entries(purchasesByDate).map(([date, items]) => (
-              <div key={date} className="purchase-date-group">
-                <div className="purchase-date-label">{formatDate(date)}</div>
-                {items.map((item, i) => (
-                  <PurchaseItem key={`${item.name}-${i}`} item={item} onRate={handleRate} />
-                ))}
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
       {/* Camera overlay */}
       {showCamera && (
         <CameraCapture
@@ -237,7 +210,33 @@ export default function ReceiptPage() {
             Found {uploadResult.matched + (uploadResult.extras || 0)} item{(uploadResult.matched + (uploadResult.extras || 0)) !== 1 ? 's' : ''} on the receipt
           </div>
         )}
+
+        <button
+          className="past-toggle"
+          onClick={() => { setShowPast(v => !v); if (!showPast) loadPurchases() }}
+        >
+          {showPast ? 'Hide' : 'View'} previous purchases
+        </button>
       </div>
+
+      {showPast && (
+        <div className="past-purchases">
+          {purchases === null ? (
+            <div className="loading">Loading...</div>
+          ) : purchases.length === 0 ? (
+            <div className="prefs-section-hint">No purchase history yet.</div>
+          ) : (
+            Object.entries(purchasesByDate).map(([date, items]) => (
+              <div key={date} className="purchase-date-group">
+                <div className="purchase-date-label">{formatDate(date)}</div>
+                {items.map((item, i) => (
+                  <PurchaseItem key={`${item.name}-${i}`} item={item} onRate={handleRate} />
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Matches awaiting confirmation */}
       {receipt.matched.length > 0 && receipt.matched.some(i => !i.checked) && (

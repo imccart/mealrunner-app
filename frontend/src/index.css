@@ -717,17 +717,17 @@ main {
 /* ── Past Meals ────────────────────────── */
 
 .past-toggle {
-  display: inline-block;
+  display: block;
+  width: 100%;
   background: none;
   border: none;
   font-size: 12px;
   font-family: 'DM Sans', sans-serif;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 8px 16px 12px;
+  padding: 8px 0 4px;
   font-weight: 500;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-align: center;
 }
 
 .past-toggle:hover {
