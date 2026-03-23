@@ -289,6 +289,7 @@ export default function GroceryPage({ sidebar = false }) {
     await submitPrompt(api.addPantryItems, [...pantryChecked])
     setPantryExpanded(false)
   }
+
   const handleUndoRecent = async (name) => {
     const prev = grocery
     // Optimistic: remove from checked/have_it
