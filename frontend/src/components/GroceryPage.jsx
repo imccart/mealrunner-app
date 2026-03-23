@@ -254,6 +254,10 @@ export default function GroceryPage({ sidebar = false }) {
 
   // Regulars prompt handlers
   const handleRegularsExpand = async () => {
+    if (regularsExpanded) {
+      setRegularsExpanded(false)
+      return
+    }
     try {
       const data = await api.getRegulars()
       const active = (data.regulars || []).filter(r => r.active)
@@ -270,13 +274,12 @@ export default function GroceryPage({ sidebar = false }) {
     await submitPrompt(api.addRegulars, [...regularsChecked])
     setRegularsExpanded(false)
   }
-  const handleRegularsDismiss = async () => {
-    await submitPrompt(api.addRegulars, [])
-    setRegularsExpanded(false)
-  }
-
-  // Pantry prompt handlers
+  // Pantry handlers
   const handlePantryExpand = async () => {
+    if (pantryExpanded) {
+      setPantryExpanded(false)
+      return
+    }
     try {
       const data = await api.getPantry()
       setPantryData(data.items || [])
@@ -291,11 +294,6 @@ export default function GroceryPage({ sidebar = false }) {
     await submitPrompt(api.addPantryItems, [...pantryChecked])
     setPantryExpanded(false)
   }
-  const handlePantryDismiss = async () => {
-    await submitPrompt(api.addPantryItems, [])
-    setPantryExpanded(false)
-  }
-
   // Stale prompt handlers
   const handleStaleExpand = () => {
     setStaleKeep(new Set()) // default: nothing kept (all will be skipped)
@@ -317,8 +315,7 @@ export default function GroceryPage({ sidebar = false }) {
     setStaleExpanded(false)
   }
 
-  // Inline prompt cards — "prompt" = full card, "done" = compact row
-  const renderPromptCard = ({ state, expanded, label, doneLabel, onExpand, onSubmit, onDismiss, data, checkedSet, setChecked, groupField }) => {
+  const renderActionCard = ({ expanded, label, onExpand, onSubmit, data, checkedSet, setChecked, groupField }) => {
     if (expanded) {
       return (
         <div className="grocery-prompt-card">
@@ -356,12 +353,12 @@ export default function GroceryPage({ sidebar = false }) {
               </div>
             ) : (
               <div className="grocery-prompt-empty">
-                {groupField ? 'No active regulars yet.' : 'No pantry items yet. Add them in My Kitchen.'}
+                {groupField ? 'No regulars yet. Add them in My Kitchen.' : 'No staples yet. Add them in My Kitchen.'}
               </div>
             )}
             <div className="grocery-prompt-actions">
-              <button className="grocery-prompt-dismiss" onClick={onDismiss}>
-                {groupField ? 'Not this time' : 'Skip'}
+              <button className="grocery-prompt-dismiss" onClick={() => { setChecked(new Set()); onExpand() }}>
+                Cancel
               </button>
               <button className="grocery-prompt-submit" onClick={onSubmit}>
                 Add to list {checkedSet.size > 0 ? `(${checkedSet.size})` : ''}
@@ -372,42 +369,30 @@ export default function GroceryPage({ sidebar = false }) {
       )
     }
 
-    if (state === 'done') {
-      return (
-        <button className="grocery-prompt-compact" onClick={onExpand}>
-          <span className="grocery-prompt-compact-check">{'\u2713'}</span>
-          <span>{doneLabel}</span>
-          <span className="grocery-prompt-compact-edit">Update</span>
-        </button>
-      )
-    }
-
-    // state === 'prompt'
     return (
-      <div className="grocery-prompt-card">
-        <button className="grocery-prompt-trigger" onClick={onExpand}>
-          <BentSpoonIcon size={18} />
-          <span>{label}</span>
-          <span className="grocery-prompt-arrow">{'\u203A'}</span>
-        </button>
-      </div>
+      <button className="grocery-action-btn" onClick={onExpand}>
+        <span>{label}</span>
+        <span className="grocery-prompt-arrow">{'\u203A'}</span>
+      </button>
     )
   }
 
   const promptCards = (
     <>
-      {renderPromptCard({
-        state: regulars_state, expanded: regularsExpanded,
-        label: 'Add your regulars', doneLabel: 'Regulars added',
-        onExpand: handleRegularsExpand, onSubmit: handleRegularsSubmit, onDismiss: handleRegularsDismiss,
-        data: regularsData, checkedSet: regularsChecked, setChecked: setRegularsChecked, groupField: 'shopping_group',
-      })}
-      {renderPromptCard({
-        state: pantry_state, expanded: pantryExpanded,
-        label: 'Running low on anything?', doneLabel: 'Pantry checked',
-        onExpand: handlePantryExpand, onSubmit: handlePantrySubmit, onDismiss: handlePantryDismiss,
-        data: pantryData, checkedSet: pantryChecked, setChecked: setPantryChecked, groupField: null,
-      })}
+      <div className="grocery-actions">
+        {renderActionCard({
+          expanded: regularsExpanded,
+          label: 'Add my regulars',
+          onExpand: handleRegularsExpand, onSubmit: handleRegularsSubmit,
+          data: regularsData, checkedSet: regularsChecked, setChecked: setRegularsChecked, groupField: 'shopping_group',
+        })}
+        {renderActionCard({
+          expanded: pantryExpanded,
+          label: 'Check my staples',
+          onExpand: handlePantryExpand, onSubmit: handlePantrySubmit,
+          data: pantryData, checkedSet: pantryChecked, setChecked: setPantryChecked, groupField: null,
+        })}
+      </div>
       {stale_state === 'prompt' && stale_items && stale_items.length > 0 && (
         staleExpanded ? (
           <div className="grocery-prompt-card">
