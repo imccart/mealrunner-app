@@ -133,7 +133,7 @@ export default function GroceryPage({ sidebar = false }) {
   if (loading) return <><div className="loading">Gathering ingredients...</div><FeedbackFab page="grocery" /></>
   if (loadError) return <><div className="loading">Something went wrong loading your list. Try refreshing.</div><FeedbackFab page="grocery" /></>
 
-  const { items_by_group, checked, ordered, have_it, recently_checked } = grocery
+  const { items_by_group, checked, ordered, have_it, recently_checked, start_date } = grocery
   const checkedSet = new Set((checked || []).map(n => n.toLowerCase()))
   const orderedSet = new Set((ordered || []).map(n => n.toLowerCase()))
   const haveItSet = new Set((have_it || []).map(n => n.toLowerCase()))
