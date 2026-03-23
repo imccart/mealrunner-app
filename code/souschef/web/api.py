@@ -766,9 +766,12 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
     # Add or update meal items
     for name_lower, info in fresh_meal_items.items():
         if name_lower in existing_map:
-            # Update for_meals/meal_count but keep checked state
+            # Update for_meals/meal_count, keep checked state, clear old ordered state
             conn.execute(
-                text("""UPDATE trip_items SET for_meals = :for_meals, meal_count = :meal_count, shopping_group = :group
+                text("""UPDATE trip_items SET for_meals = :for_meals, meal_count = :meal_count, shopping_group = :group,
+                   ordered = 0, ordered_at = NULL, submitted_at = NULL,
+                   product_upc = '', product_name = '', product_brand = '', product_size = '',
+                   product_price = NULL, product_image = '', quantity = 1, selected_at = NULL
                    WHERE id = :id"""),
                 {"for_meals": info["for_meals"], "meal_count": info["meal_count"],
                  "group": info["shopping_group"], "id": existing_map[name_lower]["id"]},
