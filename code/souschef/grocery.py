@@ -35,7 +35,7 @@ def build_grocery_list(
                    WHERE ri.recipe_id = :recipe_id"""),
                 {"recipe_id": side.side_recipe_id},
             ).fetchall()
-            side_label = side.side_name or meal.recipe_name
+            side_label = meal.recipe_name
             for sr in side_rows:
                 iid = sr["ingredient_id"]
                 if iid in agg:

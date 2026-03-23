@@ -102,6 +102,7 @@ export default function GroceryPage({ sidebar = false }) {
   const [editingNote, setEditingNote] = useState(null)
   const [noteText, setNoteText] = useState('')
   const [showRecent, setShowRecent] = useState(false)
+  const [stapleSuggestion, setStapleSuggestion] = useState(null)
 
   // Inline prompt state
   const [regularsData, setRegularsData] = useState(null)
@@ -213,7 +214,12 @@ export default function GroceryPage({ sidebar = false }) {
     setGrocery({ ...grocery, checked: [...sets.checked], have_it: [...sets.have_it] })
 
     const apiCall = { bought: api.toggleGroceryItem, have_it: api.haveItGroceryItem }
-    try { await apiCall[action](name) } catch { setGrocery(prev) }
+    try {
+      const result = await apiCall[action](name)
+      if (result.suggest_staple) {
+        setStapleSuggestion(result.suggest_staple)
+      }
+    } catch { setGrocery(prev) }
   }
 
   const handleRecategorize = async (group) => {
@@ -540,6 +546,19 @@ export default function GroceryPage({ sidebar = false }) {
             </div>
           )
         })
+      )}
+      {/* Staple suggestion */}
+      {stapleSuggestion && (
+        <div className="staple-suggestion">
+          <span>You always have <strong>{stapleSuggestion}</strong> on hand.</span>
+          <div className="staple-suggestion-actions">
+            <button onClick={() => {
+              api.addPantryItem(stapleSuggestion, '').catch(() => {})
+              setStapleSuggestion(null)
+            }}>Add to staples</button>
+            <button className="dismiss" onClick={() => setStapleSuggestion(null)}>Not now</button>
+          </div>
+        </div>
       )}
       {/* Recently checked — 24-hour undo window */}
       {recently_checked && recently_checked.length > 0 && (

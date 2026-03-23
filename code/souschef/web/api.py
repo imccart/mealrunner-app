@@ -1011,6 +1011,7 @@ async def have_it_grocery_item(item_name: str, request: Request):
         {"trip_id": trip["id"], "name": item_name},
     ).fetchone()
 
+    suggest_staple = None
     if row:
         if row["have_it"]:
             # Un-have-it: return to active
@@ -1023,8 +1024,26 @@ async def have_it_grocery_item(item_name: str, request: Request):
                 text("UPDATE trip_items SET have_it = 1, have_it_at = CURRENT_TIMESTAMP, checked = 0, checked_at = NULL WHERE id = :id"),
                 {"id": row["id"]},
             )
+            # Check if this item has been marked "have it" 3+ times — suggest as staple
+            from souschef.regulars import list_regulars
+            from souschef.pantry import list_pantry_items
+            reg_names = {r.name.lower() for r in list_regulars(conn, user_id)}
+            pantry_names = {p["name"].lower() for p in list_pantry_items(conn, user_id)}
+            name_lower = item_name.strip().lower()
+            if name_lower not in reg_names and name_lower not in pantry_names:
+                have_it_count = conn.execute(
+                    text("""SELECT COUNT(*) as cnt FROM trip_items ti
+                       JOIN grocery_trips gt ON gt.id = ti.trip_id
+                       WHERE gt.user_id = :uid AND LOWER(ti.name) = LOWER(:name) AND ti.have_it = 1"""),
+                    {"uid": user_id, "name": item_name},
+                ).fetchone()
+                if have_it_count and have_it_count["cnt"] >= 3:
+                    suggest_staple = item_name
     conn.commit()
-    return await get_grocery(request)
+    result = await get_grocery(request)
+    if suggest_staple:
+        result["suggest_staple"] = suggest_staple
+    return result
 
 
 @router.post("/grocery/add-regulars")
