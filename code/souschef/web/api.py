@@ -723,7 +723,7 @@ def _ensure_active_trip(conn, mw, user_id: str):
     conn.execute(
         text("""DELETE FROM trip_items WHERE trip_id = :tid
            AND (checked = 1 OR have_it = 1)
-           AND COALESCE(checked_at, have_it_at) < NOW() - INTERVAL '30 days'"""),
+           AND COALESCE(checked_at, have_it_at)::timestamptz < NOW() - INTERVAL '30 days'"""),
         {"tid": trip["id"]},
     )
     conn.commit()
@@ -800,17 +800,11 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
 async def get_grocery(request: Request):
     """Get the grocery list from the active trip."""
     from souschef.planner import load_rolling_week
-    import traceback
 
-    try:
-        user_id = request.state.user_id
-        conn = _conn()
-        mw = load_rolling_week(conn, user_id)
-        trip = _ensure_active_trip(conn, mw, user_id)
-    except Exception as e:
-        print(f"[grocery] ERROR in get_grocery setup: {e}", flush=True)
-        traceback.print_exc()
-        raise
+    user_id = request.state.user_id
+    conn = _conn()
+    mw = load_rolling_week(conn, user_id)
+    trip = _ensure_active_trip(conn, mw, user_id)
 
     # Read all items from the trip
     rows = conn.execute(
