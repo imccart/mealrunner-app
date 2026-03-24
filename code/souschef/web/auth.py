@@ -133,12 +133,28 @@ def create_magic_link(conn: DictConnection, user_id: str) -> str:
 
 
 def verify_magic_link(conn: DictConnection, token: str) -> str | None:
-    """Verify a magic link token. Returns user_id if valid, None if expired/used."""
+    """Verify a magic link token. Returns user_id if valid, None if expired/used.
+
+    Allows a 60-second grace window after first use to handle email client
+    link prefetching (Outlook, Gmail scan links before the user clicks).
+    """
     row = conn.execute(
         text("SELECT user_id, expires_at, used_at FROM magic_links WHERE token = :token"),
         {"token": token},
     ).fetchone()
-    if not row or row["used_at"]:
+    if not row:
+        return None
+
+    # If already used, allow within 60-second grace window
+    if row["used_at"]:
+        try:
+            used = datetime.fromisoformat(row["used_at"])
+            if used.tzinfo is None:
+                used = used.replace(tzinfo=timezone.utc)
+            if _now() - used < timedelta(seconds=60):
+                return row["user_id"]
+        except (ValueError, TypeError):
+            pass
         return None
 
     expires = datetime.fromisoformat(row["expires_at"])
@@ -147,16 +163,17 @@ def verify_magic_link(conn: DictConnection, token: str) -> str | None:
     if _now() > expires:
         return None
 
-    # Delete used token
+    # Mark as used (don't delete — grace window allows re-use)
     conn.execute(
-        text("DELETE FROM magic_links WHERE token = :token"),
-        {"token": token},
+        text("UPDATE magic_links SET used_at = :now WHERE token = :token"),
+        {"now": _now_str(), "token": token},
     )
 
-    # Clean up expired tokens while we're at it
+    # Clean up old tokens (expired or used > 5 minutes ago)
     conn.execute(
-        text("DELETE FROM magic_links WHERE expires_at < :now"),
-        {"now": _now_str()},
+        text("""DELETE FROM magic_links WHERE expires_at < :now
+           OR (used_at IS NOT NULL AND used_at < :cutoff)"""),
+        {"now": _now_str(), "cutoff": (_now() - timedelta(minutes=5)).isoformat()},
     )
 
     # Update last_login
