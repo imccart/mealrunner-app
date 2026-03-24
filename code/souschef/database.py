@@ -423,6 +423,7 @@ receipt_extra_items = Table(
     Column("upc", Text, nullable=False, server_default=text("''")),
     Column("brand", Text, nullable=False, server_default=text("''")),
     Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("dismissed", Integer, nullable=False, server_default=text("0")),
 )
 
 unknown_brands = Table(

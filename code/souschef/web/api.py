@@ -1906,7 +1906,7 @@ async def get_receipt(request: Request):
     # Fetch extra items (unmatched receipt items)
     try:
         extras_rows = conn.execute(
-            text("SELECT item_name, price, upc, brand FROM receipt_extra_items WHERE trip_id = :trip_id ORDER BY id"),
+            text("SELECT item_name, price, upc, brand FROM receipt_extra_items WHERE trip_id = :trip_id AND dismissed = 0 ORDER BY id"),
             {"trip_id": trip["id"]},
         ).fetchall()
         extras = [{"item_name": r["item_name"], "price": r["price"], "upc": r["upc"], "brand": r["brand"]} for r in extras_rows]
@@ -2415,7 +2415,7 @@ async def dismiss_extra(body: dict, request: Request):
         return {"ok": False}
 
     conn.execute(
-        text("DELETE FROM receipt_extra_items WHERE trip_id = :tid AND LOWER(item_name) = LOWER(:name)"),
+        text("UPDATE receipt_extra_items SET dismissed = 1 WHERE trip_id = :tid AND LOWER(item_name) = LOWER(:name)"),
         {"tid": trip["id"], "name": name},
     )
     conn.commit()
