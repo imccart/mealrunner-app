@@ -99,7 +99,13 @@ def rollup_community_prices(conn: DictConnection) -> dict:
 
     Returns dict with counts: {'rolled_up': int, 'pruned': int}.
     """
-    # Upsert daily aggregates from raw prices
+    # Only include data from users who opted into sharing (or system-generated data with no user_id)
+    sharing_users = conn.execute(
+        text("SELECT user_id FROM settings WHERE key = 'price_sharing' AND value = '1'"),
+    ).fetchall()
+    sharing_ids = {r["user_id"] for r in sharing_users}
+
+    # Upsert daily aggregates from raw prices (only from sharing users or anonymous)
     result = conn.execute(
         text("""INSERT INTO community_prices (upc, location_id, store_chain, date, avg_price, min_price, max_price, promo_price, sample_count)
            SELECT upc, location_id, store_chain,
@@ -111,6 +117,7 @@ def rollup_community_prices(conn: DictConnection) -> dict:
                   COUNT(*) AS sample_count
            FROM product_prices
            WHERE price IS NOT NULL
+           AND (user_id IS NULL OR user_id IN (SELECT user_id FROM settings WHERE key = 'price_sharing' AND value = '1'))
            GROUP BY upc, location_id, store_chain, fetched_at::date::text
            ON CONFLICT (upc, location_id, date) DO UPDATE SET
                   avg_price = excluded.avg_price,
