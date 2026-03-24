@@ -618,8 +618,8 @@ export default function GroceryPage({ sidebar = false }) {
       ) : (
         <>
           {mobileTitleBlock}
-          {addBar}
           {promptCards}
+          {addBar}
           {listContent}
         </>
       )}
