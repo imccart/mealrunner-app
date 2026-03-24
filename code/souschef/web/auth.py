@@ -151,7 +151,7 @@ def verify_magic_link(conn: DictConnection, token: str) -> str | None:
             used = datetime.fromisoformat(row["used_at"])
             if used.tzinfo is None:
                 used = used.replace(tzinfo=timezone.utc)
-            if _now() - used < timedelta(seconds=60):
+            if _now() - used < timedelta(minutes=10):
                 return row["user_id"]
         except (ValueError, TypeError):
             pass
