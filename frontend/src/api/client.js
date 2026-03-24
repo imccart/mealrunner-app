@@ -237,6 +237,13 @@ export const api = {
     body: JSON.stringify({ data_type: dataType, subject, suggested_value: suggestedValue }),
   }),
 
+  // Price tracking settings
+  getPriceTracking: () => request('/settings/price-tracking'),
+  setPriceTracking: (settings) => request('/settings/price-tracking', {
+    method: 'POST',
+    body: JSON.stringify(settings),
+  }),
+
   // Feedback
   sendFeedback: (message, page) => request('/feedback', {
     method: 'POST',

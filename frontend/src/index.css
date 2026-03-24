@@ -4274,6 +4274,26 @@ main {
   padding-left: 26px;
 }
 
+.prefs-price-tracking {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--tan);
+}
+.prefs-price-tracking-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.prefs-price-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 6px 0 4px;
+  padding: 8px 10px;
+  background: var(--warm-white);
+  border-radius: 6px;
+}
+
 /* ── Nav Icons ───────────────────────── */
 
 .nav-icons {

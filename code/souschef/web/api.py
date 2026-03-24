@@ -3698,6 +3698,42 @@ async def update_account(body: dict, request: Request):
     return {"ok": True, "email": user["email"], "display_name": user["display_name"]}
 
 
+# ── Price Tracking Settings ───────────────────────────────
+
+
+@router.get("/settings/price-tracking")
+async def get_price_tracking(request: Request):
+    """Get price tracking preferences."""
+    user_id = request.state.user_id
+    conn = _conn()
+    rows = conn.execute(
+        text("SELECT key, value FROM settings WHERE user_id = :uid AND key IN ('price_polling', 'price_sharing')"),
+        {"uid": user_id},
+    ).fetchall()
+    prefs = {r["key"]: r["value"] == "1" for r in rows}
+    return {
+        "price_polling": prefs.get("price_polling", False),
+        "price_sharing": prefs.get("price_sharing", False),
+    }
+
+
+@router.post("/settings/price-tracking")
+async def set_price_tracking(body: dict, request: Request):
+    """Update price tracking preferences."""
+    user_id = request.state.user_id
+    conn = _conn()
+    for key in ("price_polling", "price_sharing"):
+        if key in body:
+            val = "1" if body[key] else "0"
+            conn.execute(
+                text("""INSERT INTO settings (user_id, key, value) VALUES (:uid, :key, :val)
+                   ON CONFLICT (user_id, key) DO UPDATE SET value = :val, updated_at = CURRENT_TIMESTAMP"""),
+                {"uid": user_id, "key": key, "val": val},
+            )
+    conn.commit()
+    return {"ok": True}
+
+
 # ── Feedback ──────────────────────────────────────────────
 
 
