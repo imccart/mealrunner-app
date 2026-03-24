@@ -19,6 +19,32 @@ def _conn():
     return ensure_db()
 
 
+# ── Price logging ──────────────────────────────────────────
+
+
+def _log_prices(conn, products: list[dict], location_id: str, source: str, user_id: str | None = None):
+    """Log product prices to product_prices table for price tracking."""
+    for p in products:
+        upc = p.get("upc", "")
+        price = p.get("price")
+        if not upc or price is None:
+            continue
+        try:
+            conn.execute(
+                text("""INSERT INTO product_prices (upc, location_id, store_chain, price, promo_price, in_stock, source, user_id)
+                   VALUES (:upc, :loc, 'kroger', :price, :promo, :stock, :source, :uid)"""),
+                {"upc": upc, "loc": location_id, "price": price,
+                 "promo": p.get("promo_price"), "stock": p.get("in_stock"),
+                 "source": source, "uid": user_id},
+            )
+        except Exception:
+            pass
+    try:
+        conn.commit()
+    except Exception:
+        pass
+
+
 # ── Per-user rate limiting (DB-backed, persists across deploys) ────────
 
 
@@ -1519,6 +1545,9 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
         )
     conn.commit()
 
+    # Log prices for tracking
+    _log_prices(conn, [{"upc": p.upc, "price": p.price, "promo_price": p.promo_price, "in_stock": int(p.in_stock)} for p in products if p.price], user_location_id, "search", user_id)
+
     from souschef.brands import get_parent_company
     from souschef.kroger import get_product_ratings
     from souschef.violations import get_company_violations
@@ -1656,6 +1685,11 @@ async def select_product(body: dict, request: Request):
         {"id": trip["id"]},
     )
     conn.commit()
+
+    # Log price for tracking
+    from souschef.stores import get_kroger_location_id
+    sel_location = get_kroger_location_id(conn, user_id) or ""
+    _log_prices(conn, [{"upc": product["upc"], "price": product.get("price"), "promo_price": None}], sel_location, "select", user_id)
 
     # Save preference for future searches
     kp = KrogerProduct(
@@ -2154,6 +2188,25 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
             save_preference(conn, user_id, mi["name"].lower(), pref_product, source="receipt")
         except Exception:
             pass
+
+    # Log receipt prices for tracking
+    from souschef.stores import get_kroger_location_id as _get_loc
+    rcpt_location = _get_loc(conn, user_id) or ""
+    rcpt_prices = []
+    for mi in all_matched_items:
+        upc = mi["receipt_upc"] or mi["product_upc"] or ""
+        if upc:
+            rcpt_prices.append({"upc": upc, "price": None, "promo_price": None})
+    # Also log receipt items that have prices from the parsed receipt
+    receipt_items_with_prices = conn.execute(
+        text("SELECT receipt_upc, receipt_price FROM trip_items WHERE trip_id = :tid AND receipt_status IN ('matched', 'substituted') AND receipt_price IS NOT NULL"),
+        {"tid": trip["id"]},
+    ).fetchall()
+    for ri in receipt_items_with_prices:
+        if ri["receipt_upc"]:
+            rcpt_prices.append({"upc": ri["receipt_upc"], "price": ri["receipt_price"], "promo_price": None})
+    if rcpt_prices:
+        _log_prices(conn, rcpt_prices, rcpt_location, "receipt", user_id)
 
     # Save unmatched receipt items as extras
     if receipt_remaining:

@@ -229,6 +229,58 @@ def _run_column_migrations(conn: DictConnection) -> None:
         except Exception:
             pass
 
+    # Create product_prices table if missing
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS product_prices (
+                id SERIAL PRIMARY KEY,
+                upc TEXT NOT NULL,
+                location_id TEXT NOT NULL,
+                store_chain TEXT NOT NULL DEFAULT 'kroger',
+                price FLOAT,
+                promo_price FLOAT,
+                in_stock INTEGER,
+                source TEXT NOT NULL,
+                user_id TEXT,
+                fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_product_prices_upc_loc_time ON product_prices (upc, location_id, fetched_at)"
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   product_prices table skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+    # Create community_prices table if missing
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS community_prices (
+                id SERIAL PRIMARY KEY,
+                upc TEXT NOT NULL,
+                location_id TEXT NOT NULL,
+                store_chain TEXT NOT NULL DEFAULT 'kroger',
+                date TEXT NOT NULL,
+                avg_price FLOAT,
+                min_price FLOAT,
+                max_price FLOAT,
+                promo_price FLOAT,
+                sample_count INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(upc, location_id, date)
+            )
+        """))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   community_prices table skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
     # Backfill product_key from upc where missing
     try:
         conn.execute(text(
@@ -1080,6 +1132,21 @@ def ensure_db(db_path: str | None = None) -> DictConnection:
             except Exception as e:
                 print(f"[db] Background: FDA refresh error (non-fatal): {e}", flush=True)
         threading.Thread(target=_background_fda_refresh, daemon=True).start()
+
+        # Price polling + community rollup background thread (runs every 12 hours)
+        def _background_price_polling():
+            import time as _sleep
+            while True:
+                try:
+                    bg_conn = get_connection()
+                    from souschef.pricing import run_price_polling
+                    print("[db] Background: running price polling...", flush=True)
+                    run_price_polling(bg_conn)
+                    print("[db] Background: price polling done", flush=True)
+                except Exception as e:
+                    print(f"[db] Background: price polling error (non-fatal): {e}", flush=True)
+                _sleep.sleep(12 * 3600)  # 12 hours
+        threading.Thread(target=_background_price_polling, daemon=True).start()
 
         _db_initialized = True
     return conn

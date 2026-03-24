@@ -229,6 +229,35 @@ product_scores = Table(
     Column("price_fetched_at", Text),
 )
 
+product_prices = Table(
+    "product_prices", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("upc", Text, nullable=False),
+    Column("location_id", Text, nullable=False),
+    Column("store_chain", Text, nullable=False, server_default=text("'kroger'")),
+    Column("price", Float),
+    Column("promo_price", Float),
+    Column("in_stock", Integer),
+    Column("source", Text, nullable=False),
+    Column("user_id", Text),
+    Column("fetched_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
+community_prices = Table(
+    "community_prices", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("upc", Text, nullable=False),
+    Column("location_id", Text, nullable=False),
+    Column("store_chain", Text, nullable=False, server_default=text("'kroger'")),
+    Column("date", Text, nullable=False),
+    Column("avg_price", Float),
+    Column("min_price", Float),
+    Column("max_price", Float),
+    Column("promo_price", Float),
+    Column("sample_count", Integer, nullable=False, server_default=text("1")),
+    UniqueConstraint("upc", "location_id", "date"),
+)
+
 grocery_trips = Table(
     "grocery_trips", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
