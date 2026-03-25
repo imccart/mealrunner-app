@@ -104,6 +104,8 @@ export default function GroceryPage({ sidebar = false }) {
   const [noteText, setNoteText] = useState('')
   const [showRecent, setShowRecent] = useState(false)
   const [stapleSuggestion, setStapleSuggestion] = useState(null)
+  const [shoppingMode, setShoppingMode] = useState(false)
+  const [wakeLock, setWakeLock] = useState(null)
 
   // Inline prompt state
   const [regularsData, setRegularsData] = useState(null)
@@ -170,6 +172,96 @@ export default function GroceryPage({ sidebar = false }) {
   })
 
   const hasItems = sortedGroups.length > 0
+  const totalItems = totalActive + Object.values(groupCounts).reduce((sum, g) => sum - g.remaining, 0) + totalActive
+  const checkedCount = Object.values(items_by_group).flat().filter(i => {
+    const nl = i.name.toLowerCase()
+    return checkedSet.has(nl) || haveItSet.has(nl)
+  }).length
+
+  // Shopping mode enter/exit
+  const enterShoppingMode = async () => {
+    setShoppingMode(true)
+    try {
+      const lock = await navigator.wakeLock.request('screen')
+      setWakeLock(lock)
+    } catch { /* wake lock not supported — fine */ }
+  }
+
+  const exitShoppingMode = () => {
+    setShoppingMode(false)
+    if (wakeLock) {
+      wakeLock.release().catch(() => {})
+      setWakeLock(null)
+    }
+  }
+
+  const handleShopCheck = async (name) => {
+    await handleItemAction(name, 'bought')
+  }
+
+  const handleShopUncheck = async (name) => {
+    // Toggle bought back off
+    await handleItemAction(name, 'bought')
+  }
+
+  // Shopping mode render
+  if (shoppingMode) {
+    return (
+      <div className="shopping-mode">
+        <div className="shopping-header">
+          <div className="shopping-count">
+            {checkedCount} of {checkedCount + totalActive}
+          </div>
+          <button className="shopping-done" onClick={exitShoppingMode}>Done</button>
+        </div>
+        <div className="shopping-list">
+          {sortedGroups.map(group => {
+            const items = items_by_group[group]
+            const active = items.filter(i => {
+              const nl = i.name.toLowerCase()
+              return !checkedSet.has(nl) && !haveItSet.has(nl) && !removedSet.has(nl)
+            })
+            const done = items.filter(i => {
+              const nl = i.name.toLowerCase()
+              return checkedSet.has(nl) || haveItSet.has(nl)
+            })
+            if (active.length === 0 && done.length === 0) return null
+            return (
+              <div key={group} className="shopping-group">
+                <div className="shopping-group-header">{group}</div>
+                {active.map(item => (
+                  <SwipeableItem
+                    key={item.name}
+                    className="shopping-item"
+                    onSwipeRight={() => handleShopCheck(item.name)}
+                  >
+                    <div className="shopping-item-name" onClick={() => handleShopCheck(item.name)}>
+                      {item.name}
+                      {item.meal_count > 1 && <span className="shopping-multi">x{item.meal_count}</span>}
+                    </div>
+                  </SwipeableItem>
+                ))}
+                {done.map(item => (
+                  <div
+                    key={item.name}
+                    className="shopping-item checked"
+                    onClick={() => handleShopUncheck(item.name)}
+                  >
+                    <div className="shopping-item-name">{item.name}</div>
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+          {totalActive === 0 && (
+            <div className="shopping-all-done">
+              All done! {'\u{1F389}'}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   const isGroupAllDone = (group) => {
     return groupCounts[group] && groupCounts[group].remaining === 0
@@ -621,6 +713,11 @@ export default function GroceryPage({ sidebar = false }) {
           {promptCards}
           {addBar}
           {listContent}
+          {totalActive > 0 && (
+            <button className="shopping-now-btn" onClick={enterShoppingMode}>
+              Shopping Now
+            </button>
+          )}
         </>
       )}
 

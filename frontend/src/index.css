@@ -5317,6 +5317,125 @@ main {
   .mouse-img { width: 36px; }
 }
 
+/* ── Shopping Now Mode ────────────────── */
+
+.shopping-now-btn {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 20px 16px;
+  padding: 14px;
+  font-size: 16px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(212,98,58,0.25);
+}
+.shopping-now-btn:hover { background: #C0562F; }
+
+.shopping-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: #2C2420;
+  color: #FAF7F2;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.shopping-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  flex-shrink: 0;
+}
+
+.shopping-count {
+  font-size: 16px;
+  font-family: 'DM Sans', sans-serif;
+  color: rgba(250, 247, 242, 0.6);
+}
+
+.shopping-done {
+  background: none;
+  border: 1.5px solid rgba(250, 247, 242, 0.3);
+  border-radius: 8px;
+  color: #FAF7F2;
+  font-size: 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  padding: 8px 20px;
+  cursor: pointer;
+}
+.shopping-done:hover { border-color: #D4623A; color: #D4623A; }
+
+.shopping-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px 40px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.shopping-group {
+  margin-bottom: 24px;
+}
+
+.shopping-group-header {
+  font-family: 'Playfair Display', serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #D4623A;
+  padding: 12px 0 8px;
+  position: sticky;
+  top: 0;
+  background: #2C2420;
+  z-index: 1;
+  border-bottom: 1px solid rgba(139, 111, 94, 0.4);
+}
+
+.shopping-item {
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(139, 111, 94, 0.2);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.shopping-item-name {
+  font-size: 28px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 400;
+  color: #FAF7F2;
+  cursor: pointer;
+}
+
+.shopping-multi {
+  font-size: 16px;
+  color: #D4623A;
+  margin-left: 8px;
+}
+
+.shopping-item.checked {
+  cursor: pointer;
+}
+
+.shopping-item.checked .shopping-item-name {
+  color: rgba(250, 247, 242, 0.3);
+  text-decoration: line-through;
+  font-size: 22px;
+}
+
+.shopping-all-done {
+  text-align: center;
+  font-size: 24px;
+  color: rgba(250, 247, 242, 0.6);
+  padding: 60px 0;
+}
+
 /* ── Household Invite Prompt ──────────── */
 
 .invite-prompt {
