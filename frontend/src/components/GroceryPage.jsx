@@ -148,7 +148,10 @@ export default function GroceryPage({ sidebar = false }) {
   const onListSet = new Set()
   for (const group of Object.values(items_by_group)) {
     for (const item of group) {
-      onListSet.add(item.name.toLowerCase())
+      const nl = item.name.toLowerCase()
+      if (!checkedSet.has(nl) && !haveItSet.has(nl) && !removedSet.has(nl)) {
+        onListSet.add(nl)
+      }
     }
   }
 
