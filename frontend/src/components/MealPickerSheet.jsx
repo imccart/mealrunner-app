@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import Sheet from './Sheet'
+import styles from './MealPickerSheet.module.css'
 
 function daysAgo(dateStr) {
   if (!dateStr) return null
@@ -71,7 +72,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
     const selectedIds = new Set(selectedSides.map(s => s.id))
 
     return (
-      <Sheet onClose={onClose} className="meal-picker-sheet">
+      <Sheet onClose={onClose} className={styles.mealPickerSheet}>
         <div className="sheet-title">{dayName}</div>
         <div className="sheet-sub">{pickedRecipe.name} + sides? ({selectedSides.length}/{MAX_SIDES})</div>
         {!sides ? (
@@ -79,15 +80,15 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
         ) : (
           <>
             <input
-              className="picker-search"
+              className={styles.pickerSearch}
               type="text"
               placeholder="Search sides..."
               value={sideSearch}
               onChange={(e) => setSideSearch(e.target.value)}
             />
             {query && filtered.length === 0 ? (
-              <div className="picker-results">
-                <button className="picker-option freeform" onClick={() => {
+              <div className={styles.pickerResults}>
+                <button className={`${styles.pickerOption} ${styles.freeform}`} onClick={() => {
                   if (selectedSides.length < MAX_SIDES) {
                     const custom = { id: `custom-${sideSearch.trim()}`, name: sideSearch.trim(), custom: true }
                     setSelectedSides(prev => [...prev, custom])
@@ -98,11 +99,11 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
                 </button>
               </div>
             ) : (
-              <div className="picker-pills">
+              <div className={styles.pickerPills}>
                 {filtered.map(s => (
                   <button
                     key={s.id}
-                    className={`meal-pill ${selectedIds.has(s.id) ? 'selected-side' : ''} ${s.in_use ? 'in-use' : ''}`}
+                    className={`${styles.mealPill} ${selectedIds.has(s.id) ? styles.selectedSide : ''} ${s.in_use ? styles.inUse : ''}`}
                     onClick={() => toggleSide(s)}
                     disabled={!selectedIds.has(s.id) && selectedSides.length >= MAX_SIDES}
                   >
@@ -112,12 +113,12 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
                 ))}
               </div>
             )}
-            <div className="picker-side-actions">
+            <div className={styles.pickerSideActions}>
               <button className="btn primary" onClick={confirmSides}>
                 {selectedSides.length === 0 ? 'No sides' : `Done (${selectedSides.length})`}
               </button>
             </div>
-            <button className="picker-back" onClick={() => { setPickedRecipe(null); setSides(null); setSideSearch(''); setSelectedSides([]) }}>
+            <button className={styles.pickerBack} onClick={() => { setPickedRecipe(null); setSides(null); setSideSearch(''); setSelectedSides([]) }}>
               {'\u2190'} Back to meals
             </button>
           </>
@@ -132,7 +133,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
       <div className="sheet-title">{dayName}</div>
       <div className="sheet-sub">Couldn't load recipes</div>
       <input
-        className="picker-search"
+        className={styles.pickerSearch}
         type="text"
         placeholder="Type a meal name..."
         value={search}
@@ -142,12 +143,12 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
         }}
       />
       {search.trim() && (
-        <button className="picker-option freeform" onClick={() => onCreateNew(search.trim())}>
+        <button className={`${styles.pickerOption} ${styles.freeform}`} onClick={() => onCreateNew(search.trim())}>
           Create "{search.trim()}" as a new meal
         </button>
       )}
       <div style={{ marginTop: 12 }}>
-        <button className="picker-option freeform" onClick={() => onFreeform('Eating Out')}>Eating Out</button>
+        <button className={`${styles.pickerOption} ${styles.freeform}`} onClick={() => onFreeform('Eating Out')}>Eating Out</button>
       </div>
     </Sheet>
   )
@@ -180,11 +181,11 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
   }
 
   return (
-    <Sheet onClose={onClose} className="meal-picker-sheet">
+    <Sheet onClose={onClose} className={styles.mealPickerSheet}>
       <div className="sheet-title">{dayName}</div>
       <div className="sheet-sub">What are you making?</div>
       <input
-        className="picker-search"
+        className={styles.pickerSearch}
         type="text"
         placeholder="Search or type a meal..."
         value={search}
@@ -201,15 +202,15 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
       />
 
       {query ? (
-        <div className="picker-results">
+        <div className={styles.pickerResults}>
           {filtered.length > 0 ? (
             filtered.map(r => {
               const h = (history || []).find(x => x.recipe_id === r.id)
               return (
-                <button key={r.id} className="picker-option" onClick={() => pickMeal(r.id, r.name)}>
+                <button key={r.id} className={styles.pickerOption} onClick={() => pickMeal(r.id, r.name)}>
                   {r.name}
                   {h && (
-                    <span className="picker-favorite-meta">
+                    <span className={styles.pickerFavoriteMeta}>
                       Made {h.cook_count} time{h.cook_count !== 1 ? 's' : ''}, last {daysAgo(h.last_made)}
                     </span>
                   )}
@@ -217,7 +218,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
               )
             })
           ) : (
-            <button className="picker-option freeform" onClick={() => onCreateNew(search.trim())}>
+            <button className={`${styles.pickerOption} ${styles.freeform}`} onClick={() => onCreateNew(search.trim())}>
               Create "{search.trim()}" as a new meal
             </button>
           )}
@@ -227,12 +228,12 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
           {/* Favorites */}
           {favorites.length > 0 && (
             <>
-              <div className="picker-section-label">Your favorites</div>
-              <div className="picker-pills" style={{ marginBottom: '16px' }}>
+              <div className={styles.pickerSectionLabel}>Your favorites</div>
+              <div className={styles.pickerPills} style={{ marginBottom: '16px' }}>
                 {favorites.map(f => (
                   <button
                     key={f.recipe_id}
-                    className="meal-pill"
+                    className={styles.mealPill}
                     onClick={() => pickMeal(f.recipe_id, f.recipe_name)}
                     title={`Made ${f.cook_count} times, last ${daysAgo(f.last_made)}`}
                   >
@@ -244,17 +245,17 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
           )}
 
           {/* Suggested / Other */}
-          <div className="picker-section-label">
+          <div className={styles.pickerSectionLabel}>
             {favorites.length > 0 ? 'Other recipes' : 'Suggested'}
           </div>
-          <div className="picker-pills">
+          <div className={styles.pickerPills}>
             {(favorites.length > 0 ? otherRecipes : candidates.slice(0, 8)).map(r => (
-              <button key={r.id} className="meal-pill" onClick={() => pickMeal(r.id, r.name)}>
+              <button key={r.id} className={styles.mealPill} onClick={() => pickMeal(r.id, r.name)}>
                 {r.name}
               </button>
             ))}
             <button
-              className="meal-pill eating-out"
+              className={`${styles.mealPill} ${styles.eatingOut}`}
               onClick={() => onFreeform('Eating Out')}
             >
               Eating Out

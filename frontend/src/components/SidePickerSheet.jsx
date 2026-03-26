@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import Sheet from './Sheet'
+import styles from './MealPickerSheet.module.css'
 
 const MAX_SIDES = 3
 
@@ -50,11 +51,11 @@ export default function SidePickerSheet({ date, mealName, onSelect, onClose }) {
   const selectedIds = new Set(selectedSides.map(s => s.id))
 
   return (
-    <Sheet onClose={onClose} className="meal-picker-sheet">
+    <Sheet onClose={onClose} className={styles.mealPickerSheet}>
       <div className="sheet-title">Side dishes</div>
       <div className="sheet-sub">Pick sides for {mealName} ({selectedSides.length}/{MAX_SIDES})</div>
       <input
-        className="picker-search"
+        className={styles.pickerSearch}
         type="text"
         placeholder="Search or type a side..."
         value={search}
@@ -62,8 +63,8 @@ export default function SidePickerSheet({ date, mealName, onSelect, onClose }) {
       />
 
       {query && filtered.length === 0 ? (
-        <div className="picker-results">
-          <button className="picker-option freeform" onClick={() => {
+        <div className={styles.pickerResults}>
+          <button className={`${styles.pickerOption} ${styles.freeform}`} onClick={() => {
             if (selectedSides.length < MAX_SIDES) {
               const custom = { id: `custom-${search.trim()}`, name: search.trim(), custom: true }
               setSelectedSides(prev => [...prev, custom])
@@ -76,13 +77,13 @@ export default function SidePickerSheet({ date, mealName, onSelect, onClose }) {
       ) : (
         <>
           {!query && (
-            <div className="picker-section-label">Options</div>
+            <div className={styles.pickerSectionLabel}>Options</div>
           )}
-          <div className="picker-pills">
+          <div className={styles.pickerPills}>
             {filtered.map(s => (
               <button
                 key={s.id}
-                className={`meal-pill ${selectedIds.has(s.id) ? 'selected-side' : ''} ${s.in_use ? 'in-use' : ''}`}
+                className={`${styles.mealPill} ${selectedIds.has(s.id) ? styles.selectedSide : ''} ${s.in_use ? styles.inUse : ''}`}
                 onClick={() => toggleSide(s)}
                 disabled={!selectedIds.has(s.id) && selectedSides.length >= MAX_SIDES}
               >
@@ -94,7 +95,7 @@ export default function SidePickerSheet({ date, mealName, onSelect, onClose }) {
         </>
       )}
 
-      <div className="picker-side-actions">
+      <div className={styles.pickerSideActions}>
         <button className="btn primary" onClick={confirm}>
           {selectedSides.length === 0 ? 'No sides' : `Done (${selectedSides.length})`}
         </button>

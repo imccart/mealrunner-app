@@ -1,0 +1,32 @@
+.mealIngSection {
+  margin-top: 16px;
+}
+.mealIngTitle {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.mealIngList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.mealIngItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.mealIngEmpty {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.mealIngLoading {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}

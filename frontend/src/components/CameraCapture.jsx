@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import styles from './CameraCapture.module.css'
 
 /**
  * Full-screen camera overlay that captures high-res photos using
@@ -102,39 +103,39 @@ export default function CameraCapture({ onCapture, onClose }) {
   }, [stopStream, preview, onClose])
 
   return (
-    <div className="camera-overlay">
+    <div className={styles.cameraOverlay}>
       {error ? (
-        <div className="camera-error">
+        <div className={styles.cameraError}>
           <p>{error}</p>
-          <button className="camera-btn" onClick={handleClose}>Close</button>
+          <button className={styles.cameraBtn} onClick={handleClose}>Close</button>
         </div>
       ) : preview ? (
         <>
-          <img className="camera-preview" src={preview.url} alt="Captured receipt" />
-          <div className="camera-controls">
-            <button className="camera-btn" onClick={retake}>Retake</button>
-            <button className="camera-btn primary" onClick={usePhoto}>Use photo</button>
+          <img className={styles.cameraPreview} src={preview.url} alt="Captured receipt" />
+          <div className={styles.cameraControls}>
+            <button className={styles.cameraBtn} onClick={retake}>Retake</button>
+            <button className={`${styles.cameraBtn} ${styles.primary}`} onClick={usePhoto}>Use photo</button>
           </div>
         </>
       ) : (
         <>
           <video
             ref={videoRef}
-            className="camera-viewfinder"
+            className={styles.cameraViewfinder}
             autoPlay
             playsInline
             muted
           />
-          {!ready && <div className="camera-loading">Starting camera...</div>}
-          <div className="camera-controls">
-            <button className="camera-btn" onClick={handleClose}>Cancel</button>
+          {!ready && <div className={styles.cameraLoading}>Starting camera...</div>}
+          <div className={styles.cameraControls}>
+            <button className={styles.cameraBtn} onClick={handleClose}>Cancel</button>
             <button
-              className="camera-shutter"
+              className={styles.cameraShutter}
               onClick={capture}
               disabled={!ready}
               aria-label="Take photo"
             />
-            <div className="camera-spacer" />
+            <div className={styles.cameraSpacer} />
           </div>
         </>
       )}

@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import Sheet from './Sheet'
 import AutocompleteInput from './AutocompleteInput'
 import ls from '../shared/lists.module.css'
+import styles from './MealIngredientsSheet.module.css'
 
 function IngredientSection({ title, recipeId, allIngredients }) {
   const [ingredients, setIngredients] = useState(null)
@@ -44,23 +45,23 @@ function IngredientSection({ title, recipeId, allIngredients }) {
   const existingNames = new Set((ingredients || []).map(i => i.name.toLowerCase()))
 
   return (
-    <div className="meal-ing-section">
-      <div className="meal-ing-title">{title}</div>
+    <div className={styles.mealIngSection}>
+      <div className={styles.mealIngTitle}>{title}</div>
       {ingredients === null ? (
-        <div className="meal-ing-loading">Loading...</div>
+        <div className={styles.mealIngLoading}>Loading...</div>
       ) : (
         <>
           {ingredients.length > 0 ? (
-            <div className="meal-ing-list">
+            <div className={styles.mealIngList}>
               {ingredients.map(ing => (
-                <div key={ing.id} className="meal-ing-item">
+                <div key={ing.id} className={styles.mealIngItem}>
                   <span>{ing.name}</span>
                   <button className={ls.remove} onClick={() => handleRemove(ing.id)}>{'\u00D7'}</button>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="meal-ing-empty">No ingredients yet</div>
+            <div className={styles.mealIngEmpty}>No ingredients yet</div>
           )}
           <div className={ls.addRow}>
             <AutocompleteInput
