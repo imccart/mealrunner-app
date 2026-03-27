@@ -1166,9 +1166,9 @@ async def have_it_grocery_item(item_name: str, request: Request):
             )
             # Check if this item has been marked "have it" 3+ times — suggest as staple
             from souschef.regulars import list_regulars
-            from souschef.pantry import list_pantry_items
+            from souschef.pantry import list_pantry
             reg_names = {r.name.lower() for r in list_regulars(conn, user_id)}
-            pantry_names = {p["name"].lower() for p in list_pantry_items(conn, user_id)}
+            pantry_names = {p.ingredient_name.lower() for p in list_pantry(conn, user_id)}
             name_lower = item_name.strip().lower()
             if name_lower not in reg_names and name_lower not in pantry_names:
                 have_it_count = conn.execute(
