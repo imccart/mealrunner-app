@@ -1051,11 +1051,13 @@ def _kill_stale_connections(conn: DictConnection) -> None:
         pass  # Best-effort — don't block startup if this fails
 
 
-def ensure_db(db_path: str | None = None) -> DictConnection:
-    """Create tables, run migrations, seed if empty. Returns a connection."""
+def ensure_db_initialized() -> None:
+    """Run once at startup: create tables, run migrations, seed data, start background threads."""
     global _db_initialized
+    if _db_initialized:
+        return
     conn = get_connection()
-    if not _db_initialized:
+    try:
         _kill_stale_connections(conn)
 
         # Set statement_timeout so migrations fail fast if old instance holds locks.
@@ -1124,30 +1126,41 @@ def ensure_db(db_path: str | None = None) -> DictConnection:
         # Refresh FDA violation data in background thread (non-blocking startup)
         import threading
         def _background_fda_refresh():
+            bg_conn = get_connection()
             try:
-                bg_conn = get_connection()
                 from souschef.violations import refresh_fda_data
                 print("[db] Background: refreshing FDA violation data...", flush=True)
                 result = refresh_fda_data(bg_conn)
                 print(f"[db] Background: FDA refresh done — {result['updated']} updated, {result['errors']} errors", flush=True)
             except Exception as e:
                 print(f"[db] Background: FDA refresh error (non-fatal): {e}", flush=True)
+            finally:
+                bg_conn.close()
         threading.Thread(target=_background_fda_refresh, daemon=True).start()
 
         # Price polling + community rollup background thread (runs every 12 hours)
         def _background_price_polling():
             import time as _sleep
             while True:
+                bg_conn = get_connection()
                 try:
-                    bg_conn = get_connection()
                     from souschef.pricing import run_price_polling
                     print("[db] Background: running price polling...", flush=True)
                     run_price_polling(bg_conn)
                     print("[db] Background: price polling done", flush=True)
                 except Exception as e:
                     print(f"[db] Background: price polling error (non-fatal): {e}", flush=True)
+                finally:
+                    bg_conn.close()
                 _sleep.sleep(12 * 3600)  # 12 hours
         threading.Thread(target=_background_price_polling, daemon=True).start()
 
         _db_initialized = True
-    return conn
+    finally:
+        conn.close()
+
+
+def ensure_db(db_path: str | None = None) -> DictConnection:
+    """Legacy wrapper: ensure init, then return a new connection."""
+    ensure_db_initialized()
+    return get_connection()

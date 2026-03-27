@@ -17,7 +17,7 @@ from sqlalchemy import text
 
 import sys
 
-from souschef.db import ensure_db
+from souschef.db import ensure_db_initialized
 from souschef.web.api import router as api_router
 from souschef.web.auth import (
     _is_public,
@@ -37,13 +37,38 @@ from souschef.web.auth import (
     SESSION_COOKIE,
     BASE_URL,
 )
-from souschef.database import get_connection
+from souschef.database import (
+    get_connection,
+    get_request_connection,
+    set_request_connection,
+    reset_request_connection,
+)
 
 _FRONTEND_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"
 
 _CORS_ORIGINS = os.environ.get(
     "CORS_ORIGINS", "http://localhost:5173"
 ).split(",")
+
+
+# ── Connection Middleware ─────────────────────────────────
+
+
+class ConnectionMiddleware(BaseHTTPMiddleware):
+    """Open a DB connection for each request and close it when done."""
+
+    async def dispatch(self, request: Request, call_next):
+        conn = get_connection()
+        token = set_request_connection(conn)
+        try:
+            response = await call_next(request)
+            return response
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            reset_request_connection(token)
 
 
 # ── Auth Middleware ───────────────────────────────────────
@@ -65,14 +90,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse({"error": "Not authenticated"}, status_code=401)
 
         # Resolve to household owner's user_id so all members share data
-        conn = get_connection()
+        conn = get_request_connection()
         try:
             effective_user_id = get_household_owner_id(conn, user_id)
         except Exception as e:
             print(f"[auth] Household resolution failed for {user_id}: {e}")
             effective_user_id = user_id  # fall back to own user_id
-        finally:
-            conn.close()
 
         # Attach user_id to request state for endpoints to use
         request.state.user_id = effective_user_id
@@ -88,7 +111,7 @@ async def startup_event():
     try:
         print("[startup] Initializing database...", flush=True)
         sys.stdout.flush()
-        ensure_db()
+        ensure_db_initialized()
         print("[startup] Database initialized successfully", flush=True)
         sys.stdout.flush()
     except Exception as e:
@@ -99,6 +122,7 @@ async def startup_event():
         raise
 
 app.add_middleware(AuthMiddleware)
+app.add_middleware(ConnectionMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_CORS_ORIGINS,
@@ -128,9 +152,8 @@ for _fname in _ROOT_STATIC:
 async def health():
     """Health check for Railway / load balancers."""
     try:
-        conn = get_connection()
+        conn = get_request_connection()
         conn.execute(text("SELECT 1"))
-        conn.close()
         return {"status": "ok"}
     except Exception:
         return JSONResponse({"status": "error"}, status_code=503)
@@ -238,22 +261,19 @@ async def auth_login(body: dict):
     if throttled:
         return {"ok": False, "error": "Too many login attempts. Please try again later."}
 
-    conn = get_connection()
-    try:
-        if not is_email_allowed(conn, email):
-            # Save to waitlist for future approval
-            conn.execute(
-                text("INSERT INTO waitlist (email) VALUES (:email) ON CONFLICT DO NOTHING"),
-                {"email": email},
-            )
-            conn.commit()
-            return {"ok": False, "waitlist": True}
+    conn = get_request_connection()
+    if not is_email_allowed(conn, email):
+        # Save to waitlist for future approval
+        conn.execute(
+            text("INSERT INTO waitlist (email) VALUES (:email) ON CONFLICT DO NOTHING"),
+            {"email": email},
+        )
+        conn.commit()
+        return {"ok": False, "waitlist": True}
 
-        user_id = find_or_create_user(conn, email)
-        token = create_magic_link(conn, user_id)
-        send_magic_link_email(email, token)
-    finally:
-        conn.close()
+    user_id = find_or_create_user(conn, email)
+    token = create_magic_link(conn, user_id)
+    send_magic_link_email(email, token)
 
     return {"ok": True, "sent": True}
 
@@ -261,22 +281,19 @@ async def auth_login(body: dict):
 @app.get("/api/auth/verify")
 async def auth_verify(token: str):
     """Verify a magic link token, create session, redirect to app."""
-    conn = get_connection()
-    try:
-        user_id = verify_magic_link(conn, token)
-        if not user_id:
-            return RedirectResponse(url="/app?auth=expired", status_code=302)
+    conn = get_request_connection()
+    user_id = verify_magic_link(conn, token)
+    if not user_id:
+        return RedirectResponse(url="/app?auth=expired", status_code=302)
 
-        # One-time: claim orphaned 'default' user data for the first real user
-        _claim_default_data(conn, user_id)
+    # One-time: claim orphaned 'default' user data for the first real user
+    _claim_default_data(conn, user_id)
 
-        # Ensure user has a household (creates one if needed)
-        # Note: pending household invites are handled via UI prompt, not auto-accepted
-        ensure_household(conn, user_id)
+    # Ensure user has a household (creates one if needed)
+    # Note: pending household invites are handled via UI prompt, not auto-accepted
+    ensure_household(conn, user_id)
 
-        session_id = create_session(conn, user_id)
-    finally:
-        conn.close()
+    session_id = create_session(conn, user_id)
 
     response = RedirectResponse(url="/app", status_code=302)
     set_session_cookie(response, session_id)
@@ -290,18 +307,15 @@ async def auth_me(request: Request):
     if not session_id:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
 
-    conn = get_connection()
-    try:
-        user_id = get_user_from_session(conn, session_id)
-        if not user_id:
-            return JSONResponse({"error": "Session expired"}, status_code=401)
+    conn = get_request_connection()
+    user_id = get_user_from_session(conn, session_id)
+    if not user_id:
+        return JSONResponse({"error": "Session expired"}, status_code=401)
 
-        user = conn.execute(
-            text("SELECT id, email, display_name FROM users WHERE id = :id"),
-            {"id": user_id},
-        ).fetchone()
-    finally:
-        conn.close()
+    user = conn.execute(
+        text("SELECT id, email, display_name FROM users WHERE id = :id"),
+        {"id": user_id},
+    ).fetchone()
 
     if not user:
         return JSONResponse({"error": "User not found"}, status_code=401)
@@ -314,11 +328,8 @@ async def auth_logout(request: Request):
     """Clear the session."""
     session_id = request.cookies.get(SESSION_COOKIE)
     if session_id:
-        conn = get_connection()
-        try:
-            delete_session(conn, session_id)
-        finally:
-            conn.close()
+        conn = get_request_connection()
+        delete_session(conn, session_id)
 
     response = JSONResponse({"ok": True})
     clear_session_cookie(response)
@@ -331,14 +342,11 @@ async def auth_logout(request: Request):
 async def kroger_status(request: Request):
     """Check if the current user has a linked Kroger account."""
     user_id = request.state.real_user_id
-    conn = get_connection()
-    try:
-        row = conn.execute(
-            text("SELECT expires_at FROM user_kroger_tokens WHERE user_id = :uid"),
-            {"uid": user_id},
-        ).fetchone()
-    finally:
-        conn.close()
+    conn = get_request_connection()
+    row = conn.execute(
+        text("SELECT expires_at FROM user_kroger_tokens WHERE user_id = :uid"),
+        {"uid": user_id},
+    ).fetchone()
     return {"connected": bool(row)}
 
 
@@ -352,7 +360,7 @@ async def kroger_connect(request: Request):
     state = _secrets.token_urlsafe(32)
 
     # Store state → user_id mapping in session-like table (reuse settings)
-    conn = get_connection()
+    conn = get_request_connection()
     try:
         conn.execute(
             text("""INSERT INTO settings (user_id, key, value)
@@ -363,8 +371,6 @@ async def kroger_connect(request: Request):
         conn.commit()
     except Exception:
         return JSONResponse({"error": "Kroger not configured"}, status_code=503)
-    finally:
-        conn.close()
 
     redirect_uri = f"{BASE_URL}/api/kroger/callback"
     try:
@@ -383,7 +389,7 @@ async def kroger_callback(code: str = "", state: str = "", error: str = ""):
     from souschef.kroger import exchange_code_for_token
     from datetime import datetime, timedelta, timezone
 
-    conn = get_connection()
+    conn = get_request_connection()
     try:
         # Look up which user initiated this flow via state
         row = conn.execute(
@@ -431,8 +437,6 @@ async def kroger_callback(code: str = "", state: str = "", error: str = ""):
     except Exception as e:
         print(f"[kroger] OAuth callback error: {e}")
         return RedirectResponse(url="/app?kroger=error", status_code=302)
-    finally:
-        conn.close()
 
     return RedirectResponse(url="/app?kroger=connected", status_code=302)
 
@@ -441,15 +445,12 @@ async def kroger_callback(code: str = "", state: str = "", error: str = ""):
 async def kroger_disconnect(request: Request):
     """Remove Kroger connection for the current user."""
     user_id = request.state.real_user_id
-    conn = get_connection()
-    try:
-        conn.execute(
-            text("DELETE FROM user_kroger_tokens WHERE user_id = :uid"),
-            {"uid": user_id},
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    conn = get_request_connection()
+    conn.execute(
+        text("DELETE FROM user_kroger_tokens WHERE user_id = :uid"),
+        {"uid": user_id},
+    )
+    conn.commit()
     return {"ok": True}
 
 
@@ -470,33 +471,30 @@ async def kroger_locations(zip: str = "", request: Request = None):
 async def kroger_location_get(request: Request):
     """Get the user's current Kroger store location with name/address."""
     user_id = request.state.user_id
-    conn = get_connection()
+    conn = get_request_connection()
+    row = conn.execute(
+        text("SELECT location_id FROM stores WHERE user_id = :uid AND api = 'kroger' AND location_id != '' LIMIT 1"),
+        {"uid": user_id},
+    ).fetchone()
+    if not row:
+        return {"location_id": "", "name": "", "address": ""}
+    loc_id = row["location_id"]
+    # Try to look up store details from Kroger API
     try:
-        row = conn.execute(
-            text("SELECT location_id FROM stores WHERE user_id = :uid AND api = 'kroger' AND location_id != '' LIMIT 1"),
-            {"uid": user_id},
-        ).fetchone()
-        if not row:
-            return {"location_id": "", "name": "", "address": ""}
-        loc_id = row["location_id"]
-        # Try to look up store details from Kroger API
-        try:
-            from souschef.kroger import _headers, BASE_URL
-            import requests as _requests
-            resp = _requests.get(f"{BASE_URL}/locations/{loc_id}", headers=_headers(), timeout=10)
-            if resp.ok:
-                data = resp.json().get("data", {})
-                addr = data.get("address", {})
-                return {
-                    "location_id": loc_id,
-                    "name": data.get("name", "Kroger"),
-                    "address": f"{addr.get('addressLine1', '')}, {addr.get('city', '')} {addr.get('state', '')} {addr.get('zipCode', '')}",
-                }
-        except Exception:
-            pass
-        return {"location_id": loc_id, "name": "Kroger", "address": ""}
-    finally:
-        conn.close()
+        from souschef.kroger import _headers, BASE_URL
+        import requests as _requests
+        resp = _requests.get(f"{BASE_URL}/locations/{loc_id}", headers=_headers(), timeout=10)
+        if resp.ok:
+            data = resp.json().get("data", {})
+            addr = data.get("address", {})
+            return {
+                "location_id": loc_id,
+                "name": data.get("name", "Kroger"),
+                "address": f"{addr.get('addressLine1', '')}, {addr.get('city', '')} {addr.get('state', '')} {addr.get('zipCode', '')}",
+            }
+    except Exception:
+        pass
+    return {"location_id": loc_id, "name": "Kroger", "address": ""}
 
 
 @app.post("/api/kroger/location")
@@ -507,11 +505,8 @@ async def kroger_location_set(body: dict, request: Request):
     location_id = body.get("location_id", "").strip()
     if not location_id:
         return {"ok": False, "error": "location_id required"}
-    conn = get_connection()
-    try:
-        set_kroger_location_id(conn, user_id, location_id)
-    finally:
-        conn.close()
+    conn = get_request_connection()
+    set_kroger_location_id(conn, user_id, location_id)
     return {"ok": True, "location_id": location_id}
 
 
@@ -519,29 +514,26 @@ async def kroger_location_set(body: dict, request: Request):
 async def kroger_household_accounts(request: Request):
     """Return household members who have linked Kroger accounts."""
     real_user_id = request.state.real_user_id
-    conn = get_connection()
-    try:
-        # Find the user's household
-        hh_row = conn.execute(
-            text("SELECT household_id FROM household_members WHERE user_id = :uid"),
-            {"uid": real_user_id},
-        ).fetchone()
-        if not hh_row:
-            return {"accounts": []}
+    conn = get_request_connection()
+    # Find the user's household
+    hh_row = conn.execute(
+        text("SELECT household_id FROM household_members WHERE user_id = :uid"),
+        {"uid": real_user_id},
+    ).fetchone()
+    if not hh_row:
+        return {"accounts": []}
 
-        # Get household members with Kroger tokens — only show others if they opted in
-        rows = conn.execute(
-            text("""SELECT hm.user_id, u.display_name, u.email, ukt.allow_household
-                FROM household_members hm
-                JOIN users u ON u.id = hm.user_id
-                JOIN user_kroger_tokens ukt ON ukt.user_id = hm.user_id
-                WHERE hm.household_id = :hh_id
-                  AND (ukt.user_id = :real_user_id OR ukt.allow_household = 1)
-                ORDER BY hm.role ASC, hm.joined_at ASC"""),
-            {"hh_id": hh_row["household_id"], "real_user_id": real_user_id},
-        ).fetchall()
-    finally:
-        conn.close()
+    # Get household members with Kroger tokens — only show others if they opted in
+    rows = conn.execute(
+        text("""SELECT hm.user_id, u.display_name, u.email, ukt.allow_household
+            FROM household_members hm
+            JOIN users u ON u.id = hm.user_id
+            JOIN user_kroger_tokens ukt ON ukt.user_id = hm.user_id
+            WHERE hm.household_id = :hh_id
+              AND (ukt.user_id = :real_user_id OR ukt.allow_household = 1)
+            ORDER BY hm.role ASC, hm.joined_at ASC"""),
+        {"hh_id": hh_row["household_id"], "real_user_id": real_user_id},
+    ).fetchall()
 
     accounts = []
     for r in rows:
@@ -563,17 +555,14 @@ async def store_allow_household(request: Request):
     real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
     body = await request.json()
     allow = 1 if body.get("allow") else 0
-    conn = get_connection()
-    try:
-        result = conn.execute(
-            text("UPDATE user_kroger_tokens SET allow_household = :allow WHERE user_id = :uid"),
-            {"allow": allow, "uid": real_user_id},
-        )
-        conn.commit()
-        if result.rowcount == 0:
-            return {"ok": False, "error": "No linked account found"}
-    finally:
-        conn.close()
+    conn = get_request_connection()
+    result = conn.execute(
+        text("UPDATE user_kroger_tokens SET allow_household = :allow WHERE user_id = :uid"),
+        {"allow": allow, "uid": real_user_id},
+    )
+    conn.commit()
+    if result.rowcount == 0:
+        return {"ok": False, "error": "No linked account found"}
     return {"ok": True}
 
 

@@ -10,13 +10,16 @@ from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
-from souschef.db import ensure_db
+from souschef.database import get_request_connection, get_connection
 
 router = APIRouter(prefix="/api")
 
 
 def _conn():
-    return ensure_db()
+    conn = get_request_connection()
+    if conn is not None:
+        return conn
+    return get_connection()
 
 
 # ── Price logging ──────────────────────────────────────────

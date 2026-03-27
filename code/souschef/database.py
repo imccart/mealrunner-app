@@ -6,6 +6,7 @@ via DictConnection/DictResult wrappers.
 
 from __future__ import annotations
 
+import contextvars
 import os
 
 from sqlalchemy import (
@@ -32,7 +33,10 @@ if not DATABASE_URL:
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
+engine = create_engine(
+    DATABASE_URL, echo=False, pool_pre_ping=True,
+    pool_size=10, max_overflow=5, pool_timeout=30,
+)
 
 metadata = MetaData()
 
@@ -553,6 +557,28 @@ class DictConnection:
 
     def __exit__(self, *args):
         self._conn.close()
+
+
+# ── Per-request connection (contextvars) ─────────────────
+
+_request_conn: contextvars.ContextVar[DictConnection | None] = contextvars.ContextVar(
+    '_request_conn', default=None
+)
+
+
+def set_request_connection(conn: DictConnection) -> contextvars.Token:
+    """Set the per-request connection (called by middleware)."""
+    return _request_conn.set(conn)
+
+
+def get_request_connection() -> DictConnection | None:
+    """Get the per-request connection, or None if outside request context."""
+    return _request_conn.get()
+
+
+def reset_request_connection(token: contextvars.Token) -> None:
+    """Reset the context var (called by middleware in finally)."""
+    _request_conn.reset(token)
 
 
 # ── Public API ────────────────────────────────────────────
