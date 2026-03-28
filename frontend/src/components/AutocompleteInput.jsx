@@ -110,7 +110,7 @@ export default function AutocompleteInput({
             <div
               key={name}
               className={`autocomplete-item ${i === selectedIndex ? 'selected' : ''}`}
-              onPointerDown={(e) => { e.preventDefault(); handleSelect(name) }}
+              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); handleSelect(name) }}
             >
               {name}
             </div>

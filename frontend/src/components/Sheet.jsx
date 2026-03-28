@@ -13,11 +13,10 @@ export default function Sheet({ onClose, className, children }) {
   }, [onClose])
 
   return (
-    <div className="sheet-overlay" onClick={onClose}>
+    <div className="sheet-overlay" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div
         className={`sheet${className ? ` ${className}` : ''}`}
         {...swipeHandlers}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="sheet-handle" />
         <button className="sheet-close" onClick={onClose}>{'\u00D7'}</button>
