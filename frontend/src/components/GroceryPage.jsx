@@ -108,6 +108,7 @@ export default function GroceryPage({ sidebar = false }) {
   const [stapleSuggestion, setStapleSuggestion] = useState(null)
   const [shoppingMode, setShoppingMode] = useState(false)
   const [showShopChecked, setShowShopChecked] = useState(false)
+  const shopListRef = useRef(null)
   const [wakeLock, setWakeLock] = useState(null)
 
   // Inline prompt state
@@ -212,7 +213,6 @@ export default function GroceryPage({ sidebar = false }) {
 
   // Shopping mode render
   if (shoppingMode) {
-    const shopListRef = React.createRef()
     const allChecked = []
     const handleShopCheckAndScroll = async (name) => {
       await handleShopCheck(name)
