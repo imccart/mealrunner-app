@@ -9,19 +9,14 @@ import styles from './OnboardingFlow.module.css'
 export function WelcomeScreen({ onStart }) {
   const [phase, setPhase] = useState(0)
   const ladleRef = useRef(null)
-  const logoRef = useRef(null)
   const dripRef = useRef(null)
-  const [liftDy, setLiftDy] = useState(0)
   const [splatPos, setSplatPos] = useState({ x: 0, y: 0 })
 
   const runAnimation = useCallback(() => {
     setPhase(0)
     const t0 = setTimeout(() => {
-      if (ladleRef.current && logoRef.current) {
+      if (ladleRef.current) {
         const ladleRect = ladleRef.current.getBoundingClientRect()
-        const logoRect = logoRef.current.getBoundingClientRect()
-        const dy = (logoRect.top + logoRect.height / 2) - (ladleRect.top + ladleRect.height / 2)
-        setLiftDy(dy)
         const impactX = ladleRect.left + ladleRect.width * 0.33
         const impactY = ladleRect.top + ladleRect.height * 0.82 + 160
         setSplatPos({ x: impactX, y: impactY })
@@ -43,8 +38,6 @@ export function WelcomeScreen({ onStart }) {
   }, [runAnimation])
 
   const ladleClass = `${styles.ladle}${phase >= 4 ? ` ${styles.upright}` : phase >= 1 ? ` ${styles.tilt}` : ''}`
-  const moverClass = `${styles.ladleMover}${phase >= 4 ? ` ${styles.lift}` : ''}`
-  const moverStyle = phase >= 4 ? { '--lift-dy': `${liftDy}px` } : {}
 
   return (
     <div className={styles.welcome}>
@@ -57,16 +50,13 @@ export function WelcomeScreen({ onStart }) {
         </>
       )}
       <div className={styles.welcomeContent}>
-        <div className={styles.welcomeLogoSlot} ref={logoRef} />
+        <div className={styles.welcomeLadleArea} ref={ladleRef}>
+          <img className={ladleClass} src={ladleImg} alt="" />
+          {phase >= 2 && phase < 4 && <div className={styles.welcomeDrip} ref={dripRef} />}
+        </div>
         <div className={`${styles.welcomeWordmark}${phase >= 4 ? ` ${styles.reveal}` : ''}`}>sous<em>chef</em></div>
-        <div className={styles.welcomeTaglineSlot}>
-          <div className={`${styles.welcomeTagline}${phase >= 4 ? ` ${styles.reveal}` : ''}`}>
-            because someone has to plan dinner<br />and get groceries
-          </div>
-          <div className={moverClass} ref={ladleRef} style={moverStyle}>
-            <img className={ladleClass} src={ladleImg} alt="" />
-            {phase >= 2 && phase < 4 && <div className={styles.welcomeDrip} ref={dripRef} />}
-          </div>
+        <div className={`${styles.welcomeTagline}${phase >= 4 ? ` ${styles.reveal}` : ''}`}>
+          because someone has to plan dinner<br />and get groceries
         </div>
         <button className={`${styles.welcomeBtn}${phase >= 5 ? ` ${styles.reveal}` : ''}`} onClick={onStart}>
           Get started
@@ -82,7 +72,7 @@ export function WelcomeScreen({ onStart }) {
 // ── Clippy quips per step ───────────────────────────────
 
 const CLIPPY_QUIPS = [
-  "Looks like you're trying to make dinner. \u{1F4CE}",
+  "Looks like you're trying to make dinner.",
   "It looks like you're trying to cook from scratch! Would you like me to open the 'Recipe vs. Reality' template, or should I just pre-load a shortcut to UberEats for 7:00 PM Thursday?",
   "It looks like you're listing 'Flour.' I've noticed you haven't opened that bag since the Great Sourdough Craze of 2020. Should I change the quantity to 'One Small Bag for Dusting' or are we still pretending we're bakers?",
   "It looks like you're making a list of 'The Regulars.' Should I go ahead and hide the 'Vegetable' section since we both know how that ends?",
@@ -107,7 +97,7 @@ const REGULAR_CATEGORIES = {
   'Snacks': ['chips', 'crackers', 'fruit snacks', 'goldfish crackers'],
   'Lunch': ['deli meat', 'sandwich bread', 'chips', 'applesauce'],
   'Household': ['paper towels', 'trash bags', 'dish soap', 'sponges'],
-  'Pets': [],
+  'Pets': ['cat food', 'dog food', 'cat litter'],
 }
 
 // ── Time survey options ─────────────────────────────────
@@ -122,17 +112,23 @@ const TIME_OPTIONS = [
 // ── Tour stops ──────────────────────────────────────────
 
 const TOUR_STOPS = [
-  { icon: '\u{1F4CB}', label: 'Plan', desc: 'Your dinners for the week. Tap a day to pick a meal.' },
-  { icon: '\u{1F6D2}', label: 'Grocery', desc: 'Everything you need to buy, organized by aisle.' },
-  { icon: '\u{1F4E6}', label: 'Order', desc: 'Pick products from your store and send your cart.' },
-  { icon: '\u{1F9FE}', label: 'Receipt', desc: 'Upload your receipt to track what you bought.' },
-  { icon: '\u{1F944}', label: 'Kitchen', desc: 'Your meals, sides, staples, and product ratings.' },
-  { icon: '\u{1F9D1}\u200D\u{1F373}', label: 'Account', desc: 'Store connections, household sharing, and settings.' },
+  { region: 'plan', label: 'Plan', desc: 'Your dinners for the week. Tap a day to pick a meal.' },
+  { region: 'grocery', label: 'Grocery', desc: 'Everything you need to buy, organized by aisle.' },
+  { region: 'order', label: 'Order', desc: 'Pick products from your store and send your cart.' },
+  { region: 'receipt', label: 'Receipt', desc: 'Upload your receipt to track what you bought.' },
+  { region: 'kitchen', label: 'Kitchen', desc: 'Your meals, sides, staples, and product ratings.' },
+  { region: 'account', label: 'Account', desc: 'Store connections, household sharing, and settings.' },
+  { region: 'feedback', label: 'Talk to the Manager', desc: 'Send feedback, report bugs, or request features.' },
 ]
 
 // ── Main Onboarding Flow ────────────────────────────────
 
-export default function OnboardingFlow({ onComplete }) {
+// Household members skip meals/sides/staples/regulars (steps 1-3)
+// Flow: Welcome(0) → Store(4) → Tour(5)
+const HH_STEPS = [0, 4, 5]
+
+export default function OnboardingFlow({ onComplete, householdInfo }) {
+  const isHousehold = !!householdInfo
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
 
@@ -165,8 +161,9 @@ export default function OnboardingFlow({ onComplete }) {
   // Step 5: Tour
   const [tourStep, setTourStep] = useState(0)
 
-  // Load library on mount
+  // Load library on mount (skip for household members)
   useEffect(() => {
+    if (isHousehold) return
     api.getOnboardingLibrary().then(data => {
       setLibrary(data)
       // Pre-select default meals
@@ -178,7 +175,7 @@ export default function OnboardingFlow({ onComplete }) {
       }
       setSelectedMealIds(defaultIds)
     })
-  }, [])
+  }, [isHousehold])
 
   // Detect Kroger OAuth return
   useEffect(() => {
@@ -189,7 +186,8 @@ export default function OnboardingFlow({ onComplete }) {
     }
   }, [])
 
-  const totalSteps = 6
+  const activeSteps = isHousehold ? HH_STEPS : [0, 1, 2, 3, 4, 5]
+  const totalSteps = activeSteps.length
 
   const goNext = async () => {
     setSaving(true)
@@ -229,34 +227,51 @@ export default function OnboardingFlow({ onComplete }) {
     } catch { /* continue anyway */ }
     setSaving(false)
 
+    const nextStep = getNextStep(step)
+
     // Load data for next step
-    if (step === 0) {
-      // About to enter meals step — library already loaded
-    } else if (step === 1) {
-      // About to enter staples — load staples data
-      api.getOnboardingStaples().then(data => {
-        setStaplesData(data.staples)
-        setSelectedStaples(new Set(data.staples.map(s => s.name)))
-      })
+    if (!isHousehold) {
+      if (step === 0) {
+        // About to enter meals step — library already loaded
+      } else if (step === 1) {
+        // About to enter staples — load staples data
+        api.getOnboardingStaples().then(data => {
+          setStaplesData(data.staples)
+          setSelectedStaples(new Set(data.staples.map(s => s.name)))
+        })
+      }
     }
 
-    setStep(step + 1)
+    setStep(nextStep)
+  }
+
+  const getNextStep = (current) => {
+    if (!isHousehold) return current + 1
+    const idx = HH_STEPS.indexOf(current)
+    return idx >= 0 && idx < HH_STEPS.length - 1 ? HH_STEPS[idx + 1] : current + 1
+  }
+
+  const getPrevStep = (current) => {
+    if (!isHousehold) return current - 1
+    const idx = HH_STEPS.indexOf(current)
+    return idx > 0 ? HH_STEPS[idx - 1] : current - 1
   }
 
   const goBack = () => {
-    if (step > 0) setStep(step - 1)
+    if (step > 0) setStep(getPrevStep(step))
   }
 
   const skipStep = () => {
     setSaving(false)
-    if (step === 1) {
+    const nextStep = getNextStep(step)
+    if (!isHousehold && step === 1) {
       // Load staples for next step
       api.getOnboardingStaples().then(data => {
         setStaplesData(data.staples)
         setSelectedStaples(new Set(data.staples.map(s => s.name)))
       })
     }
-    setStep(step + 1)
+    setStep(nextStep)
   }
 
   // ── Meals + Sides helpers ──
@@ -318,8 +333,8 @@ export default function OnboardingFlow({ onComplete }) {
       <div className={styles.card}>
         {/* Progress dots */}
         <div className={styles.dots}>
-          {Array.from({ length: totalSteps }).map((_, i) => (
-            <div key={i} className={`${styles.dot}${i === step ? ` ${styles.active}` : i < step ? ` ${styles.done}` : ''}`} />
+          {activeSteps.map((s, i) => (
+            <div key={i} className={`${styles.dot}${s === step ? ` ${styles.active}` : activeSteps.indexOf(step) > i ? ` ${styles.done}` : ''}`} />
           ))}
         </div>
 
@@ -327,10 +342,21 @@ export default function OnboardingFlow({ onComplete }) {
         {step === 0 && (
           <div className={styles.step}>
             <div className={styles.logo}>sous<em>chef</em></div>
-            <div className={styles.welcomeText}>
-              Your kitchen and meal assistant. We help you plan dinners, build grocery lists, and order from your favorite store — so you spend less time thinking about what's for dinner.
-            </div>
-            <div className={styles.welcomeTime}>It takes about 5 minutes to set up.</div>
+            {isHousehold ? (
+              <>
+                <div className={styles.welcomeText}>
+                  Welcome! {householdInfo.ownerName} has already set up your household's meals, staples, and regulars — so we'll skip ahead to connecting your store and showing you around.
+                </div>
+                <div className={styles.welcomeTime}>This will only take a minute.</div>
+              </>
+            ) : (
+              <>
+                <div className={styles.welcomeText}>
+                  Your kitchen and meal assistant. We help you plan dinners, build grocery lists, and order from your favorite store — so you spend less time thinking about what's for dinner.
+                </div>
+                <div className={styles.welcomeTime}>It takes about 5 minutes to set up.</div>
+              </>
+            )}
             <button className={`${styles.obBtn} ${styles.primary}`} onClick={goNext}>Let's get started</button>
           </div>
         )}
@@ -584,21 +610,63 @@ export default function OnboardingFlow({ onComplete }) {
           </div>
         )}
 
-        {/* Step 5: Tour */}
+        {/* Step 5: Tour — mini app mockup */}
         {step === 5 && (
           <div className={styles.step}>
             <div className={styles.stepTitle}>Here's where everything lives</div>
-            <div className={styles.tourCards}>
-              {TOUR_STOPS.map((stop, i) => (
-                <div key={i} className={`${styles.tourCard}${i <= tourStep ? ` ${styles.visible}` : ''}`}>
-                  <div className={styles.tourIcon}>{stop.icon}</div>
-                  <div className={styles.tourInfo}>
-                    <div className={styles.tourLabel}>{stop.label}</div>
-                    <div className={styles.tourDesc}>{stop.desc}</div>
+            <div className={styles.tourMockup}>
+              {/* Header bar */}
+              <div className={styles.mockHeader}>
+                <div className={styles.mockLogo}>sous<em>chef</em></div>
+                <div className={styles.mockIcons}>
+                  <div className={`${styles.mockIcon}${TOUR_STOPS[tourStep]?.region === 'kitchen' ? ` ${styles.mockHighlight}` : ''}`}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <ellipse cx="12" cy="5" rx="7" ry="4" />
+                      <path d="M5 5 C5 5 4 10 8 14 C8 14 9 15 9 17 L9 22" />
+                    </svg>
+                  </div>
+                  <div className={`${styles.mockIcon}${TOUR_STOPS[tourStep]?.region === 'account' ? ` ${styles.mockHighlight}` : ''}`}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                      <path d="M12 2C10.5 2 9 3.5 9 5V8H15V5C15 3.5 13.5 2 12 2Z" />
+                      <path d="M6 8H18L19 10V12L17 22H7L5 12V10L6 8Z" />
+                    </svg>
                   </div>
                 </div>
-              ))}
+              </div>
+              {/* Content area */}
+              <div className={styles.mockContent}>
+                <div className={styles.mockPlaceholder}>
+                  {TOUR_STOPS[tourStep]?.region === 'feedback' && (
+                    <div className={styles.mockFab}>
+                      <span>Talk to the manager</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Bottom nav */}
+              <div className={styles.mockNav}>
+                {[
+                  { region: 'plan', icon: '\u{1F5D3}', label: 'Plan' },
+                  { region: 'grocery', icon: '\u{1F6D2}', label: 'Grocery' },
+                  { region: 'order', icon: '\u{1F697}', label: 'Order' },
+                  { region: 'receipt', icon: '\u{1F9FE}', label: 'Receipt' },
+                ].map(tab => (
+                  <div key={tab.region} className={`${styles.mockTab}${TOUR_STOPS[tourStep]?.region === tab.region ? ` ${styles.mockHighlight}` : ''}`}>
+                    <span className={styles.mockTabIcon}>{tab.icon}</span>
+                    <span className={styles.mockTabLabel}>{tab.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
+            {/* Callout bubble — outside mockup for mobile layout */}
+            {TOUR_STOPS[tourStep] && (
+              <div className={styles.tourCalloutWrap}>
+                <div key={tourStep} className={`${styles.tourCallout} ${styles[`callout_${TOUR_STOPS[tourStep].region}`]}`}>
+                  <div className={styles.tourCalloutLabel}>{TOUR_STOPS[tourStep].label}</div>
+                  <div className={styles.tourCalloutDesc}>{TOUR_STOPS[tourStep].desc}</div>
+                </div>
+              </div>
+            )}
             {tourStep < TOUR_STOPS.length - 1 ? (
               <button className={`${styles.obBtn} ${styles.primary}`} onClick={() => setTourStep(t => t + 1)}>
                 Next
@@ -610,17 +678,17 @@ export default function OnboardingFlow({ onComplete }) {
         {/* Navigation buttons */}
         {step > 0 && (
           <div className={styles.btnRow}>
-            {step > 0 && step < 5 && (
+            {step !== 5 && step !== 0 && (
               <button className={styles.skip} onClick={skipStep}>Skip for now</button>
             )}
             {step === 5 && tourStep < TOUR_STOPS.length - 1 && (
               <button className={styles.skip} onClick={() => { setTourStep(TOUR_STOPS.length - 1) }}>Skip tour</button>
             )}
             <div className={styles.btnSpacer} />
-            {step > 1 && (
+            {activeSteps.indexOf(step) > 1 && (
               <button className={`${styles.obBtn} ${styles.secondary}`} onClick={goBack}>Back</button>
             )}
-            {step >= 1 && step <= 4 && (
+            {step !== 0 && step !== 5 && (
               <button className={`${styles.obBtn} ${styles.primary}`} onClick={goNext} disabled={saving}>
                 {saving ? '...' : 'Next'}
               </button>

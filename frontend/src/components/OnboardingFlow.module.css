@@ -20,11 +20,15 @@
   width: 100%;
 }
 
-.welcomeLogoSlot {
-  width: 72px;
-  height: 72px;
-  margin-bottom: 16px;
+.welcomeLadleArea {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin-bottom: 24px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .welcomeWordmark {
@@ -48,16 +52,6 @@
   font-weight: 400;
 }
 
-.welcomeTaglineSlot {
-  position: relative;
-  height: 48px;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 40px;
-}
-
 .welcomeTagline {
   font-family: 'Playfair Display', serif;
   font-style: italic;
@@ -66,37 +60,18 @@
   line-height: 1.5;
   text-align: center;
   max-width: 300px;
+  margin-bottom: 40px;
   opacity: 0;
   transform: translateY(4px);
-  position: absolute;
 }
 
 .welcomeTagline.reveal {
   animation: fadeUp 0.55s ease 0.08s forwards;
 }
 
-.ladleMover {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 90px;
-  height: 90px;
-  z-index: 10;
-}
-
-.ladleMover.lift {
-  animation: ladleLift 0.65s cubic-bezier(0.34, 1.2, 0.64, 1) forwards;
-}
-
-@keyframes ladleLift {
-  0%   { transform: translate(-50%, -50%) translateY(0); }
-  100% { transform: translate(-50%, -50%) translateY(var(--lift-dy, -120px)); }
-}
-
 .ladle {
-  width: 90px;
-  height: 90px;
+  width: 120px;
+  height: 120px;
   object-fit: contain;
   transform-origin: 38% 81%;
   filter: drop-shadow(0 4px 14px rgba(212, 98, 58, 0.25));
@@ -123,8 +98,8 @@
 
 .welcomeDrip {
   position: absolute;
-  left: 30px;
-  top: 74px;
+  left: 40px;
+  top: 99px;
   width: 8px;
   height: 11px;
   background: var(--accent);
@@ -489,39 +464,163 @@
 }
 .storeItem:hover { border-color: var(--accent); }
 
-/* Tour cards */
-.tourCards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin: 16px 0;
+/* Tour mockup */
+.tourMockup {
+  position: relative;
+  width: 280px;
+  margin: 20px auto;
+  border-radius: 20px;
+  border: 2px solid var(--tan);
+  background: var(--warm-white);
+  overflow: visible;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
 }
-.tourCard {
+
+.mockHeader {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border-radius: 10px;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--tan);
   background: white;
-  border: 1px solid var(--tan);
-  opacity: 0.3;
-  transform: translateY(8px);
-  transition: all 0.3s ease;
+  border-radius: 18px 18px 0 0;
 }
-.tourCard.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-.tourIcon { font-size: 24px; flex-shrink: 0; }
-.tourLabel {
+
+.mockLogo {
+  font-family: 'Playfair Display', serif;
+  font-size: 16px;
   font-weight: 600;
-  font-size: 14px;
   color: var(--dark);
 }
-.tourDesc {
+.mockLogo em { color: var(--accent); font-style: italic; font-weight: 400; }
+
+.mockIcons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.mockIcon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text-muted);
+  transition: all 0.3s ease;
+}
+
+.mockIcon.mockHighlight {
+  color: var(--accent);
+  background: var(--accent-bg);
+  box-shadow: 0 0 0 3px rgba(212, 98, 58, 0.2);
+}
+
+.mockContent {
+  height: 200px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mockPlaceholder {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.mockFab {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  background: var(--cream);
+  border: 1.5px solid var(--tan);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 11px;
+  color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(212, 98, 58, 0.2);
+  animation: fabPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes fabPulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(212, 98, 58, 0.2); }
+  50% { box-shadow: 0 0 0 6px rgba(212, 98, 58, 0.15); }
+}
+
+.mockNav {
+  display: flex;
+  border-top: 1px solid var(--tan);
+  background: white;
+  border-radius: 0 0 18px 18px;
+  padding: 8px 0 10px;
+}
+
+.mockTab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-muted);
+  transition: all 0.3s ease;
+  border-radius: 8px;
+  padding: 4px 0;
+  margin: 0 4px;
+}
+
+.mockTab.mockHighlight {
+  color: var(--accent);
+  background: var(--accent-bg);
+  box-shadow: 0 0 0 3px rgba(212, 98, 58, 0.2);
+}
+
+.mockTabIcon { font-size: 16px; }
+.mockTabLabel { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+
+/* Tour callout wrapper + callout */
+.tourCalloutWrap {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.tourCallout {
+  display: inline-block;
+  text-align: left;
+  background: white;
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  padding: 12px 16px;
+  max-width: 280px;
+  box-shadow: 0 4px 16px rgba(212, 98, 58, 0.15);
+  animation: calloutIn 0.3s ease forwards;
+}
+
+@keyframes calloutIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tourCalloutLabel {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+
+.tourCalloutDesc {
   font-size: 12px;
   color: var(--text-muted);
-  margin-top: 2px;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .tourMockup { width: 240px; }
+  .mockContent { height: 160px; }
 }
 
 /* Buttons */
@@ -607,7 +706,7 @@
   align-items: flex-end;
 }
 .clippyImg {
-  width: 80px;
+  width: 120px;
   height: auto;
   animation: clippyWobble 3s ease-in-out infinite;
 }
@@ -645,7 +744,7 @@
 
 @media (max-width: 640px) {
   .clippyContainer { bottom: 12px; right: 12px; }
-  .clippyImg { width: 60px; }
-  .clippyBubble { max-width: 200px; font-size: 12px; }
-  .mouseImg { width: 36px; }
+  .clippyImg { width: 80px; }
+  .clippyBubble { max-width: 220px; font-size: 12px; }
+  .mouseImg { width: 40px; }
 }

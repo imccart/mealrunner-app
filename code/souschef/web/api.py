@@ -3000,24 +3000,34 @@ async def remove_store(key: str, request: Request):
 async def onboarding_status(request: Request):
     """Check whether onboarding has been completed."""
     user_id = request.state.user_id
+    real_user_id = getattr(request.state, 'real_user_id', user_id)
     conn = _conn()
     row = conn.execute(
         text("SELECT value FROM settings WHERE key = 'onboarding_complete' AND user_id = :user_id"),
-        {"user_id": user_id},
+        {"user_id": real_user_id},
     ).fetchone()
-    return {"completed": row is not None and row["value"] == "true"}
+    result = {"completed": row is not None and row["value"] == "true"}
+    # If this user is a household member, tell the frontend
+    if real_user_id != user_id:
+        owner_row = conn.execute(
+            text("SELECT display_name, email FROM users WHERE id = :uid"),
+            {"uid": user_id},
+        ).fetchone()
+        result["household_member"] = True
+        result["household_owner_name"] = (owner_row["display_name"] or owner_row["email"].split("@")[0]) if owner_row else "your household"
+    return result
 
 
 @router.post("/onboarding/complete")
 async def onboarding_complete(request: Request):
     """Mark onboarding as done."""
-    user_id = request.state.user_id
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
     conn = _conn()
     conn.execute(
         text("""INSERT INTO settings (user_id, key, value, updated_at)
            VALUES (:user_id, 'onboarding_complete', 'true', CURRENT_TIMESTAMP)
            ON CONFLICT (user_id, key) DO UPDATE SET value = 'true', updated_at = CURRENT_TIMESTAMP"""),
-        {"user_id": user_id},
+        {"user_id": real_user_id},
     )
     conn.commit()
     return {"ok": True}

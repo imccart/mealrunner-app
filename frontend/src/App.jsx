@@ -44,6 +44,7 @@ function App() {
   const [onboardingDone, setOnboardingDone] = useState(null)
   const [welcomed, setWelcomed] = useState(() => localStorage.getItem('souschef_welcomed') === 'true')
   const [pendingInvite, setPendingInvite] = useState(null) // { inviter_name } or null
+  const [householdInfo, setHouseholdInfo] = useState(null) // { household_member, household_owner_name } or null
   const [inviteChecked, setInviteChecked] = useState(false)
   const isWide = useIsWide()
   const [mealData, setMealData] = useState(null)
@@ -82,6 +83,7 @@ function App() {
           .then(data => {
             setOnboardingDone(data.completed)
             if (data.completed) localStorage.setItem('souschef_onboarded', 'true')
+            if (data.household_member) setHouseholdInfo({ ownerName: data.household_owner_name })
           })
       })
       .catch(() => {
@@ -128,7 +130,7 @@ function App() {
   }
 
   if (!onboardingDone) {
-    return <OnboardingFlow onComplete={() => setOnboardingDone(true)} />
+    return <OnboardingFlow onComplete={() => setOnboardingDone(true)} householdInfo={householdInfo} />
   }
 
   return (
