@@ -84,6 +84,19 @@ def poll_user_prices(conn: DictConnection, user_id: str) -> dict:
                      "stock": price_data.get("in_stock"),
                      "uid": user_id},
                 )
+                # Also update product_scores cache so search reads fresh prices
+                conn.execute(
+                    text("""INSERT INTO product_scores (upc, price, promo_price, in_stock, curbside, price_fetched_at)
+                       VALUES (:upc, :price, :promo, :stock, :curbside, CURRENT_TIMESTAMP)
+                       ON CONFLICT(upc) DO UPDATE SET
+                         price = excluded.price, promo_price = excluded.promo_price,
+                         in_stock = excluded.in_stock, curbside = excluded.curbside,
+                         price_fetched_at = excluded.price_fetched_at"""),
+                    {"upc": upc, "price": price_data["price"],
+                     "promo": price_data.get("promo_price"),
+                     "stock": price_data.get("in_stock"),
+                     "curbside": price_data.get("curbside", False)},
+                )
                 polled += 1
             # Rate limit: sleep between calls to avoid Kroger 429
             time.sleep(0.5)
