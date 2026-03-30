@@ -564,28 +564,31 @@ export default function OrderPage() {
                     </div>
                   )}
                   <div className={styles.productInfo}>
-                    <div className={styles.productName}>{pref.name}</div>
+                    <div className={styles.productName}>
+                      {pref.name}
+                      {pref.rating === 1 && <span className={styles.prefStar}> {'\u{1F44D}'}</span>}
+                      {pref.rating === -1 && <span className={styles.prefDown}> {'\u{1F44E}'}</span>}
+                    </div>
                     <div className={styles.productMeta}>
                       {pref.brand && <span>{pref.brand}</span>}
                       {pref.size && <span> {'\u00B7'} {pref.size}</span>}
+                      {(pref.price || pref.promo_price) && (
+                        <>
+                          <span> {'\u00B7'} </span>
+                          {pref.promo_price ? (
+                            <>
+                              <span className={styles.pricePromo}>{formatPrice(pref.promo_price)}</span>
+                              <span className={styles.priceOriginal}> {formatPrice(pref.price)}</span>
+                            </>
+                          ) : (
+                            <span className={styles.price}>{formatPrice(pref.price)}</span>
+                          )}
+                        </>
+                      )}
                     </div>
-                    {(pref.price || pref.promo_price) && (
-                      <div className={styles.productPriceRow}>
-                        {pref.promo_price ? (
-                          <>
-                            <span className={styles.pricePromo}>{formatPrice(pref.promo_price)}</span>
-                            <span className={styles.priceOriginal}>{formatPrice(pref.price)}</span>
-                          </>
-                        ) : (
-                          <span className={styles.price}>{formatPrice(pref.price)}</span>
-                        )}
-                      </div>
-                    )}
+                    <ProductInsights nova={pref.nova} nutriscore={pref.nutriscore} />
+                    <ParentCoBadge brand={pref.brand} parentCompany={pref.parent_company} violations={pref.violations} onTapUnknown={(b) => setCommunityBrand(b)} />
                   </div>
-                  <ProductInsights nova={pref.nova} nutriscore={pref.nutriscore} />
-                  {pref.rating === 1 && <span className={styles.prefStar}>{'\u{1F44D}'}</span>}
-                  {pref.rating === -1 && <span className={styles.prefDown}>{'\u{1F44E}'}</span>}
-                  <ParentCoBadge brand={pref.brand} parentCompany={pref.parent_company} violations={pref.violations} onTapUnknown={(b) => setCommunityBrand(b)} />
                 </button>
               ))}
             </div>

@@ -1756,7 +1756,7 @@ async def submit_order(request: Request):
     trip = _ensure_active_trip(conn, mw, user_id)
 
     rows = conn.execute(
-        text("""SELECT product_upc FROM trip_items
+        text("""SELECT product_upc, quantity FROM trip_items
            WHERE trip_id = :trip_id AND product_upc != '' AND ordered = 1 AND submitted_at IS NULL"""),
         {"trip_id": trip["id"]},
     ).fetchall()
@@ -1819,7 +1819,7 @@ async def submit_order(request: Request):
         if not token:
             return {"ok": False, "error": "No linked store account. Connect in Preferences."}
 
-    items = [{"upc": r["product_upc"]} for r in rows]
+    items = [{"upc": r["product_upc"], "qty": r["quantity"]} for r in rows]
     # Mark submitted BEFORE calling Kroger — if the process dies mid-request,
     # items won't re-appear on the order page for a duplicate submit
     conn.execute(
