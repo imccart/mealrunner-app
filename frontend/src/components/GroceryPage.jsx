@@ -254,6 +254,12 @@ export default function GroceryPage({ sidebar = false }) {
                     <div className={styles.shoppingItemName} onClick={() => handleShopCheckAndScroll(item.name)}>
                       {item.name}
                       {item.meal_count > 1 && <span className={styles.shoppingMulti}>x{item.meal_count}</span>}
+                      {item.for_meals && item.for_meals.length > 0 && (
+                        <span className={styles.shoppingItemMeals}>{item.for_meals.join(', ')}</span>
+                      )}
+                      {item.notes && (
+                        <span className={styles.shoppingItemNote}>{item.notes}</span>
+                      )}
                     </div>
                   </SwipeableItem>
                 ))}

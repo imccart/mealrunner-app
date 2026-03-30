@@ -179,6 +179,7 @@ export default function OrderPage() {
   }, [activeItem, fulfillment])
 
   const storeName = storeInfo?.name || 'Kroger'
+  const activeItemData = order ? [...order.pending, ...order.selected, ...order.buy_elsewhere].find(i => i.name === activeItem) : null
 
   const advanceToNext = (updatedOrder) => {
     const pending = updatedOrder.pending
@@ -422,6 +423,9 @@ export default function OrderPage() {
                   onClick={() => setActiveItem(item.name)}
                 >
                   <span className={styles.queueItemName}>{item.name}</span>
+                  {item.for_meals?.length > 0 && (
+                    <span className={styles.queueItemMeals}>{item.for_meals.join(', ')}</span>
+                  )}
                 </button>
               )
             })}
@@ -472,6 +476,12 @@ export default function OrderPage() {
             <div>
               <div className={styles.orderItemLabel}>Picking for</div>
               <div className={styles.orderItemName}>{activeItem}</div>
+              {activeItemData?.for_meals?.length > 0 && (
+                <div className={styles.orderItemMeals}>{activeItemData.for_meals.join(', ')}</div>
+              )}
+              {activeItemData?.notes && (
+                <div className={styles.orderItemNote}>{activeItemData.notes}</div>
+              )}
             </div>
             <div className={styles.orderItemActions}>
               <button className={styles.orderGroceryBtn} onClick={() => handleGroceryAction('bought')}>Bought</button>

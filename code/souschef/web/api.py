@@ -1355,11 +1355,16 @@ async def get_order(request: Request):
     selected = []
     buy_elsewhere = []
     for r in rows:
+        try:
+            notes = r["notes"] or ""
+        except (KeyError, Exception):
+            notes = ""
         item = {
             "name": r["name"],
             "shopping_group": r["shopping_group"],
             "source": r["source"],
             "for_meals": [m for m in r["for_meals"].split(",") if m] if r["for_meals"] else [],
+            "notes": notes,
         }
         if r["buy_elsewhere"]:
             buy_elsewhere.append(item)

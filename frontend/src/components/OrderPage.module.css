@@ -59,6 +59,14 @@
   text-overflow: ellipsis;
 }
 
+.queueItemMeals {
+  font-size: 10px;
+  color: var(--text-light);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Order content */
 
 .orderActiveItem {
@@ -115,6 +123,19 @@
   font-size: 20px;
   font-weight: 600;
   color: var(--dark);
+}
+
+.orderItemMeals {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.orderItemNote {
+  font-size: 12px;
+  color: var(--accent);
+  font-style: italic;
+  margin-top: 2px;
 }
 
 .orderSearchForm {
