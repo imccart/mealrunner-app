@@ -114,6 +114,9 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("trip_items", "buy_elsewhere_at", "TEXT"),
         ("receipt_extra_items", "dismissed", "INTEGER NOT NULL DEFAULT 0"),
         ("trip_items", "checked_at", "TEXT"),
+        ("regulars", "last_bought_at", "TEXT"),
+        ("regulars", "created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
+        ("pantry", "last_bought_at", "TEXT"),
     ]
 
     for table_name, col_name, col_def in migrations:

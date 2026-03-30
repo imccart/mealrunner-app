@@ -1027,7 +1027,7 @@ async def toggle_grocery_item(item_name: str, request: Request):
         return {"name": item_name, "checked": False}
 
     row = conn.execute(
-        text("SELECT id, checked, ordered FROM trip_items WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
+        text("SELECT id, checked, ordered, source FROM trip_items WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
         {"trip_id": trip["id"], "name": item_name},
     ).fetchone()
 
@@ -1046,6 +1046,20 @@ async def toggle_grocery_item(item_name: str, request: Request):
                            ELSE 'mixed'
                        END WHERE id = :id"""),
                     {"id": trip["id"]},
+                )
+            # Track last_bought_at on source table
+            if row["source"] == "regular":
+                conn.execute(
+                    text("UPDATE regulars SET last_bought_at = CURRENT_TIMESTAMP::text WHERE user_id = :uid AND LOWER(name) = LOWER(:name)"),
+                    {"uid": user_id, "name": item_name},
+                )
+            elif row["source"] == "pantry":
+                conn.execute(
+                    text("""UPDATE pantry SET last_bought_at = CURRENT_TIMESTAMP::text
+                        WHERE user_id = :uid AND ingredient_id IN (
+                            SELECT id FROM ingredients WHERE LOWER(name) = LOWER(:name)
+                        )"""),
+                    {"uid": user_id, "name": item_name},
                 )
         else:
             conn.execute(
@@ -3309,18 +3323,22 @@ async def get_meal_history(request: Request):
 
 @router.get("/learning/suggestions")
 async def get_learning_suggestions(request: Request):
-    """Suggest regulars additions/removals based on weekly shopping patterns.
-
-    Uses calendar-week grouping over item timestamps. Requires 4+ weeks of data.
-    Suggests additions for items appearing in 4+ of the last 5 active weeks,
-    and removals for regulars skipped in 4+ of the last 5 active weeks.
+    """Suggest regulars additions based on purchase frequency,
+    removals for stale regulars, and restocks for staples not bought recently.
     """
     from souschef.regulars import list_regulars
 
     user_id = request.state.user_id
     conn = _conn()
 
-    # Get all items from the last 35 days, grouped by calendar week
+    dismissed_rows = conn.execute(
+        text("SELECT name FROM learning_dismissed WHERE user_id = :user_id"),
+        {"user_id": user_id},
+    ).fetchall()
+    dismissed = {r["name"] for r in dismissed_rows}
+
+    # --- Addition suggestions (items bought frequently but not a regular) ---
+    add_suggestions = []
     rows = conn.execute(
         text("""SELECT LOWER(ti.name) as name,
                        EXTRACT(ISOYEAR FROM ti.added_at::timestamp) AS iso_year,
@@ -3332,48 +3350,59 @@ async def get_learning_suggestions(request: Request):
         {"user_id": user_id},
     ).fetchall()
 
-    if not rows:
-        return {"add": []}
+    if rows:
+        week_items: dict[str, set[str]] = {}
+        for r in rows:
+            try:
+                week_key = f"{int(r['iso_year'])}-W{int(r['iso_week']):02d}"
+            except (TypeError, ValueError):
+                continue
+            week_items.setdefault(week_key, set()).add(r["name"])
 
-    # Group items by calendar week
-    week_items: dict[str, set[str]] = {}
-    for r in rows:
-        try:
-            week_key = f"{int(r['iso_year'])}-W{int(r['iso_week']):02d}"
-        except (TypeError, ValueError):
-            continue
-        week_items.setdefault(week_key, set()).add(r["name"])
+        sorted_weeks = sorted(week_items.keys(), reverse=True)[:5]
+        if len(sorted_weeks) >= 4:
+            regulars = list_regulars(conn, user_id, active_only=False)
+            regular_names = {r.name.lower() for r in regulars}
+            item_week_count: dict[str, int] = {}
+            for week_key in sorted_weeks:
+                for name in week_items.get(week_key, set()):
+                    item_week_count[name] = item_week_count.get(name, 0) + 1
+            for name, week_count in item_week_count.items():
+                if week_count >= 4 and name not in regular_names and name not in dismissed:
+                    add_suggestions.append({"name": name, "trip_count": week_count, "total_trips": len(sorted_weeks)})
 
-    sorted_weeks = sorted(week_items.keys(), reverse=True)[:5]
-    if len(sorted_weeks) < 4:
-        return {"add": []}
-
-    total_weeks = len(sorted_weeks)
-
-    regulars = list_regulars(conn, user_id, active_only=False)
-    regular_names = {r.name.lower() for r in regulars}
-    dismissed_rows = conn.execute(
-        text("SELECT name FROM learning_dismissed WHERE user_id = :user_id"),
-        {"user_id": user_id},
+    # --- Removal suggestions (regulars not bought in 4+ weeks) ---
+    remove_regulars = []
+    stale_rows = conn.execute(
+        text("""SELECT id, name FROM regulars
+            WHERE user_id = :uid AND active = 1
+              AND created_at IS NOT NULL AND created_at::timestamp < NOW() - INTERVAL '4 weeks'
+              AND (last_bought_at IS NULL OR last_bought_at::timestamp < NOW() - INTERVAL '4 weeks')"""),
+        {"uid": user_id},
     ).fetchall()
-    dismissed = {r["name"] for r in dismissed_rows}
+    for r in stale_rows:
+        if r["name"].lower() not in dismissed:
+            remove_regulars.append({"name": r["name"], "id": r["id"]})
 
-    # Suggest adding items that appear in 4+ of the last 5 weeks
-    item_week_count: dict[str, int] = {}
-    for week_key in sorted_weeks:
-        for name in week_items.get(week_key, set()):
-            item_week_count[name] = item_week_count.get(name, 0) + 1
+    # --- Restock suggestions (staples not bought in 6+ weeks) ---
+    restock_staples = []
+    pantry_rows = conn.execute(
+        text("""SELECT p.id, i.name FROM pantry p
+            JOIN ingredients i ON i.id = p.ingredient_id
+            WHERE p.user_id = :uid
+              AND p.last_bought_at IS NOT NULL
+              AND p.last_bought_at::timestamp < NOW() - INTERVAL '6 weeks'"""),
+        {"uid": user_id},
+    ).fetchall()
+    for r in pantry_rows:
+        if r["name"].lower() not in dismissed:
+            restock_staples.append({"name": r["name"], "id": r["id"]})
 
-    add_suggestions = []
-    for name, week_count in item_week_count.items():
-        if week_count >= 4 and name not in regular_names and name not in dismissed:
-            add_suggestions.append({
-                "name": name,
-                "trip_count": week_count,
-                "total_trips": total_weeks,
-            })
-
-    return {"add": add_suggestions[:5]}
+    return {
+        "add": add_suggestions[:5],
+        "remove_regulars": remove_regulars[:5],
+        "restock_staples": restock_staples[:5],
+    }
 
 
 @router.post("/learning/dismiss/{name:path}")
