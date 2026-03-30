@@ -1212,19 +1212,6 @@ async def add_regulars_to_grocery(body: dict, request: Request):
             {"trip_id": trip["id"], "name": name_lower, "group": group},
         )
 
-    # Record skipped regulars for learning
-    all_active_regulars = list_regulars(conn, user_id, active_only=True)
-    for reg in all_active_regulars:
-        if reg.name.lower() not in selected_lower:
-            group = reg.shopping_group or _infer_item_group(conn, reg.name.lower(), user_id)
-            conn.execute(
-                text("""INSERT INTO trip_items
-                   (trip_id, name, shopping_group, source, for_meals, meal_count, checked)
-                   VALUES (:trip_id, :name, :group, 'regular_skip', '', 0, 0)
-                   ON CONFLICT DO NOTHING"""),
-                {"trip_id": trip["id"], "name": reg.name.lower(), "group": group},
-            )
-
     # Mark regulars as handled for this trip
     conn.execute(
         text("UPDATE grocery_trips SET regulars_added = 1, regulars_added_at = CURRENT_TIMESTAMP WHERE id = :id"),
