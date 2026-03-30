@@ -741,7 +741,7 @@ export default function GroceryPage({ sidebar = false }) {
           {listContent}
           {totalActive > 0 && (
             <button className={styles.shoppingNowBtn} onClick={enterShoppingMode}>
-              Shopping Now
+              Walk the Aisles
             </button>
           )}
         </>
