@@ -7,13 +7,13 @@ export default function LearningSuggestions({ onChange }) {
   useEffect(() => {
     api.getLearningSuggestions()
       .then(setSuggestions)
-      .catch(() => setSuggestions({ add: [], remove: [] }))
+      .catch(() => setSuggestions({ add: [] }))
   }, [])
 
   if (!suggestions) return null
 
-  const { add, remove } = suggestions
-  if (add.length === 0 && remove.length === 0) return null
+  const { add } = suggestions
+  if (add.length === 0) return null
 
   const handleAddYes = async (name) => {
     await api.addRegular(name)
@@ -24,20 +24,10 @@ export default function LearningSuggestions({ onChange }) {
     onChange?.()
   }
 
-  const handleRemoveYes = async (id, name) => {
-    await api.toggleRegular(id)
-    setSuggestions(prev => ({
-      ...prev,
-      remove: prev.remove.filter(s => s.id !== id),
-    }))
-    onChange?.()
-  }
-
   const handleDismiss = async (name) => {
     await api.dismissLearning(name)
     setSuggestions(prev => ({
       add: prev.add.filter(s => s.name !== name),
-      remove: prev.remove.filter(s => s.name.toLowerCase() !== name.toLowerCase()),
     }))
   }
 
@@ -50,17 +40,6 @@ export default function LearningSuggestions({ onChange }) {
           </div>
           <div className="learning-card-actions">
             <button className="learning-btn yes" onClick={() => handleAddYes(s.name)}>Yes</button>
-            <button className="learning-btn no" onClick={() => handleDismiss(s.name)}>Not now</button>
-          </div>
-        </div>
-      ))}
-      {remove.map(s => (
-        <div key={s.id} className="learning-card">
-          <div className="learning-card-text">
-            You've been skipping <em>{s.name}</em>. Remove from regulars?
-          </div>
-          <div className="learning-card-actions">
-            <button className="learning-btn yes" onClick={() => handleRemoveYes(s.id, s.name)}>Yes</button>
             <button className="learning-btn no" onClick={() => handleDismiss(s.name)}>Not now</button>
           </div>
         </div>

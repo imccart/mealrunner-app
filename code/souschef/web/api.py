@@ -3322,7 +3322,7 @@ async def get_learning_suggestions(request: Request):
 
     # Get all items from the last 35 days, grouped by calendar week
     rows = conn.execute(
-        text("""SELECT LOWER(ti.name) as name, ti.source,
+        text("""SELECT LOWER(ti.name) as name,
                        EXTRACT(ISOYEAR FROM ti.added_at::timestamp) AS iso_year,
                        EXTRACT(WEEK FROM ti.added_at::timestamp) AS iso_week
                 FROM trip_items ti
@@ -3333,24 +3333,20 @@ async def get_learning_suggestions(request: Request):
     ).fetchall()
 
     if not rows:
-        return {"add": [], "remove": []}
+        return {"add": []}
 
     # Group items by calendar week
     week_items: dict[str, set[str]] = {}
-    week_skips: dict[str, set[str]] = {}
     for r in rows:
         try:
             week_key = f"{int(r['iso_year'])}-W{int(r['iso_week']):02d}"
         except (TypeError, ValueError):
             continue
-        if r["source"] != "regular_skip":
-            week_items.setdefault(week_key, set()).add(r["name"])
-        else:
-            week_skips.setdefault(week_key, set()).add(r["name"])
+        week_items.setdefault(week_key, set()).add(r["name"])
 
     sorted_weeks = sorted(week_items.keys(), reverse=True)[:5]
     if len(sorted_weeks) < 4:
-        return {"add": [], "remove": []}
+        return {"add": []}
 
     total_weeks = len(sorted_weeks)
 
@@ -3362,7 +3358,7 @@ async def get_learning_suggestions(request: Request):
     ).fetchall()
     dismissed = {r["name"] for r in dismissed_rows}
 
-    # --- Addition suggestions ---
+    # Suggest adding items that appear in 4+ of the last 5 weeks
     item_week_count: dict[str, int] = {}
     for week_key in sorted_weeks:
         for name in week_items.get(week_key, set()):
@@ -3377,21 +3373,7 @@ async def get_learning_suggestions(request: Request):
                 "total_trips": total_weeks,
             })
 
-    # --- Removal suggestions ---
-    remove_suggestions = []
-    active_regulars = [r for r in regulars if r.active]
-    for reg in active_regulars:
-        name_lower = reg.name.lower()
-        if name_lower in dismissed:
-            continue
-        skip_weeks = sum(1 for wk in sorted_weeks if name_lower in week_skips.get(wk, set()))
-        if skip_weeks >= 4:
-            remove_suggestions.append({"name": reg.name, "id": reg.id})
-
-    return {
-        "add": add_suggestions[:5],
-        "remove": remove_suggestions[:5],
-    }
+    return {"add": add_suggestions[:5]}
 
 
 @router.post("/learning/dismiss/{name:path}")
