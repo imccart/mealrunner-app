@@ -46,6 +46,7 @@ export default function MyKitchenSheet({ onClose }) {
   const [detailAddText, setDetailAddText] = useState('')
   const [renamed, setRenamed] = useState(null)
   const [cookingNotes, setCookingNotes] = useState('')
+  const [stapleSuggestion, setStapleSuggestion] = useState(null)
 
   useEffect(() => {
     api.getRecipes().then(data => setRecipes(data.recipes)).catch(() => setRecipes([]))
@@ -62,6 +63,7 @@ export default function MyKitchenSheet({ onClose }) {
       setDetailAddText('')
       setRenamed(null)
       setCookingNotes('')
+      setStapleSuggestion(null)
       api.getRecipeIngredients(detailRecipe.id)
         .then(data => {
           setDetailIngredients(data.ingredients)
@@ -130,6 +132,9 @@ export default function MyKitchenSheet({ onClose }) {
       if (result.renamed_from) {
         setRenamed({ from: result.renamed_from, to: result.name })
         setTimeout(() => setRenamed(null), 4000)
+      }
+      if (result.suggest_staple) {
+        setStapleSuggestion(result.suggest_staple)
       }
       const data = await api.getRecipeIngredients(detailRecipe.id)
       setDetailIngredients(data.ingredients)
@@ -291,6 +296,23 @@ export default function MyKitchenSheet({ onClose }) {
           <button className="btn primary" onClick={() => detailAddText.trim() && handleAddIngredient(detailAddText)}>+</button>
         </div>
         {renamed && <div className={ls.renamedHint}>"{renamed.from}" added as "{renamed.to}"</div>}
+        {stapleSuggestion && (
+          <div className={ls.renamedHint}>
+            {stapleSuggestion.name} is a common staple.{' '}
+            <button
+              style={{ background: 'none', border: 'none', color: 'var(--rust)', fontWeight: 600, cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
+              onClick={() => {
+                api.addPantryItem(stapleSuggestion.name).catch(() => {})
+                setStapleSuggestion(null)
+              }}
+            >Add to pantry?</button>
+            {' '}
+            <button
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
+              onClick={() => setStapleSuggestion(null)}
+            >{'\u00D7'}</button>
+          </div>
+        )}
         {detailIngredients === null ? (
           <div className={ls.sectionHint}>Loading...</div>
         ) : detailIngredients.length === 0 ? (

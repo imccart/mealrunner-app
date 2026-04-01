@@ -2885,6 +2885,20 @@ async def add_recipe_ingredient(recipe_id: int, body: dict, request: Request):
     result = {"ok": True, "name": name}
     if name.lower() != raw_name.lower():
         result["renamed_from"] = raw_name
+
+    # Suggest adding to pantry if this is a known staple the user doesn't already have
+    staple = conn.execute(
+        text("SELECT id, name FROM ingredients WHERE id = :id AND is_pantry_staple = 1"),
+        {"id": ingredient_id},
+    ).fetchone()
+    if staple:
+        already = conn.execute(
+            text("SELECT id FROM pantry WHERE user_id = :uid AND ingredient_id = :iid"),
+            {"uid": user_id, "iid": ingredient_id},
+        ).fetchone()
+        if not already:
+            result["suggest_staple"] = {"name": staple["name"], "ingredient_id": staple["id"]}
+
     return result
 
 
