@@ -17,6 +17,15 @@ const GROUP_ORDER = [
 
 const SWIPE_THRESHOLD = 50
 
+// Debug log visible on screen — TEMPORARY
+const _swipeLog = []
+function _log(msg) {
+  _swipeLog.push(`${Date.now() % 100000}: ${msg}`)
+  if (_swipeLog.length > 8) _swipeLog.shift()
+  const el = document.getElementById('swipe-debug')
+  if (el) el.textContent = _swipeLog.join('\n')
+}
+
 function SwipeableItem({ children, onSwipeRight, className }) {
   const elRef = useRef(null)
   const startX = useRef(null)
@@ -39,6 +48,7 @@ function SwipeableItem({ children, onSwipeRight, className }) {
       lastDx.current = 0
       setTransitioning(false)
       e.stopPropagation()
+      _log(`START x=${Math.round(startX.current)}`)
     }
 
     const handleMove = (e) => {
@@ -48,6 +58,7 @@ function SwipeableItem({ children, onSwipeRight, className }) {
 
       if (locked.current === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
         locked.current = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical'
+        _log(`LOCK=${locked.current}`)
       }
 
       if (locked.current !== 'horizontal') return
@@ -59,17 +70,23 @@ function SwipeableItem({ children, onSwipeRight, className }) {
     }
 
     const handleEnd = (e) => {
-      if (startX.current === null) return
+      const wasNull = startX.current === null
       startX.current = null
       startY.current = null
 
       const dx = lastDx.current
+      const wasLocked = locked.current
       if (locked.current === 'horizontal') {
         e.stopPropagation()
       }
       locked.current = null
 
+      _log(`END dx=${Math.round(dx)} locked=${wasLocked} null=${wasNull} thresh=${SWIPE_THRESHOLD}`)
+
+      if (wasNull) return
+
       if (dx > SWIPE_THRESHOLD) {
+        _log('COMPLETING')
         setTransitioning(true)
         setOffsetX(300)
         setTimeout(() => {
@@ -78,6 +95,7 @@ function SwipeableItem({ children, onSwipeRight, className }) {
           setTransitioning(false)
         }, 200)
       } else {
+        _log('SNAP BACK')
         setTransitioning(true)
         setOffsetX(0)
         setTimeout(() => setTransitioning(false), 150)
@@ -85,13 +103,15 @@ function SwipeableItem({ children, onSwipeRight, className }) {
     }
 
     const handleCancel = () => {
+      const dx = lastDx.current
+      _log(`CANCEL dx=${Math.round(dx)}`)
       startX.current = null
       startY.current = null
-      const dx = lastDx.current
       locked.current = null
       lastDx.current = 0
 
       if (dx > SWIPE_THRESHOLD) {
+        _log('CANCEL→COMPLETE')
         setTransitioning(true)
         setOffsetX(300)
         setTimeout(() => {
@@ -269,6 +289,7 @@ export default function GroceryPage({ sidebar = false }) {
           </div>
           <button className={styles.shoppingDone} onClick={exitShoppingMode}>Done</button>
         </div>
+        <pre id="swipe-debug" style={{ color: '#D4623A', fontSize: 11, padding: '4px 20px', margin: 0, whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'auto', background: 'rgba(0,0,0,0.3)' }}></pre>
         <div className={styles.shoppingList} ref={shopListRef}>
           {sortedGroups.map(group => {
             const items = items_by_group[group]
