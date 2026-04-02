@@ -87,11 +87,23 @@ function SwipeableItem({ children, onSwipeRight, className }) {
     const handleCancel = () => {
       startX.current = null
       startY.current = null
+      const dx = lastDx.current
       locked.current = null
       lastDx.current = 0
-      setTransitioning(true)
-      setOffsetX(0)
-      setTimeout(() => setTransitioning(false), 150)
+
+      if (dx > SWIPE_THRESHOLD) {
+        setTransitioning(true)
+        setOffsetX(300)
+        setTimeout(() => {
+          swipeRef.current()
+          setOffsetX(0)
+          setTransitioning(false)
+        }, 200)
+      } else {
+        setTransitioning(true)
+        setOffsetX(0)
+        setTimeout(() => setTransitioning(false), 150)
+      }
     }
 
     el.addEventListener('touchstart', handleStart, { passive: false })
