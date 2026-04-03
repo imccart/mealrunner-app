@@ -4,6 +4,7 @@ import './global.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import Toast from './components/Toast.jsx'
+import OfflineBanner from './components/OfflineBanner.jsx'
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {})
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')).render(
     <ErrorBoundary>
       <App />
       <Toast />
+      <OfflineBanner />
     </ErrorBoundary>
   </StrictMode>,
 )

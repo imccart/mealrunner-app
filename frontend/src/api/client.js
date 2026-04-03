@@ -10,6 +10,8 @@ const TOAST_MESSAGES = [
 ]
 
 function emitToast() {
+  // Don't spam toasts when fully offline — the offline banner handles that
+  if (!navigator.onLine) return
   const msg = TOAST_MESSAGES[Math.floor(Math.random() * TOAST_MESSAGES.length)]
   window.dispatchEvent(new CustomEvent('souschef-toast', { detail: msg }))
 }
