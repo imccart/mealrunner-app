@@ -137,7 +137,7 @@ if _FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=str(_FRONTEND_DIST / "assets")), name="react-assets")
 
 # Serve root-level static files (favicon, manifest, icons)
-_ROOT_STATIC = ["favicon.ico", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "manifest.json"]
+_ROOT_STATIC = ["favicon.ico", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "manifest.json", "sw.js"]
 for _fname in _ROOT_STATIC:
     _fpath = _FRONTEND_DIST / _fname
     if _fpath.exists():
