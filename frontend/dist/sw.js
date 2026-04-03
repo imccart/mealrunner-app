@@ -4,7 +4,7 @@ const API_CACHE = 'souschef-api-v1'
 // API paths to cache for offline use
 const CACHED_API_PATHS = ['/api/grocery', '/api/meals', '/api/auth/me']
 
-// Cache static assets on install
+// Cache app shell on activate (fetch /app HTML, parse for asset URLs, cache all)
 self.addEventListener('install', (event) => {
   self.skipWaiting()
 })
@@ -17,7 +17,21 @@ self.addEventListener('activate', (event) => {
           .filter((k) => k !== CACHE_NAME && k !== API_CACHE)
           .map((k) => caches.delete(k))
       )
-    ).then(() => self.clients.claim())
+    )
+    .then(() => caches.open(CACHE_NAME))
+    .then(async (cache) => {
+      try {
+        const response = await fetch('/app')
+        if (response.ok) {
+          const html = await response.clone().text()
+          await cache.put(new Request('/app'), response)
+          // Extract asset URLs from HTML and cache them
+          const assets = [...html.matchAll(/["'](\/assets\/[^"']+)["']/g)].map(m => m[1])
+          if (assets.length) await cache.addAll(assets)
+        }
+      } catch (e) { /* offline during activation — will cache on next online visit */ }
+    })
+    .then(() => self.clients.claim())
   )
 })
 
