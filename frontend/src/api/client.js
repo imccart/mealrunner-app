@@ -1,11 +1,38 @@
 const BASE = '/api'
 
+const TOAST_MESSAGES = [
+  "Lost the ticket — give it another tap.",
+  "Couldn't reach the kitchen — try again.",
+  "Stove misfired — one more try.",
+  "That order got dropped — try again.",
+  "Ticket didn't print — give it another tap.",
+  "Burner went out — one more try.",
+]
+
+function emitToast() {
+  const msg = TOAST_MESSAGES[Math.floor(Math.random() * TOAST_MESSAGES.length)]
+  window.dispatchEvent(new CustomEvent('souschef-toast', { detail: msg }))
+}
+
+// Paths where errors are handled by the caller (no toast)
+const SILENT_PATHS = ['/auth/me', '/auth/login', '/auth/google', '/auth/google-client-id']
+
 async function request(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  const silent = SILENT_PATHS.some(p => path.startsWith(p))
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    })
+  } catch (err) {
+    if (!silent) emitToast()
+    throw err
+  }
+  if (!res.ok) {
+    if (!silent) emitToast()
+    throw new Error(`${res.status} ${res.statusText}`)
+  }
   return res.json()
 }
 
