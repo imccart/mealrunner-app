@@ -9,9 +9,12 @@ export default function OfflineBanner() {
     const goOnline = () => setOffline(false)
     window.addEventListener('offline', goOffline)
     window.addEventListener('online', goOnline)
+    // Also listen for fetch failures as a fallback signal
+    window.addEventListener('souschef-offline', goOffline)
     return () => {
       window.removeEventListener('offline', goOffline)
       window.removeEventListener('online', goOnline)
+      window.removeEventListener('souschef-offline', goOffline)
     }
   }, [])
 

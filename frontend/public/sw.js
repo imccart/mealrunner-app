@@ -4,34 +4,35 @@ const API_CACHE = 'souschef-api-v1'
 // API paths to cache for offline use
 const CACHED_API_PATHS = ['/api/grocery', '/api/meals', '/api/auth/me']
 
-// Cache app shell on activate (fetch /app HTML, parse for asset URLs, cache all)
 self.addEventListener('install', (event) => {
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => k !== CACHE_NAME && k !== API_CACHE)
-          .map((k) => caches.delete(k))
+    // Clear static cache on every SW update to pick up new deploys
+    caches.delete(CACHE_NAME)
+      .then(() => caches.keys())
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => k !== CACHE_NAME && k !== API_CACHE)
+            .map((k) => caches.delete(k))
+        )
       )
-    )
-    .then(() => caches.open(CACHE_NAME))
-    .then(async (cache) => {
-      try {
-        const response = await fetch('/app')
-        if (response.ok) {
-          const html = await response.clone().text()
-          await cache.put(new Request('/app'), response)
-          // Extract asset URLs from HTML and cache them
-          const assets = [...html.matchAll(/["'](\/assets\/[^"']+)["']/g)].map(m => m[1])
-          if (assets.length) await cache.addAll(assets)
-        }
-      } catch (e) { /* offline during activation — will cache on next online visit */ }
-    })
-    .then(() => self.clients.claim())
+      .then(() => caches.open(CACHE_NAME))
+      .then(async (cache) => {
+        try {
+          const response = await fetch('/app')
+          if (response.ok) {
+            const html = await response.clone().text()
+            await cache.put(new Request('/app'), response)
+            const assets = [...html.matchAll(/["'](\/assets\/[^"']+)["']/g)].map(m => m[1])
+            if (assets.length) await cache.addAll(assets)
+          }
+        } catch (e) { /* offline during activation */ }
+      })
+      .then(() => self.clients.claim())
   )
 })
 
@@ -54,8 +55,24 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Static assets (/assets/, app shell): cache first, network fallback
-  if (url.pathname.startsWith('/assets/') || url.pathname === '/app' || url.pathname.startsWith('/app/')) {
+  // App shell HTML: network first, cache fallback (so deploys always get fresh code)
+  if (url.pathname === '/app' || url.pathname.startsWith('/app/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
+          }
+          return response
+        })
+        .catch(() => caches.match(event.request))
+    )
+    return
+  }
+
+  // Hashed assets (/assets/): cache first (filenames change on deploy)
+  if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
       caches.match(event.request).then((cached) => {
         if (cached) return cached

@@ -9,9 +9,18 @@ const TOAST_MESSAGES = [
   "Burner went out — one more try.",
 ]
 
+let _offlineDetected = false
+
 function emitToast() {
   // Don't spam toasts when fully offline — the offline banner handles that
-  if (!navigator.onLine) return
+  if (!navigator.onLine || _offlineDetected) {
+    if (!_offlineDetected) {
+      _offlineDetected = true
+      window.dispatchEvent(new Event('souschef-offline'))
+      window.addEventListener('online', () => { _offlineDetected = false }, { once: true })
+    }
+    return
+  }
   const msg = TOAST_MESSAGES[Math.floor(Math.random() * TOAST_MESSAGES.length)]
   window.dispatchEvent(new CustomEvent('souschef-toast', { detail: msg }))
 }
@@ -28,7 +37,12 @@ async function request(path, options = {}) {
       ...options,
     })
   } catch (err) {
-    if (!silent) emitToast()
+    if (!silent) {
+      // Network error likely means offline
+      _offlineDetected = true
+      window.dispatchEvent(new Event('souschef-offline'))
+      window.addEventListener('online', () => { _offlineDetected = false }, { once: true })
+    }
     throw err
   }
   if (!res.ok) {
