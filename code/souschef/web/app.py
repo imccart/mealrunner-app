@@ -565,13 +565,20 @@ async def kroger_location_get(request: Request):
 @app.post("/api/kroger/location")
 async def kroger_location_set(body: dict, request: Request):
     """Set the user's Kroger store location."""
-    from souschef.stores import set_kroger_location_id
+    from souschef.stores import set_kroger_location_id, refresh_nearby_stores
     user_id = request.state.user_id
     location_id = body.get("location_id", "").strip()
     if not location_id:
         return {"ok": False, "error": "location_id required"}
     conn = get_request_connection()
     set_kroger_location_id(conn, user_id, location_id)
+    # Cache nearby stores if zip provided
+    zip_code = body.get("zip_code", "").strip()
+    if zip_code:
+        try:
+            refresh_nearby_stores(conn, user_id, location_id, zip_code)
+        except Exception:
+            pass
     return {"ok": True, "location_id": location_id}
 
 

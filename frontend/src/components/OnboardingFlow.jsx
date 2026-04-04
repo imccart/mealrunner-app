@@ -215,7 +215,7 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
       } else if (step === 4) {
         // Store — nothing to save (OAuth handles it)
         if (selectedLocation) {
-          await api.setKrogerLocation(selectedLocation)
+          await api.setKrogerLocation(selectedLocation, storeZip.trim())
         }
       } else if (step === 5) {
         // Tour complete — finish onboarding

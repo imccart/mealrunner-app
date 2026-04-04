@@ -287,6 +287,28 @@ def _run_column_migrations(conn: DictConnection) -> None:
         except Exception:
             pass
 
+    # Create nearby_stores table if missing
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS nearby_stores (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                location_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                address TEXT NOT NULL DEFAULT '',
+                rank INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, location_id)
+            )
+        """))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   nearby_stores table skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
     # Backfill product_key from upc where missing
     try:
         conn.execute(text(

@@ -1726,6 +1726,42 @@ async def select_product(body: dict, request: Request):
     )
     save_preference(conn, user_id, item_name, kp, source="picked")
 
+    # Background: look up this UPC at nearby stores for price comparison
+    upc = product.get("upc", "")
+    if upc and sel_location:
+        import threading
+
+        def _bg_nearby_prices(bg_upc, bg_user_id):
+            from souschef.database import get_connection
+            from souschef.stores import get_nearby_stores
+            from souschef.pricing import _poll_single_product
+            import time as _time
+            try:
+                with get_connection() as bg_conn:
+                    nearby = get_nearby_stores(bg_conn, bg_user_id)
+                    for store in nearby:
+                        try:
+                            price_data = _poll_single_product(bg_upc, store["location_id"])
+                            if price_data:
+                                bg_conn.execute(
+                                    text("""INSERT INTO product_prices
+                                        (upc, location_id, store_chain, price, promo_price, in_stock, source, user_id)
+                                        VALUES (:upc, :loc, 'kroger', :price, :promo, :stock, 'nearby', :uid)"""),
+                                    {"upc": bg_upc, "loc": store["location_id"],
+                                     "price": price_data["price"],
+                                     "promo": price_data.get("promo_price"),
+                                     "stock": price_data.get("in_stock"),
+                                     "uid": bg_user_id},
+                                )
+                            _time.sleep(0.5)
+                        except Exception:
+                            pass
+                    bg_conn.commit()
+            except Exception:
+                pass
+
+        threading.Thread(target=_bg_nearby_prices, args=(upc, user_id), daemon=True).start()
+
     return await get_order(request)
 
 
@@ -1750,6 +1786,109 @@ async def deselect_product(item_name: str, request: Request):
     conn.commit()
 
     return await get_order(request)
+
+
+@router.get("/order/price-comparison")
+async def price_comparison(request: Request):
+    """Compare current order prices across nearby Kroger stores."""
+    from souschef.stores import get_kroger_location_id, get_nearby_stores
+    from souschef.planner import load_rolling_week
+
+    user_id = request.state.user_id
+    conn = _conn()
+
+    home_loc = get_kroger_location_id(conn, user_id)
+    if not home_loc:
+        return {"comparisons": []}
+
+    nearby = get_nearby_stores(conn, user_id)
+    if not nearby:
+        # Auto-populate for existing users: look up store zip from Kroger API
+        try:
+            from souschef.kroger import _headers, BASE_URL
+            import requests as _requests
+            resp = _requests.get(f"{BASE_URL}/locations/{home_loc}", headers=_headers(), timeout=10)
+            if resp.ok:
+                zip_code = resp.json().get("data", {}).get("address", {}).get("zipCode", "")
+                if zip_code:
+                    from souschef.stores import refresh_nearby_stores
+                    refresh_nearby_stores(conn, user_id, home_loc, zip_code)
+                    nearby = get_nearby_stores(conn, user_id)
+        except Exception:
+            pass
+        if not nearby:
+            return {"comparisons": []}
+
+    mw = load_rolling_week(conn, user_id)
+    trip = _ensure_active_trip(conn, mw, user_id)
+
+    # Get selected order items with prices
+    rows = conn.execute(text("""
+        SELECT product_upc, product_price, quantity FROM trip_items
+        WHERE trip_id = :tid AND product_upc != '' AND product_price IS NOT NULL
+        AND submitted_at IS NULL AND removed = 0 AND buy_elsewhere = 0
+    """), {"tid": trip["id"]}).fetchall()
+
+    if not rows:
+        return {"comparisons": []}
+
+    upcs = [r["product_upc"] for r in rows]
+    items_total = len(upcs)
+
+    # Build home price map: upc -> total cost (price * qty)
+    home_prices = {}
+    qty_map = {}
+    for r in rows:
+        home_prices[r["product_upc"]] = r["product_price"] * (r["quantity"] or 1)
+        qty_map[r["product_upc"]] = r["quantity"] or 1
+
+    comparisons = []
+    for store in nearby:
+        # Get latest price per UPC at this store (within 7 days)
+        placeholders = ", ".join(f":u{i}" for i in range(len(upcs)))
+        params = {f"u{i}": u for i, u in enumerate(upcs)}
+        params["loc"] = store["location_id"]
+
+        price_rows = conn.execute(text(f"""
+            SELECT DISTINCT ON (upc) upc, price, promo_price
+            FROM product_prices
+            WHERE location_id = :loc AND upc IN ({placeholders})
+            AND fetched_at::timestamptz > NOW() - INTERVAL '7 days'
+            ORDER BY upc, fetched_at DESC
+        """), params).fetchall()
+
+        if not price_rows:
+            continue
+
+        nearby_total = 0.0
+        home_total = 0.0
+        matched = 0
+        for pr in price_rows:
+            upc = pr["upc"]
+            if upc not in home_prices:
+                continue
+            nearby_price = pr["promo_price"] if pr["promo_price"] else pr["price"]
+            if nearby_price is None:
+                continue
+            qty = qty_map.get(upc, 1)
+            nearby_total += nearby_price * qty
+            home_total += home_prices[upc]
+            matched += 1
+
+        if matched == 0:
+            continue
+
+        comparisons.append({
+            "location_id": store["location_id"],
+            "name": store["name"],
+            "address": store["address"],
+            "savings": round(home_total - nearby_total, 2),
+            "items_compared": matched,
+            "items_total": items_total,
+        })
+
+    comparisons.sort(key=lambda c: -c["savings"])
+    return {"comparisons": comparisons}
 
 
 @router.post("/order/submit")

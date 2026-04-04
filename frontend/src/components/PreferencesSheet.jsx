@@ -131,7 +131,7 @@ export default function PreferencesSheet({ onClose }) {
 
   const handleSelectStore = async (loc) => {
     try {
-      await api.setKrogerLocation(loc.location_id)
+      await api.setKrogerLocation(loc.location_id, storeZip.trim())
       setKrogerLocationId(loc.location_id)
       setKrogerLocationName(loc.name + ' — ' + loc.address)
       setStoreResults(null)

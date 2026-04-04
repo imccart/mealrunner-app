@@ -94,3 +94,41 @@ def prompt_keys_help(stores: list[dict]) -> str:
     """Build a prompt hint string like '(k = Kroger, s = Sam's Club)'."""
     parts = [f"{s['key']} = {s['name']}" for s in stores]
     return f"({', '.join(parts)})"
+
+
+def refresh_nearby_stores(conn: DictConnection, user_id: str, own_location_id: str, zip_code: str) -> int:
+    """Cache the 3 nearest Kroger stores (excluding user's own). Returns count saved."""
+    from souschef.kroger import search_kroger_locations
+
+    try:
+        locations = search_kroger_locations(zip_code, limit=5)
+    except Exception:
+        return 0
+
+    conn.execute(text("DELETE FROM nearby_stores WHERE user_id = :uid"), {"uid": user_id})
+    rank = 0
+    for loc in locations:
+        if loc["location_id"] == own_location_id:
+            continue
+        rank += 1
+        if rank > 3:
+            break
+        conn.execute(
+            text("""INSERT INTO nearby_stores (user_id, location_id, name, address, rank)
+                VALUES (:uid, :loc, :name, :addr, :rank)
+                ON CONFLICT(user_id, location_id) DO UPDATE SET
+                    name = excluded.name, address = excluded.address, rank = excluded.rank"""),
+            {"uid": user_id, "loc": loc["location_id"], "name": loc["name"],
+             "addr": loc["address"], "rank": rank},
+        )
+    conn.commit()
+    return rank
+
+
+def get_nearby_stores(conn: DictConnection, user_id: str) -> list[dict]:
+    """Return cached nearby stores for a user, ordered by rank."""
+    rows = conn.execute(
+        text("SELECT location_id, name, address, rank FROM nearby_stores WHERE user_id = :uid ORDER BY rank"),
+        {"uid": user_id},
+    ).fetchall()
+    return [dict(r) for r in rows]

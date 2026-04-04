@@ -112,6 +112,8 @@ export default function OrderPage() {
   const [communityConfirm, setCommunityConfirm] = useState(false)
   const [noStore, setNoStore] = useState(false)
   const [loadError, setLoadError] = useState(false)
+  const [comparisons, setComparisons] = useState(null)
+  const [showComparison, setShowComparison] = useState(false)
 
   const [sharedAccountName, setSharedAccountName] = useState(null)
 
@@ -179,6 +181,16 @@ export default function OrderPage() {
       doSearch(activeItem)
     }
   }, [activeItem, fulfillment])
+
+  // Fetch price comparisons when selected items change
+  const selectedCount = order?.selected?.length || 0
+  useEffect(() => {
+    if (selectedCount === 0) { setComparisons(null); return }
+    const timer = setTimeout(() => {
+      api.getPriceComparison().then(data => setComparisons(data.comparisons)).catch(() => {})
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [selectedCount])
 
   const storeName = storeInfo?.name || 'Kroger'
   const activeItemData = order ? [...order.pending, ...order.selected, ...order.buy_elsewhere].find(i => i.name === activeItem) : null
@@ -717,6 +729,33 @@ export default function OrderPage() {
               <span>Est. subtotal</span>
               <strong>{formatPrice(order.total_price)}</strong>
             </div>
+            {comparisons && comparisons.length > 0 && (
+              <div className={styles.priceComparisonPanel}>
+                <button className={styles.comparisonToggle} onClick={() => setShowComparison(!showComparison)}>
+                  Compare nearby stores {showComparison ? '\u25B4' : '\u25BE'}
+                </button>
+                {showComparison && (
+                  <>
+                    {comparisons.map(c => (
+                      <div key={c.location_id} className={styles.comparisonRow}>
+                        <div className={styles.comparisonStore}>{c.name}</div>
+                        <div className={c.savings > 0 ? styles.comparisonSavings : styles.comparisonMore}>
+                          {c.savings > 0
+                            ? `Save $${c.savings.toFixed(2)}`
+                            : `$${Math.abs(c.savings).toFixed(2)} more`}
+                          <span className={styles.comparisonDetail}>
+                            {' '}(comparing {c.items_compared} of {c.items_total} items)
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    <div className={styles.comparisonDisclaimer}>
+                      Prices are estimates and may change. Not all items could be compared.
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </>
         ) : (
           <div className={styles.orderSummaryEmpty}>
@@ -892,6 +931,35 @@ export default function OrderPage() {
       {!mobileSection && (
         <div className={styles.orderMobileContent}>
           {centerPanel}
+        </div>
+      )}
+
+      {/* Mobile: price comparison */}
+      {!activeItem && comparisons && comparisons.length > 0 && (
+        <div className={styles.priceComparisonMobile}>
+          <button className={styles.comparisonToggle} onClick={() => setShowComparison(!showComparison)}>
+            Compare nearby stores {showComparison ? '\u25B4' : '\u25BE'}
+          </button>
+          {showComparison && (
+            <>
+              {comparisons.map(c => (
+                <div key={c.location_id} className={styles.comparisonRow}>
+                  <div className={styles.comparisonStore}>{c.name}</div>
+                  <div className={c.savings > 0 ? styles.comparisonSavings : styles.comparisonMore}>
+                    {c.savings > 0
+                      ? `Save $${c.savings.toFixed(2)}`
+                      : `$${Math.abs(c.savings).toFixed(2)} more`}
+                    <span className={styles.comparisonDetail}>
+                      {' '}(comparing {c.items_compared} of {c.items_total} items)
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <div className={styles.comparisonDisclaimer}>
+                Prices are estimates and may change. Not all items could be compared.
+              </div>
+            </>
+          )}
         </div>
       )}
 

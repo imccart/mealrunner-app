@@ -471,6 +471,18 @@ stores = Table(
     UniqueConstraint("user_id", "key"),
 )
 
+nearby_stores = Table(
+    "nearby_stores", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, nullable=False),
+    Column("location_id", Text, nullable=False),
+    Column("name", Text, nullable=False),
+    Column("address", Text, nullable=False, server_default=text("''")),
+    Column("rank", Integer, nullable=False, server_default=text("1")),
+    Column("created_at", Text, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    UniqueConstraint("user_id", "location_id"),
+)
+
 settings = Table(
     "settings", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),

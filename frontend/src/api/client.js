@@ -108,6 +108,7 @@ export const api = {
     body: JSON.stringify({ item_name: itemName, product, quantity: quantity || 1 }),
   }),
   deselectProduct: (itemName) => request(`/order/deselect/${encodeURIComponent(itemName)}`, { method: 'POST' }),
+  getPriceComparison: () => request('/order/price-comparison'),
   submitOrder: (krogerUserId) => request('/order/submit', {
     method: 'POST',
     body: JSON.stringify(krogerUserId ? { kroger_user_id: krogerUserId } : {}),
@@ -228,7 +229,7 @@ export const api = {
   disconnectKroger: () => request('/kroger/disconnect', { method: 'POST' }),
   searchKrogerLocations: (zip) => request(`/kroger/locations?zip=${encodeURIComponent(zip)}`),
   getKrogerLocation: () => request('/kroger/location'),
-  setKrogerLocation: (locationId) => request('/kroger/location', { method: 'POST', body: JSON.stringify({ location_id: locationId }) }),
+  setKrogerLocation: (locationId, zipCode) => request('/kroger/location', { method: 'POST', body: JSON.stringify({ location_id: locationId, zip_code: zipCode || '' }) }),
   getKrogerHouseholdAccounts: () => request('/kroger/household-accounts'),
   setStoreHouseholdAccess: (allow) => request('/store/allow-household', {
     method: 'POST',
