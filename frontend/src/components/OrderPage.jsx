@@ -593,7 +593,11 @@ export default function OrderPage() {
                 <div key={pref.upc} className={`${styles.productCard} ${styles.preference}`} style={{ position: 'relative' }}>
                   <button
                     className={styles.prefDismiss}
-                    onClick={(e) => { e.stopPropagation(); api.deletePreference(pref.upc).then(() => doSearch(searchTerm)).catch(() => {}) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      api.deletePreference(pref.upc).catch(() => {})
+                      setProducts(prev => prev ? { ...prev, preferences: prev.preferences.filter(p => p.upc !== pref.upc) } : prev)
+                    }}
                     title="Remove prior selection"
                   >{'\u00D7'}</button>
                   <button
