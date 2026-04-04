@@ -1918,6 +1918,56 @@ async def price_comparison(request: Request):
         })
 
     comparisons.sort(key=lambda c: -c["savings"])
+
+    # Background: fetch missing nearby prices so next request is more complete
+    # Find UPCs that had no price at ANY nearby store
+    all_matched_upcs = set()
+    for store in nearby:
+        placeholders = ", ".join(f":u{i}" for i in range(len(upcs)))
+        params = {f"u{i}": u for i, u in enumerate(upcs)}
+        params["loc"] = store["location_id"]
+        found = conn.execute(text(f"""
+            SELECT DISTINCT upc FROM product_prices
+            WHERE location_id = :loc AND upc IN ({placeholders})
+            AND fetched_at::timestamptz > NOW() - INTERVAL '7 days'
+        """), params).fetchall()
+        all_matched_upcs.update(r["upc"] for r in found)
+
+    missing_upcs = [u for u in upcs if u not in all_matched_upcs]
+    if missing_upcs:
+        import threading
+
+        def _bg_fill_nearby(bg_upcs, bg_nearby, bg_user_id):
+            from souschef.database import get_connection
+            from souschef.pricing import _poll_single_product
+            import time as _time
+            try:
+                with get_connection() as bg_conn:
+                    for upc in bg_upcs:
+                        for store in bg_nearby:
+                            try:
+                                price_data = _poll_single_product(upc, store["location_id"])
+                                if price_data:
+                                    bg_conn.execute(
+                                        text("""INSERT INTO product_prices
+                                            (upc, location_id, store_chain, price, promo_price, in_stock, source, user_id)
+                                            VALUES (:upc, :loc, 'kroger', :price, :promo, :stock, 'nearby', :uid)"""),
+                                        {"upc": upc, "loc": store["location_id"],
+                                         "price": price_data["price"],
+                                         "promo": price_data.get("promo_price"),
+                                         "stock": price_data.get("in_stock"),
+                                         "uid": bg_user_id},
+                                    )
+                                _time.sleep(0.5)
+                            except Exception:
+                                pass
+                    bg_conn.commit()
+            except Exception:
+                pass
+
+        nearby_copy = [dict(s) for s in nearby]
+        threading.Thread(target=_bg_fill_nearby, args=(missing_upcs, nearby_copy, user_id), daemon=True).start()
+
     return {"comparisons": comparisons}
 
 
