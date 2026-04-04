@@ -768,10 +768,20 @@ export default function OrderPage() {
                             {' '}(comparing {c.items_compared} of {c.items_total} items)
                           </span>
                         </div>
+                        {c.savings > 0 && (
+                          <button
+                            className={styles.comparisonSwitch}
+                            onClick={async () => {
+                              await api.setKrogerLocation(c.location_id)
+                              window.location.reload()
+                            }}
+                          >Switch to {c.name.replace(/^Kroger\s*/i, '')} {'\u2192'}</button>
+                        )}
                       </div>
                     ))}
                     <div className={styles.comparisonDisclaimer}>
                       Prices are estimates and may change. Not all items could be compared.
+                      Switching stores changes your default Kroger location.
                     </div>
                   </>
                 )}
@@ -969,15 +979,27 @@ export default function OrderPage() {
                   <div className={c.savings > 0 ? styles.comparisonSavings : styles.comparisonMore}>
                     {c.savings > 0
                       ? `Save $${c.savings.toFixed(2)}`
+                      : c.savings === 0
+                      ? 'Same price'
                       : `$${Math.abs(c.savings).toFixed(2)} more`}
                     <span className={styles.comparisonDetail}>
                       {' '}(comparing {c.items_compared} of {c.items_total} items)
                     </span>
                   </div>
+                  {c.savings > 0 && (
+                    <button
+                      className={styles.comparisonSwitch}
+                      onClick={async () => {
+                        await api.setKrogerLocation(c.location_id)
+                        window.location.reload()
+                      }}
+                    >Switch to {c.name.replace(/^Kroger\s*/i, '')} {'\u2192'}</button>
+                  )}
                 </div>
               ))}
               <div className={styles.comparisonDisclaimer}>
                 Prices are estimates and may change. Not all items could be compared.
+                Switching stores changes your default Kroger location.
               </div>
             </>
           )}
