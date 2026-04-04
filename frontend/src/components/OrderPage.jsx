@@ -114,6 +114,9 @@ export default function OrderPage() {
   const [loadError, setLoadError] = useState(false)
   const [comparisons, setComparisons] = useState(null)
   const [showComparison, setShowComparison] = useState(false)
+  const [originalStore, setOriginalStore] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('souschef_original_store')) } catch { return null }
+  })
 
   const [sharedAccountName, setSharedAccountName] = useState(null)
 
@@ -432,6 +435,18 @@ export default function OrderPage() {
       )}
       {submitResult?.ok && (
         <span className={styles.pickingRowSent}>Sent {'\u2713'}</span>
+      )}
+      {submitResult?.ok && originalStore && (
+        <button
+          className={styles.comparisonSwitch}
+          style={{ marginTop: 6 }}
+          onClick={async () => {
+            await api.setKrogerLocation(originalStore.location_id)
+            localStorage.removeItem('souschef_original_store')
+            setOriginalStore(null)
+            setStoreInfo({ ...storeInfo, location_id: originalStore.location_id, name: originalStore.name })
+          }}
+        >Switch back to {originalStore.name} {'\u2192'}</button>
       )}
     </div>
   )
@@ -779,6 +794,7 @@ export default function OrderPage() {
                           <button
                             className={styles.comparisonSwitch}
                             onClick={async () => {
+                              if (storeInfo) localStorage.setItem('souschef_original_store', JSON.stringify({ location_id: storeInfo.location_id, name: storeInfo.name }))
                               await api.setKrogerLocation(c.location_id)
                               window.location.reload()
                             }}
@@ -825,7 +841,21 @@ export default function OrderPage() {
                   </div>
                 )}
                 {submitResult?.ok ? (
-                  <div className="submit-success">Sent to {storeName} {'\u2713'}</div>
+                  <>
+                    <div className="submit-success">Sent to {storeName} {'\u2713'}</div>
+                    {originalStore && (
+                      <button
+                        className={styles.comparisonSwitch}
+                        style={{ marginTop: 8, width: '100%' }}
+                        onClick={async () => {
+                          await api.setKrogerLocation(originalStore.location_id)
+                          localStorage.removeItem('souschef_original_store')
+                          setOriginalStore(null)
+                          setStoreInfo({ ...storeInfo, location_id: originalStore.location_id, name: originalStore.name })
+                        }}
+                      >Switch back to {originalStore.name} {'\u2192'}</button>
+                    )}
+                  </>
                 ) : (
                   <button
                     className={styles.orderFinalizeBtn}
