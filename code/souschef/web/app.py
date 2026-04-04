@@ -385,7 +385,12 @@ async def auth_me(request: Request):
     if not user:
         return JSONResponse({"error": "User not found"}, status_code=401)
 
-    return {"id": user["id"], "email": user["email"], "display_name": user["display_name"]}
+    home_zip_row = conn.execute(
+        text("SELECT value FROM settings WHERE user_id = :uid AND key = 'home_zip'"),
+        {"uid": user_id},
+    ).fetchone()
+    return {"id": user["id"], "email": user["email"], "display_name": user["display_name"],
+            "home_zip": home_zip_row["value"] if home_zip_row else ""}
 
 
 @app.post("/api/auth/logout")
@@ -572,11 +577,16 @@ async def kroger_location_set(body: dict, request: Request):
         return {"ok": False, "error": "location_id required"}
     conn = get_request_connection()
     set_kroger_location_id(conn, user_id, location_id)
-    # Cache nearby stores if zip provided
+    # Cache nearby stores — prefer user's home zip over store search zip
     zip_code = body.get("zip_code", "").strip()
-    if zip_code:
+    home_zip_row = conn.execute(
+        text("SELECT value FROM settings WHERE user_id = :uid AND key = 'home_zip'"),
+        {"uid": user_id},
+    ).fetchone()
+    nearby_zip = (home_zip_row["value"] if home_zip_row else None) or zip_code
+    if nearby_zip:
         try:
-            refresh_nearby_stores(conn, user_id, location_id, zip_code)
+            refresh_nearby_stores(conn, user_id, location_id, nearby_zip)
         except Exception:
             pass
     return {"ok": True, "location_id": location_id}

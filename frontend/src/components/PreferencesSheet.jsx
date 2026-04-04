@@ -27,6 +27,8 @@ export default function PreferencesSheet({ onClose }) {
   const [userEmail, setUserEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [nameSaved, setNameSaved] = useState(false)
+  const [homeZip, setHomeZip] = useState('')
+  const [zipSaved, setZipSaved] = useState(false)
   const [krogerConnected, setKrogerConnected] = useState(null)
   const [krogerLocationId, setKrogerLocationId] = useState('')
   const [krogerLocationName, setKrogerLocationName] = useState('')
@@ -43,6 +45,7 @@ export default function PreferencesSheet({ onClose }) {
     api.getMe().then(data => {
       setUserEmail(data.email || '')
       setDisplayName(data.display_name || '')
+      setHomeZip(data.home_zip || '')
     }).catch(() => {})
     api.getHouseholdMembers().then(data => setMembers(data.members)).catch(() => {})
     api.getKrogerStatus().then(data => setKrogerConnected(data.connected)).catch(() => setKrogerConnected(false))
@@ -170,6 +173,30 @@ export default function PreferencesSheet({ onClose }) {
           <div className={styles.prefsAccountField}>
             <label className={styles.prefsFieldLabel}>Email</label>
             <div className={styles.prefsFieldValue}>{userEmail}</div>
+          </div>
+          <div className={styles.prefsAccountField}>
+            <label className={styles.prefsFieldLabel}>Zip code</label>
+            <div className={ls.addRow}>
+              <input
+                className={ls.addInput}
+                type="text"
+                inputMode="numeric"
+                placeholder="Your zip code"
+                value={homeZip}
+                onChange={(e) => { setHomeZip(e.target.value); setZipSaved(false) }}
+                onBlur={() => {
+                  if (homeZip.trim()) {
+                    api.saveHomeZip(homeZip.trim()).then(() => {
+                      setZipSaved(true)
+                      setTimeout(() => setZipSaved(false), 2000)
+                    }).catch(() => {})
+                  }
+                }}
+                maxLength={5}
+                style={{ maxWidth: 100 }}
+              />
+              {zipSaved && <span className={styles.prefsSaved}>{'\u2713'}</span>}
+            </div>
           </div>
           {members && members.length > 0 && (
             <div className={ls.list} style={{ marginTop: 12 }}>

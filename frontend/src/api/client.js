@@ -271,6 +271,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ value }),
   }),
+  saveHomeZip: (zip) => request('/settings/home-zip', {
+    method: 'POST',
+    body: JSON.stringify({ zip }),
+  }),
 
   // Learning
   getLearningSuggestions: () => request('/learning/suggestions'),

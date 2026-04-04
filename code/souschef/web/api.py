@@ -1895,19 +1895,30 @@ async def price_comparison(request: Request):
 
     nearby = get_nearby_stores(conn, user_id)
     if not nearby:
-        # Auto-populate for existing users: look up store zip from Kroger API
-        try:
-            from souschef.kroger import _headers, BASE_URL
-            import requests as _requests
-            resp = _requests.get(f"{BASE_URL}/locations/{home_loc}", headers=_headers(), timeout=10)
-            if resp.ok:
-                zip_code = resp.json().get("data", {}).get("address", {}).get("zipCode", "")
-                if zip_code:
-                    from souschef.stores import refresh_nearby_stores
-                    refresh_nearby_stores(conn, user_id, home_loc, zip_code)
-                    nearby = get_nearby_stores(conn, user_id)
-        except Exception:
-            pass
+        # Auto-populate: prefer user's home zip, fall back to store's zip from Kroger API
+        zip_code = None
+        home_zip_row = conn.execute(
+            text("SELECT value FROM settings WHERE user_id = :uid AND key = 'home_zip'"),
+            {"uid": user_id},
+        ).fetchone()
+        if home_zip_row:
+            zip_code = home_zip_row["value"]
+        if not zip_code:
+            try:
+                from souschef.kroger import _headers, BASE_URL
+                import requests as _requests
+                resp = _requests.get(f"{BASE_URL}/locations/{home_loc}", headers=_headers(), timeout=10)
+                if resp.ok:
+                    zip_code = resp.json().get("data", {}).get("address", {}).get("zipCode", "")
+            except Exception:
+                pass
+        if zip_code:
+            from souschef.stores import refresh_nearby_stores
+            try:
+                refresh_nearby_stores(conn, user_id, home_loc, zip_code)
+                nearby = get_nearby_stores(conn, user_id)
+            except Exception:
+                pass
         if not nearby:
             return {"comparisons": []}
 
@@ -4128,6 +4139,23 @@ async def set_price_tracking(body: dict, request: Request):
                    ON CONFLICT (user_id, key) DO UPDATE SET value = :val, updated_at = CURRENT_TIMESTAMP"""),
                 {"uid": user_id, "key": key, "val": val},
             )
+    conn.commit()
+    return {"ok": True}
+
+
+@router.post("/settings/home-zip")
+async def set_home_zip(body: dict, request: Request):
+    """Save the user's home zip code."""
+    user_id = request.state.user_id
+    zip_code = body.get("zip", "").strip()
+    if not zip_code:
+        return {"ok": False, "error": "zip required"}
+    conn = _conn()
+    conn.execute(
+        text("""INSERT INTO settings (user_id, key, value) VALUES (:uid, 'home_zip', :val)
+           ON CONFLICT (user_id, key) DO UPDATE SET value = :val, updated_at = CURRENT_TIMESTAMP"""),
+        {"uid": user_id, "val": zip_code},
+    )
     conn.commit()
     return {"ok": True}
 
