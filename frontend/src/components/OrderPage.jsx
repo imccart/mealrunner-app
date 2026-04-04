@@ -715,7 +715,11 @@ export default function OrderPage() {
               <div key={item.name} className={styles.orderSummaryRow}>
                 <span className={styles.orderSummaryItemName}>{item.name}</span>
                 <span className={styles.orderSummaryItemPrice}>
-                  {item.product?.price ? formatPrice(item.product.price) : ''}
+                  {item.product?.price ? (
+                    (item.product.quantity || 1) > 1
+                      ? `${formatPrice(item.product.price)} \u00D7 ${item.product.quantity}`
+                      : formatPrice(item.product.price)
+                  ) : ''}
                 </span>
               </div>
             ))}
