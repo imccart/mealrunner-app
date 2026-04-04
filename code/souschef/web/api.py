@@ -1690,19 +1690,47 @@ async def select_product(body: dict, request: Request):
     mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
-    conn.execute(
-        text("""UPDATE trip_items SET
-               product_upc = :upc, product_name = :name, product_brand = :brand,
-               product_size = :size, product_price = :price, product_image = :image,
-               quantity = :quantity,
-               ordered = 1, ordered_at = CURRENT_TIMESTAMP, selected_at = CURRENT_TIMESTAMP
-           WHERE trip_id = :trip_id AND LOWER(name) = :item_name"""),
-        {"upc": product["upc"], "name": product["name"], "brand": product.get("brand", ""),
-         "size": product.get("size", ""), "price": product.get("price"),
-         "image": product.get("image", ""),
-         "quantity": quantity,
-         "trip_id": trip["id"], "item_name": item_name.lower()},
-    )
+    # Check if this item already has a different product selected
+    existing = conn.execute(
+        text("""SELECT id, product_upc FROM trip_items
+           WHERE trip_id = :trip_id AND LOWER(name) = :item_name AND product_upc != '' AND product_upc != :upc
+           AND ordered = 1 AND submitted_at IS NULL AND removed = 0
+           LIMIT 1"""),
+        {"trip_id": trip["id"], "item_name": item_name.lower(), "upc": product["upc"]},
+    ).fetchone()
+
+    if existing:
+        # Different product for same item — insert additional row
+        conn.execute(
+            text("""INSERT INTO trip_items
+                   (trip_id, name, source, shopping_group, for_meals, meal_count,
+                    product_upc, product_name, product_brand, product_size, product_price, product_image,
+                    quantity, ordered, ordered_at, selected_at)
+               SELECT :trip_id, name, 'extra', shopping_group, for_meals, 0,
+                    :upc, :pname, :brand, :size, :price, :image,
+                    :quantity, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+               FROM trip_items WHERE id = :existing_id"""),
+            {"trip_id": trip["id"], "existing_id": existing["id"],
+             "upc": product["upc"], "pname": product["name"], "brand": product.get("brand", ""),
+             "size": product.get("size", ""), "price": product.get("price"),
+             "image": product.get("image", ""),
+             "quantity": quantity},
+        )
+    else:
+        # First product or same product re-selected — update in place
+        conn.execute(
+            text("""UPDATE trip_items SET
+                   product_upc = :upc, product_name = :name, product_brand = :brand,
+                   product_size = :size, product_price = :price, product_image = :image,
+                   quantity = :quantity,
+                   ordered = 1, ordered_at = CURRENT_TIMESTAMP, selected_at = CURRENT_TIMESTAMP
+               WHERE trip_id = :trip_id AND LOWER(name) = :item_name"""),
+            {"upc": product["upc"], "name": product["name"], "brand": product.get("brand", ""),
+             "size": product.get("size", ""), "price": product.get("price"),
+             "image": product.get("image", ""),
+             "quantity": quantity,
+             "trip_id": trip["id"], "item_name": item_name.lower()},
+        )
     # Update trip source based on what's happening
     conn.execute(
         text("""UPDATE grocery_trips SET order_source = CASE

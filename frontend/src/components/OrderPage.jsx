@@ -726,9 +726,9 @@ export default function OrderPage() {
         {pickedCount > 0 ? (
           <>
             <div className={styles.orderSummaryListLabel}>Selected so far</div>
-            {order.selected.map(item => (
-              <div key={item.name} className={styles.orderSummaryRow}>
-                <span className={styles.orderSummaryItemName}>{item.name}</span>
+            {order.selected.map((item, idx) => (
+              <div key={item.product?.upc || `sel-${idx}`} className={styles.orderSummaryRow}>
+                <span className={styles.orderSummaryItemName}>{item.product?.name || item.name}</span>
                 <span className={styles.orderSummaryItemPrice}>
                   {item.product?.price ? (
                     (item.product.quantity || 1) > 1
