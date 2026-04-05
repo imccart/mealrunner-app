@@ -166,6 +166,9 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
   const [storeZip, setStoreZip] = useState('')
   const [storeResults, setStoreResults] = useState(null)
   const [selectedLocation, setSelectedLocation] = useState(null)
+  const [comparisonStores, setComparisonStores] = useState(new Set())
+  const [compZip, setCompZip] = useState('')
+  const [compResults, setCompResults] = useState(null)
 
   // Step 5: Tour
   const [tourStep, setTourStep] = useState(0)
@@ -692,20 +695,23 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
                   {krogerConnected && !selectedLocation && (
                     <>
                       <div className={styles.stepHint} style={{ marginBottom: 8 }}>Select your preferred store:</div>
-                      {(!storeResults || storeResults.length === 0) && (
-                        <form onSubmit={handleSearchStores} className={styles.inputRow} style={{ marginBottom: 8 }}>
-                          <input className={styles.input} type="text" placeholder="Zip code..."
-                            value={storeZip} onChange={(e) => setStoreZip(e.target.value)} />
-                          <button className="btn primary" type="submit">Find stores</button>
-                        </form>
-                      )}
+                      <form onSubmit={handleSearchStores} className={styles.inputRow} style={{ marginBottom: 8 }}>
+                        <input className={styles.input} type="text" placeholder="Search by zip code..."
+                          value={storeZip} onChange={(e) => setStoreZip(e.target.value)} />
+                        <button className="btn primary" type="submit">Search</button>
+                      </form>
                       {storeResults && storeResults.length > 0 && (
                         <div className={styles.storeList}>
                           {storeResults.map(loc => (
                             <button
                               key={loc.location_id}
-                              className={`${styles.storeItem}${selectedLocation === loc.location_id ? ` ${styles.storeItemSelected}` : ''}`}
-                              onClick={() => setSelectedLocation(loc.location_id)}
+                              className={styles.storeItem}
+                              onClick={() => {
+                                setSelectedLocation(loc.location_id)
+                                // Auto-populate comparison stores (all others)
+                                const others = storeResults.filter(l => l.location_id !== loc.location_id).map(l => l.location_id)
+                                setComparisonStores(new Set(others))
+                              }}
                             >
                               <strong>{loc.name.replace(/^Kroger\s*-?\s*/i, '')}</strong>
                               <span>{loc.address}</span>
@@ -714,17 +720,83 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
                         </div>
                       )}
                       {storeResults && storeResults.length === 0 && (
-                        <div className={styles.stepHint}>No stores found nearby.</div>
+                        <div className={styles.stepHint}>No stores found. Try a different zip code.</div>
                       )}
                     </>
                   )}
 
-                  {/* Phase 3: Preferred store selected */}
+                  {/* Phase 3: Preferred store selected + comparison stores */}
                   {selectedLocation && (
-                    <div className={styles.storeConnected}>
-                      <div className={styles.storeCheck}>{'\u2713'}</div>
-                      <div>{storeResults?.find(l => l.location_id === selectedLocation)?.name.replace(/^Kroger\s*-?\s*/i, '') || 'Store selected'}</div>
-                    </div>
+                    <>
+                      <div className={styles.storeConnected}>
+                        <div className={styles.storeCheck}>{'\u2713'}</div>
+                        <div>{storeResults?.find(l => l.location_id === selectedLocation)?.name.replace(/^Kroger\s*-?\s*/i, '') || 'Store selected'}</div>
+                        <button className={styles.storeChange} onClick={() => setSelectedLocation(null)}>Change</button>
+                      </div>
+
+                      {/* Comparison stores */}
+                      {storeResults && storeResults.filter(l => l.location_id !== selectedLocation).length > 0 && (
+                        <div style={{ marginTop: 16 }}>
+                          <div className={styles.stepHint} style={{ marginBottom: 8 }}>
+                            We can also compare prices at nearby stores. Uncheck any you'd never shop at.
+                          </div>
+                          <div className={styles.storeList}>
+                            {storeResults.filter(l => l.location_id !== selectedLocation).map(loc => (
+                              <label key={loc.location_id} className={styles.storeCompItem}>
+                                <input
+                                  type="checkbox"
+                                  checked={comparisonStores.has(loc.location_id)}
+                                  onChange={() => setComparisonStores(prev => {
+                                    const next = new Set(prev)
+                                    next.has(loc.location_id) ? next.delete(loc.location_id) : next.add(loc.location_id)
+                                    return next
+                                  })}
+                                />
+                                <div>
+                                  <strong>{loc.name.replace(/^Kroger\s*-?\s*/i, '')}</strong>
+                                  <span>{loc.address}</span>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+
+                          {/* Search another zip for comparison */}
+                          <form onSubmit={async (e) => {
+                            e.preventDefault()
+                            if (!compZip.trim()) return
+                            try {
+                              const data = await api.searchKrogerLocations(compZip.trim())
+                              setCompResults(data.locations || [])
+                            } catch { setCompResults([]) }
+                          }} className={styles.inputRow} style={{ marginTop: 8 }}>
+                            <input className={styles.input} type="text" placeholder="Search another zip..."
+                              value={compZip} onChange={(e) => setCompZip(e.target.value)} />
+                            <button className="btn primary" type="submit">Search</button>
+                          </form>
+                          {compResults && compResults.length > 0 && (
+                            <div className={styles.storeList}>
+                              {compResults.filter(l => l.location_id !== selectedLocation && !storeResults.some(s => s.location_id === l.location_id)).map(loc => (
+                                <label key={loc.location_id} className={styles.storeCompItem}>
+                                  <input
+                                    type="checkbox"
+                                    checked={comparisonStores.has(loc.location_id)}
+                                    onChange={() => setComparisonStores(prev => {
+                                      const next = new Set(prev)
+                                      next.has(loc.location_id) ? next.delete(loc.location_id) : next.add(loc.location_id)
+                                      return next
+                                    })}
+                                  />
+                                  <div>
+                                    <strong>{loc.name.replace(/^Kroger\s*-?\s*/i, '')}</strong>
+                                    <span>{loc.address}</span>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </details>

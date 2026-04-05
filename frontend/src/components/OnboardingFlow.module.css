@@ -763,6 +763,39 @@
 .storeProviderBody {
   padding: 12px 16px;
 }
+.storeChange {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: auto;
+  font-family: 'DM Sans', sans-serif;
+}
+.storeChange:hover { text-decoration: underline; }
+.storeCompItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--tan);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.storeCompItem input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.storeCompItem div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.storeCompItem span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
 
 /* Clippy guide */
 .clippyContainer {
