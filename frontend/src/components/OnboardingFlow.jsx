@@ -346,7 +346,7 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
 
         {/* Step 0: Welcome */}
         {step === 0 && (
-          <div className={styles.step}>
+          <div className={styles.step} style={{ textAlign: 'center' }}>
             <div className={styles.logo}>meal<em>runner</em></div>
             {isHousehold ? (
               <>
