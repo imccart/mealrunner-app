@@ -337,6 +337,18 @@ def _run_column_migrations(conn: DictConnection) -> None:
     # Swap unique constraints: old (search_term, upc) / (user_id, upc) → new product_key-based
     _migrate_product_key_constraints(conn)
 
+    # Ensure recipes has UNIQUE(name, user_id) not just UNIQUE(name)
+    try:
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS recipes_name_user_id_key ON recipes(name, user_id)"
+        ))
+        conn.commit()
+    except Exception:
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
     # brand_ownership: UNIQUE(brand) → UNIQUE(brand, category)
     _migrate_brand_ownership_constraint(conn)
 
