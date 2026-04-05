@@ -763,6 +763,26 @@
 .storeProviderBody {
   padding: 12px 16px;
 }
+.featureHighlights {
+  border-top: 1px solid var(--tan);
+  margin-top: 20px;
+  padding-top: 4px;
+}
+.featureCard {
+  padding: 12px;
+  border: 1px solid var(--tan);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--brown);
+}
+.featureCard strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--dark);
+  font-size: 14px;
+}
 .storeChange {
   background: none;
   border: none;

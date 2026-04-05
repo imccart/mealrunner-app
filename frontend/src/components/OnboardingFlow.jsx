@@ -239,10 +239,11 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
         // Save regulars
         await api.saveOnboardingRegulars([...selectedRegulars])
       } else if (step === 4) {
-        // Store — save location
+        // Store — save location + enable price tracking by default
         if (selectedLocation) {
           await api.setKrogerLocation(selectedLocation, storeZip.trim())
         }
+        await api.setPriceTracking({ price_polling: true, price_sharing: true })
       } else if (step === 5) {
         // Tour complete — finish onboarding
         await api.completeOnboarding()
@@ -805,6 +806,23 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
 
             <div className={styles.stepHint} style={{ marginTop: 12, fontStyle: 'italic' }}>
               More store integrations coming soon.
+            </div>
+
+            <div className={styles.featureHighlights}>
+              <div className={styles.stepTitle} style={{ marginTop: 24 }}>While you shop</div>
+              <div className={styles.stepDesc}>
+                These features are on by default, but you can always opt out in your account settings.
+              </div>
+
+              <div className={styles.featureCard}>
+                <strong>Behind the Label</strong>
+                <div>On the Order page, we show you who really makes your food, including parent companies, food processing levels (NOVA scores), and FDA recall history.</div>
+              </div>
+
+              <div className={styles.featureCard}>
+                <strong>Price Tracking</strong>
+                <div>We check prices throughout the day so you can compare across nearby stores. We also anonymously share pricing data to help other families find better deals.</div>
+              </div>
             </div>
           </div>
         )}
