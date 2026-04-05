@@ -615,7 +615,7 @@ export default function GroceryPage({ sidebar = false }) {
       {!hasItems ? (
         <div className="empty-state">
           <div className="icon">{'\u{1F6D2}'}</div>
-          <p>No items yet. Tap the cart icon on a meal to add its ingredients.</p>
+          <p>No items yet. Add items from your meal ingredients or add them manually.</p>
         </div>
       ) : totalActive === 0 ? (
         <div className="empty-state">

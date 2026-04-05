@@ -16,7 +16,6 @@ export default function Nav({ page, setPage, kitchenOpen, onToggleKitchen, prefs
     <nav className="top-nav">
       <a href="#" className="logo" onClick={(e) => { e.preventDefault(); setPage('plan') }}>
         meal<em>runner</em>
-        {isWide && <span className="tagline">From planning to pantry.</span>}
       </a>
       <div className="nav-right">
         <div className="nav-links">
