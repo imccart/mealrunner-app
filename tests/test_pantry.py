@@ -1,6 +1,6 @@
 """Tests for pantry CRUD."""
 
-from souschef.pantry import (
+from mealrunner.pantry import (
     add_pantry_item,
     clear_pantry,
     get_pantry_quantity,

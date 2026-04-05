@@ -226,7 +226,7 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
       } else if (step === 5) {
         // Tour complete — finish onboarding
         await api.completeOnboarding()
-        localStorage.setItem('souschef_onboarded', 'true')
+        localStorage.setItem('mealrunner_onboarded', 'true')
         onComplete()
         return
       }
@@ -459,7 +459,7 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
 
             {/* Time survey */}
             <div className={styles.timeSurvey}>
-              <div className={styles.timeLabel}>Before Souschef, how long did meal planning and grocery shopping take each week?</div>
+              <div className={styles.timeLabel}>Before MealRunner, how long did meal planning and grocery shopping take each week?</div>
               <div className={styles.timeOptions}>
                 {TIME_OPTIONS.map(opt => (
                   <button

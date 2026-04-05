@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MealRunner — Mobile Final</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FAF7F2;
+    --warm-white: #F5F0E8;
+    --tan: #E8DDD0;
+    --brown: #8B6F5E;
+    --dark: #2C2420;
+    --accent: #D4623A;
+    --accent-light: #F0A882;
+    --accent-bg: #FFF5F0;
+    --green: #4A7C59;
+    --green-light: #E8F0EB;
+    --text-muted: #9B8B80;
+    --text-light: #C4B8B0;
+    --overlay: rgba(44, 36, 32, 0.5);
+    --nova1-bg: #E8F0EB; --nova1: #4A7C59;
+    --nova2-bg: #F0F4DC; --nova2: #7A8C3A;
+    --nova3-bg: #FDF0DC; --nova3: #C47F2A;
+    --nova4-bg: #FDECEA; --nova4: #C43A2A;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #E8E0D8;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    gap: 40px;
+  }
+
+  .page-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 13px; color: #8B7B70;
+    letter-spacing: 0.12em; text-transform: uppercase; text-align: center;
+  }
+
+  .phone-row {
+    display: flex; gap: 28px; align-items: flex-start;
+    flex-wrap: wrap; justify-content: center;
+  }
+
+  .phone-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+  .phone-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #8B7B70;
+  }
+
+  .phone {
+    width: 320px; height: 620px; background: var(--cream);
+    border-radius: 36px; overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 0 0 8px #2C2420, 0 0 0 10px #3D3330;
+    position: relative; display: flex; flex-direction: column;
+  }
+
+  .status-bar {
+    background: var(--cream); padding: 12px 24px 4px;
+    display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+  }
+  .status-time { font-size: 13px; font-weight: 600; color: var(--dark); }
+  .status-icons { font-size: 11px; color: var(--dark); }
+
+  .screen {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+    padding-bottom: 64px; scrollbar-width: none;
+  }
+  .screen::-webkit-scrollbar { display: none; }
+
+  .top-nav {
+    padding: 12px 20px 8px; display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--tan); background: var(--cream);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .logo { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 600; color: var(--dark); }
+  .logo em { color: var(--accent); font-style: italic; }
+  .nav-icon-btn {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--warm-white); border: 1px solid var(--tan);
+    display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer;
+  }
+
+  .screen-pad { padding: 16px 20px; }
+  .screen-heading { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 600; color: var(--dark); margin-bottom: 2px; }
+  .screen-sub { font-size: 12px; color: var(--text-muted); font-weight: 300; margin-bottom: 14px; }
+
+  .status-line {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500;
+    padding: 5px 12px; border-radius: 20px; margin-bottom: 16px;
+    background: var(--green-light); color: var(--green);
+  }
+  .status-line.pending { background: var(--accent-bg); color: var(--accent); }
+
+  .meal-row {
+    background: white; border: 1px solid var(--tan); border-radius: 10px;
+    padding: 12px 14px; margin: 0 16px 8px;
+    display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.18s;
+  }
+  .meal-row.today { border-color: var(--accent-light); background: linear-gradient(135deg,#fff 0%,#FDF5F0 100%); }
+  .meal-row.on-list { border-color: #B8D4BF; background: linear-gradient(135deg,#fff 0%,#F2F8F4 100%); }
+
+  .meal-day { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); width: 28px; flex-shrink: 0; }
+  .meal-row.today .meal-day { color: var(--accent); }
+  .meal-row.on-list .meal-day { color: var(--green); }
+
+  .meal-info { flex: 1; }
+  .meal-name { font-size: 14px; font-weight: 500; color: var(--dark); line-height: 1.3; }
+  .meal-side { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .meal-actions { display: flex; gap: 6px; }
+  .meal-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: var(--warm-white); border: 1px solid var(--tan);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; cursor: pointer; color: var(--text-muted);
+  }
+  .meal-btn.on-list { background: var(--green-light); border-color: #B8D4BF; color: var(--green); }
+
+  .empty-day-row {
+    background: white; border: 1px dashed var(--tan); border-radius: 10px;
+    padding: 12px 14px; margin: 0 16px 8px;
+    display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.18s;
+  }
+  .empty-day-row:hover { border-color: var(--accent-light); background: var(--accent-bg); }
+  .empty-day-label { font-size: 13px; color: var(--text-light); }
+
+  .plan-footer {
+    padding: 12px 16px 10px; border-top: 1px solid var(--tan); background: var(--cream);
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    position: sticky; bottom: 64px;
+  }
+  .btn-build {
+    width: 100%; background: var(--accent); color: white; border: none;
+    padding: 12px; border-radius: 9px; font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(212,98,58,0.25);
+  }
+  .new-plan-link {
+    font-size: 12px; color: var(--text-light); cursor: pointer;
+    border-bottom: 1px dashed var(--text-light); padding-bottom: 1px;
+  }
+
+  /* BOTTOM NAV — 4 tabs */
+  .bottom-nav {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 64px;
+    background: white; border-top: 1px solid var(--tan);
+    display: flex; align-items: center; padding: 0 4px 6px; z-index: 20;
+  }
+  .nav-tab {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    gap: 3px; cursor: pointer; padding: 8px 4px 0; border-radius: 10px;
+  }
+  .nav-tab-icon { font-size: 18px; color: var(--text-light); }
+  .nav-tab-label { font-size: 10px; color: var(--text-muted); font-weight: 500; letter-spacing: 0.01em; }
+  .nav-tab.active .nav-tab-icon { color: var(--accent); }
+  .nav-tab.active .nav-tab-label { color: var(--accent); font-weight: 600; }
+
+  /* GROCERY */
+  .grocery-group { margin-bottom: 4px; }
+  .group-header {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-muted); padding: 12px 20px 6px; display: flex; justify-content: space-between;
+  }
+  .group-count { color: var(--text-light); font-weight: 400; }
+  .grocery-item {
+    display: flex; align-items: center; gap: 12px; padding: 11px 20px;
+    border-bottom: 1px solid var(--warm-white); background: white; cursor: pointer;
+  }
+  .g-check {
+    width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--tan);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 10px; transition: all 0.15s;
+  }
+  .g-check.done { background: var(--green); border-color: var(--green); color: white; font-weight: 700; }
+  .g-check.ordered { background: var(--accent-bg); border-color: var(--accent-light); color: var(--accent); font-size: 9px; }
+  .g-name { flex: 1; font-size: 14px; font-weight: 400; color: var(--dark); }
+  .g-name.done-text { text-decoration: line-through; color: var(--text-light); }
+  .g-name.ordered-text { color: var(--text-muted); }
+  .g-for { font-size: 11px; color: var(--text-light); }
+
+  .grocery-footer {
+    position: sticky; bottom: 64px; left: 0; right: 0;
+    background: white; border-top: 1px solid var(--tan);
+    padding: 10px 16px; display: flex; gap: 8px; z-index: 10;
+  }
+  .add-input {
+    flex: 1; border: 1px solid var(--tan); border-radius: 8px;
+    padding: 9px 12px; font-family: 'DM Sans', sans-serif; font-size: 13px;
+    background: var(--warm-white); outline: none; color: var(--dark);
+  }
+  .add-btn { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 9px 14px; font-size: 16px; cursor: pointer; }
+
+  /* SHEET */
+  .sheet-overlay {
+    position: absolute; inset: 0; background: var(--overlay); z-index: 30;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    border-radius: 36px; overflow: hidden;
+  }
+  .sheet { background: white; border-radius: 24px 24px 0 0; padding: 12px 20px 32px; }
+  .sheet-handle { width: 36px; height: 4px; background: var(--tan); border-radius: 2px; margin: 0 auto 16px; }
+  .sheet-title { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 600; color: var(--dark); margin-bottom: 4px; }
+  .sheet-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; font-weight: 300; }
+  .carry-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--warm-white); font-size: 13px; color: var(--dark); }
+  .carry-check { width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; background: var(--green-light); border: 1px solid #B8D4BF; color: var(--green); font-weight: 700; }
+  .sheet-btn-row { display: flex; gap: 8px; margin-top: 16px; }
+  .sheet-btn-secondary { flex: 1; background: var(--warm-white); border: 1px solid var(--tan); border-radius: 8px; padding: 11px; font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; color: var(--dark); }
+  .sheet-btn-primary { flex: 2; background: var(--accent); border: none; border-radius: 8px; padding: 11px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: white; cursor: pointer; font-weight: 600; }
+
+  .meal-pill-sm {
+    background: white; border: 1px solid var(--tan); border-radius: 20px;
+    padding: 7px 14px; font-size: 13px; color: var(--dark); cursor: pointer; display: inline-block;
+  }
+  .meal-pill-sm.eating-out { background: var(--accent-bg); border-color: var(--accent-light); color: var(--accent); }
+
+  /* ORDER */
+  .order-active {
+    margin: 0 16px 8px; background: var(--accent-bg);
+    border: 1.5px solid var(--accent-light); border-radius: 10px; padding: 12px 14px;
+  }
+  .order-active-label { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+  .order-active-name { font-size: 15px; font-weight: 600; color: var(--dark); margin-bottom: 10px; }
+
+  .product-opt {
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 6px;
+    border: 1px solid var(--tan); background: white;
+  }
+  .product-opt.selected { background: var(--green-light); border-color: #B8D4BF; }
+  .product-opt-name { font-size: 13px; font-weight: 500; color: var(--dark); }
+  .product-opt.selected .product-opt-name { color: var(--green); font-weight: 600; }
+  .product-opt-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .product-badges { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+  .badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+  .n1 { background: var(--nova1-bg); color: var(--nova1); }
+  .n2 { background: var(--nova2-bg); color: var(--nova2); }
+  .n3 { background: var(--nova3-bg); color: var(--nova3); }
+  .n4 { background: var(--nova4-bg); color: var(--nova4); }
+  .b-owned { background: var(--warm-white); color: var(--brown); font-weight: 600; }
+
+  .order-queue-label { padding: 8px 20px 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+
+  .order-footer {
+    position: absolute; bottom: 64px; left: 0; right: 0;
+    background: white; border-top: 1px solid var(--tan); padding: 10px 16px;
+  }
+  .finalize-btn {
+    width: 100%; background: var(--dark); color: white; border: none;
+    border-radius: 8px; padding: 12px; font-family: 'DM Sans', sans-serif;
+    font-size: 13px; font-weight: 500; cursor: pointer;
+  }
+
+  /* RECEIPT */
+  .receipt-item {
+    display: flex; align-items: flex-start; gap: 12px; padding: 11px 20px;
+    border-bottom: 1px solid var(--warm-white); background: white;
+  }
+  .receipt-status {
+    width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700;
+  }
+  .rs-match { background: var(--green-light); color: var(--green); border: 1.5px solid #B8D4BF; }
+  .rs-sub { background: #FFF3E0; color: var(--accent); border: 1.5px solid var(--accent-light); font-size: 8px; }
+  .rs-missing { background: var(--nova4-bg); color: var(--nova4); border: 1.5px solid #F0B8B8; }
+  .receipt-info { flex: 1; }
+  .receipt-name { font-size: 13px; font-weight: 500; color: var(--dark); }
+  .receipt-note { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .receipt-price { font-size: 13px; font-weight: 500; color: var(--dark); }
+
+  .section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); padding: 14px 20px 8px; }
+
+  /* HISTORY */
+  .trip-card { background: white; border: 1px solid var(--tan); border-radius: 10px; padding: 14px 16px; margin: 0 16px 8px; }
+  .trip-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+  .trip-title { font-size: 14px; font-weight: 600; color: var(--dark); }
+  .trip-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+  .badge-complete { background: var(--green-light); color: var(--green); }
+  .badge-partial { background: #FFF3E0; color: var(--accent); }
+  .badge-active { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent-light); }
+  .trip-meta { font-size: 12px; color: var(--text-muted); }
+  .trip-preview { font-size: 11px; color: var(--text-light); margin-top: 3px; }
+</style>
+</head>
+<body>
+
+<div class="page-title">MealRunner — Mobile Final · Plan / Grocery / Order / Receipt</div>
+
+<div class="phone-row">
+
+  <!-- 1. PLAN -->
+  <div class="phone-wrap">
+    <div class="phone-label">Plan</div>
+    <div class="phone">
+      <div class="status-bar"><div class="status-time">9:41</div><div class="status-icons">●●● 🔋</div></div>
+      <div class="screen">
+        <div class="top-nav"><div class="logo">sous<em>chef</em></div><div class="nav-icon-btn">⚙</div></div>
+        <div class="screen-pad">
+          <div class="screen-heading">Your meals</div>
+          <div class="screen-sub">Mar 10 – 16</div>
+          <div class="status-line pending">5 meals planned · list not started</div>
+        </div>
+        <div class="meal-row today on-list">
+          <div class="meal-day">TUE</div>
+          <div class="meal-info"><div class="meal-name">Beans, Rice & Sausage</div></div>
+          <div class="meal-actions"><div class="meal-btn">⇄</div><div class="meal-btn on-list">✓</div></div>
+        </div>
+        <div class="meal-row on-list">
+          <div class="meal-day">WED</div>
+          <div class="meal-info"><div class="meal-name">Empanadas</div><div class="meal-side">refried beans</div></div>
+          <div class="meal-actions"><div class="meal-btn">⇄</div><div class="meal-btn on-list">✓</div></div>
+        </div>
+        <div class="meal-row">
+          <div class="meal-day">THU</div>
+          <div class="meal-info"><div class="meal-name">Mac and Cheese</div><div class="meal-side">peas, corn</div></div>
+          <div class="meal-actions"><div class="meal-btn">⇄</div><div class="meal-btn">🛒</div></div>
+        </div>
+        <div class="meal-row">
+          <div class="meal-day">FRI</div>
+          <div class="meal-info"><div class="meal-name" style="color:var(--text-muted);font-weight:300;">Eating Out</div></div>
+          <div class="meal-actions"><div class="meal-btn">⇄</div></div>
+        </div>
+        <div class="meal-row">
+          <div class="meal-day">SAT</div>
+          <div class="meal-info"><div class="meal-name">Turkey Burgers</div><div class="meal-side">corn on the cob</div></div>
+          <div class="meal-actions"><div class="meal-btn">⇄</div><div class="meal-btn">🛒</div></div>
+        </div>
+        <div class="empty-day-row">
+          <div class="meal-day" style="color:var(--text-light)">SUN</div>
+          <div class="empty-day-label">Tap to add a meal</div>
+        </div>
+        <div class="empty-day-row">
+          <div class="meal-day" style="color:var(--text-light)">MON</div>
+          <div class="empty-day-label">Tap to add a meal</div>
+        </div>
+        <div style="height:16px;"></div>
+      </div>
+      <div class="plan-footer">
+        <button class="btn-build">Build My List →</button>
+        <span class="new-plan-link">Start a new plan</span>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab active"><div class="nav-tab-icon">🗓</div><div class="nav-tab-label">Plan</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">🛒</div><div class="nav-tab-label">Grocery</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">📦</div><div class="nav-tab-label">Order</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">🧾</div><div class="nav-tab-label">Receipt</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. ADD A MEAL -->
+  <div class="phone-wrap">
+    <div class="phone-label">Add a Meal</div>
+    <div class="phone">
+      <div class="status-bar"><div class="status-time">9:41</div><div class="status-icons">●●● 🔋</div></div>
+      <div class="screen">
+        <div class="top-nav"><div class="logo">sous<em>chef</em></div><div class="nav-icon-btn">⚙</div></div>
+        <div class="screen-pad" style="opacity:0.3;">
+          <div class="screen-heading">Your meals</div>
+          <div class="screen-sub">Mar 10 – 16</div>
+          <div class="meal-row today"><div class="meal-day">TUE</div><div class="meal-info"><div class="meal-name">Beans, Rice & Sausage</div></div></div>
+          <div class="empty-day-row" style="border-color:var(--accent);background:var(--accent-bg);">
+            <div class="meal-day" style="color:var(--accent)">SUN</div>
+            <div class="empty-day-label" style="color:var(--accent)">Tap to add a meal</div>
+          </div>
+        </div>
+      </div>
+      <div class="sheet-overlay">
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Sunday</div>
+          <div class="sheet-sub">What are you making?</div>
+          <input style="width:100%;border:1px solid var(--tan);border-radius:8px;padding:10px 14px;font-family:'DM Sans',sans-serif;font-size:13px;background:var(--warm-white);outline:none;color:var(--dark);margin-bottom:14px;" placeholder="Search or type a meal...">
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;">Recent meals</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <div class="meal-pill-sm">Chicken Tacos</div>
+            <div class="meal-pill-sm">Spaghetti</div>
+            <div class="meal-pill-sm">Stir Fry</div>
+            <div class="meal-pill-sm">Pizza Night</div>
+            <div class="meal-pill-sm">Pork Chops</div>
+            <div class="meal-pill-sm">Grilled Salmon</div>
+            <div class="meal-pill-sm eating-out">Eating Out</div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab active"><div class="nav-tab-icon">🗓</div><div class="nav-tab-label">Plan</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">🛒</div><div class="nav-tab-label">Grocery</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">📦</div><div class="nav-tab-label">Order</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">🧾</div><div class="nav-tab-label">Receipt</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. BUILD MY LIST — CARRYOVER -->
+  <div class="phone-wrap">
+    <div class="phone-label">Build My List</div>
+    <div class="phone">
+      <div class="status-bar"><div class="status-time">9:41</div><div class="status-icons">●●● 🔋</div></div>
+      <div class="screen">
+        <div class="top-nav"><div class="logo">sous<em>chef</em></div><div class="nav-icon-btn">⚙</div></div>
+        <div class="screen-pad" style="opacity:0.3;"><div class="screen-heading">Your meals</div><div class="screen-sub">Mar 10 – 16</div></div>
+      </div>
+      <div class="sheet-overlay">
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Still need these?</div>
+          <div class="sheet-sub">3 items weren't checked off last trip</div>
+          <div class="carry-item"><div class="carry-check">✓</div>ground turkey</div>
+          <div class="carry-item"><div class="carry-check">✓</div>hamburger buns</div>
+          <div class="carry-item"><div class="carry-check">✓</div>oat milk creamer</div>
+          <div class="sheet-btn-row">
+            <button class="sheet-btn-secondary">Skip</button>
+            <button class="sheet-btn-primary">Carry over →</button>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab active"><div class="nav-tab-icon">🗓</div><div class="nav-tab-label">Plan</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">🛒</div><div class="nav-tab-label">Grocery</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">📦</div><div class="nav-tab-label">Order</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">🧾</div><div class="nav-tab-label">Receipt</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. GROCERY -->
+  <div class="phone-wrap">
+    <div class="phone-label">Grocery</div>
+    <div class="phone">
+      <div class="status-bar"><div class="status-time">9:41</div><div class="status-icons">●●● 🔋</div></div>
+      <div class="screen">
+        <div class="top-nav"><div class="logo">sous<em>chef</em></div><div class="nav-icon-btn">⚙</div></div>
+        <div class="screen-pad" style="padding-bottom:8px;">
+          <div class="screen-heading">Grocery List</div>
+          <div class="screen-sub">Mar 10 trip · 10 items left</div>
+        </div>
+        <div class="grocery-group">
+          <div class="group-header">Meat <span class="group-count">2 left</span></div>
+          <div class="grocery-item"><div class="g-check done">✓</div><div class="g-name done-text">chicken thighs</div><div class="g-for">Beans & Rice</div></div>
+          <div class="grocery-item"><div class="g-check ordered">↑</div><div class="g-name ordered-text">ground turkey</div><div class="g-for">Burgers · ordered</div></div>
+          <div class="grocery-item"><div class="g-check"></div><div class="g-name">andouille sausage</div><div class="g-for">Beans & Rice</div></div>
+        </div>
+        <div class="grocery-group">
+          <div class="group-header">Bread & Pasta <span class="group-count">1 left</span></div>
+          <div class="grocery-item"><div class="g-check ordered">↑</div><div class="g-name ordered-text">flour tortillas</div><div class="g-for">Empanadas · ordered</div></div>
+          <div class="grocery-item"><div class="g-check"></div><div class="g-name">hamburger buns</div><div class="g-for">Burgers</div></div>
+        </div>
+        <div class="grocery-group">
+          <div class="group-header">Dairy <span class="group-count">1 left</span></div>
+          <div class="grocery-item"><div class="g-check done">✓</div><div class="g-name done-text">butter</div></div>
+          <div class="grocery-item"><div class="g-check"></div><div class="g-name">shredded cheese</div><div class="g-for">Mac & Cheese</div></div>
+        </div>
+        <div class="grocery-group">
+          <div class="group-header">Other <span class="group-count">2 left</span></div>
+          <div class="grocery-item"><div class="g-check done">✓</div><div class="g-name done-text">milk</div></div>
+          <div class="grocery-item"><div class="g-check"></div><div class="g-name">eggs</div></div>
+          <div class="grocery-item"><div class="g-check"></div><div class="g-name">oat milk creamer</div></div>
+        </div>
+        <div style="height:60px;"></div>
+      </div>
+      <div class="grocery-footer">
+        <input class="add-input" type="text" placeholder="Add item...">
+        <button class="add-btn">+</button>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab"><div class="nav-tab-icon">🗓</div><div class="nav-tab-label">Plan</div></div>
+        <div class="nav-tab active"><div class="nav-tab-icon">🛒</div><div class="nav-tab-label">Grocery</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">📦</div><div class="nav-tab-label">Order</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">🧾</div><div class="nav-tab-label">Receipt</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. ORDER -->
+  <div class="phone-wrap">
+    <div class="phone-label">Order</div>
+    <div class="phone">
+      <div class="status-bar"><div class="status-time">9:41</div><div class="status-icons">●●● 🔋</div></div>
+      <div class="screen">
+        <div class="top-nav"><div class="logo">sous<em>chef</em></div><div class="nav-icon-btn">⚙</div></div>
+        <div class="screen-pad" style="padding-bottom:8px;">
+          <div class="screen-heading">Select Products</div>
+          <div class="screen-sub">Unchecked items · 8 remaining</div>
+        </div>
+        <div class="order-active">
+          <div class="order-active-label">Selecting now</div>
+          <div class="order-active-name">ground turkey</div>
+          <div class="product-opt selected">
+            <div class="product-opt-name">Kroger 93% Lean Ground Turkey</div>
+            <div class="product-opt-meta">1 lb · $5.49</div>
+            <div class="product-badges">
+              <span class="badge n1">NOVA 1</span>
+              <span class="badge b-owned">Kroger brand</span>
+            </div>
+          </div>
+          <div class="product-opt">
+            <div class="product-opt-name">Butterball Fresh Ground Turkey</div>
+            <div class="product-opt-meta">1 lb · $6.29</div>
+            <div class="product-badges">
+              <span class="badge n1">NOVA 1</span>
+              <span class="badge b-owned">Owned by Seaboard</span>
+            </div>
+          </div>
+          <div class="product-opt">
+            <div class="product-opt-name">Jennie-O Lean Ground Turkey</div>
+            <div class="product-opt-meta">1 lb · $5.99</div>
+            <div class="product-badges">
+              <span class="badge n2">NOVA 2</span>
+              <span class="badge b-owned">Owned by Hormel</span>
+            </div>
+          </div>
+        </div>
+        <div class="order-queue-label">Up next</div>
+        <div class="grocery-item" style="opacity:0.6;"><div class="g-check"></div><div class="g-name">andouille sausage</div><div class="g-for">Beans & Rice</div></div>
+        <div class="grocery-item" style="opacity:0.6;"><div class="g-check"></div><div class="g-name">hamburger buns</div><div class="g-for">Burgers</div></div>
+        <div class="grocery-item" style="opacity:0.6;"><div class="g-check"></div><div class="g-name">shredded cheese</div><div class="g-for">Mac & Cheese</div></div>
+        <div style="height:70px;"></div>
+      </div>
+      <div class="order-footer">
+        <button class="finalize-btn">Finalize on Kroger →</button>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab"><div class="nav-tab-icon">🗓</div><div class="nav-tab-label">Plan</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">🛒</div><div class="nav-tab-label">Grocery</div></div>
+        <div class="nav-tab active"><div class="nav-tab-icon">📦</div><div class="nav-tab-label">Order</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">🧾</div><div class="nav-tab-label">Receipt</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. RECEIPT -->
+  <div class="phone-wrap">
+    <div class="phone-label">Receipt</div>
+    <div class="phone">
+      <div class="status-bar"><div class="status-time">9:41</div><div class="status-icons">●●● 🔋</div></div>
+      <div class="screen">
+        <div class="top-nav"><div class="logo">sous<em>chef</em></div><div class="nav-icon-btn">⚙</div></div>
+        <div class="screen-pad" style="padding-bottom:8px;">
+          <div class="screen-heading">Receipt</div>
+          <div class="screen-sub">Mar 10 Kroger order · $61.42</div>
+        </div>
+
+        <div class="section-label">Matched</div>
+        <div class="receipt-item">
+          <div class="receipt-status rs-match">✓</div>
+          <div class="receipt-info"><div class="receipt-name">Kroger Ground Turkey</div><div class="receipt-note">As selected</div></div>
+          <div class="receipt-price">$5.49</div>
+        </div>
+        <div class="receipt-item">
+          <div class="receipt-status rs-match">✓</div>
+          <div class="receipt-info"><div class="receipt-name">Mission Flour Tortillas</div><div class="receipt-note">As selected</div></div>
+          <div class="receipt-price">$3.29</div>
+        </div>
+        <div class="receipt-item">
+          <div class="receipt-status rs-match">✓</div>
+          <div class="receipt-info"><div class="receipt-name">Kroger Whole Milk</div><div class="receipt-note">As selected</div></div>
+          <div class="receipt-price">$4.19</div>
+        </div>
+
+        <div class="section-label">Substituted</div>
+        <div class="receipt-item">
+          <div class="receipt-status rs-sub">⇄</div>
+          <div class="receipt-info">
+            <div class="receipt-name">Kroger Hamburger Buns</div>
+            <div class="receipt-note">You selected: Nature's Own · still on list?</div>
+          </div>
+          <div class="receipt-price">$3.99</div>
+        </div>
+
+        <div class="section-label">Not fulfilled</div>
+        <div class="receipt-item">
+          <div class="receipt-status rs-missing">!</div>
+          <div class="receipt-info">
+            <div class="receipt-name">Andouille Sausage</div>
+            <div class="receipt-note">Out of stock · still on list</div>
+          </div>
+          <div class="receipt-price">—</div>
+        </div>
+
+        <div style="margin:12px 16px 0;">
+          <button style="width:100%;background:var(--accent);color:white;border:none;border-radius:8px;padding:12px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Add missing items back to list</button>
+        </div>
+        <div style="height:16px;"></div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab"><div class="nav-tab-icon">🗓</div><div class="nav-tab-label">Plan</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">🛒</div><div class="nav-tab-label">Grocery</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">📦</div><div class="nav-tab-label">Order</div></div>
+        <div class="nav-tab active"><div class="nav-tab-icon">🧾</div><div class="nav-tab-label">Receipt</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.querySelectorAll('.grocery-item').forEach(el => {
+  el.addEventListener('click', () => {
+    const check = el.querySelector('.g-check');
+    const name = el.querySelector('.g-name');
+    if (!check || check.classList.contains('ordered')) return;
+    check.classList.toggle('done');
+    check.textContent = check.classList.contains('done') ? '✓' : '';
+    if (name) name.classList.toggle('done-text');
+  });
+});
+document.querySelectorAll('.product-opt').forEach(el => {
+  el.addEventListener('click', () => {
+    el.closest('.order-active').querySelectorAll('.product-opt').forEach(p => p.classList.remove('selected'));
+    el.classList.add('selected');
+  });
+});
+</script>
+</body>
+</html>

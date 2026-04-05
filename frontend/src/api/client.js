@@ -16,13 +16,13 @@ function emitToast() {
   if (!navigator.onLine || _offlineDetected) {
     if (!_offlineDetected) {
       _offlineDetected = true
-      window.dispatchEvent(new Event('souschef-offline'))
+      window.dispatchEvent(new Event('mealrunner-offline'))
       window.addEventListener('online', () => { _offlineDetected = false }, { once: true })
     }
     return
   }
   const msg = TOAST_MESSAGES[Math.floor(Math.random() * TOAST_MESSAGES.length)]
-  window.dispatchEvent(new CustomEvent('souschef-toast', { detail: msg }))
+  window.dispatchEvent(new CustomEvent('mealrunner-toast', { detail: msg }))
 }
 
 // Paths where errors are handled by the caller (no toast)
@@ -40,7 +40,7 @@ async function request(path, options = {}) {
     if (!silent) {
       // Network error likely means offline
       _offlineDetected = true
-      window.dispatchEvent(new Event('souschef-offline'))
+      window.dispatchEvent(new Event('mealrunner-offline'))
       window.addEventListener('online', () => { _offlineDetected = false }, { once: true })
     }
     throw err

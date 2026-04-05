@@ -1,4 +1,4 @@
-# Souschef — Deployment Guide
+# MealRunner — Deployment Guide
 
 ## Local Development
 
@@ -13,7 +13,7 @@ npm install && npm run build
 
 # Start server
 cd ..
-uvicorn souschef.web.app:app --reload --port 8000
+uvicorn mealrunner.web.app:app --reload --port 8000
 
 # Access at http://localhost:8000/app
 # Vite dev server (hot reload): cd frontend && npm run dev → localhost:5173
@@ -95,7 +95,7 @@ open https://your-app.up.railway.app/app
 
 ## Database
 
-- **Local**: SQLite at `~/.souschef/souschef.db` (auto-created)
+- **Local**: SQLite at `~/.mealrunner/mealrunner.db` (auto-created)
 - **Production**: PostgreSQL via `DATABASE_URL`
 - Tables auto-create on first request (`create_all`)
 - Migrations run automatically (additive `ALTER TABLE` for new columns)
@@ -106,7 +106,7 @@ open https://your-app.up.railway.app/app
 ```
 Client (React SPA at /app)
   ↓ JSON API
-FastAPI (souschef.web.app)
+FastAPI (mealrunner.web.app)
   ↓ SQLAlchemy Core
 PostgreSQL (Railway) or SQLite (local)
 ```

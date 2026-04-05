@@ -348,7 +348,7 @@ export default function PreferencesSheet({ onClose }) {
               }}
             />
             <span>Share anonymous pricing data</span>
-            <div className={styles.prefsToggleHint}>Help other souschef users find better prices. We share product prices (not your identity or purchase history) with the community.</div>
+            <div className={styles.prefsToggleHint}>Help other mealrunner users find better prices. We share product prices (not your identity or purchase history) with the community.</div>
           </label>
         </AccordionSection>
 
@@ -382,7 +382,7 @@ export default function PreferencesSheet({ onClose }) {
         {/* Invite a Friend */}
         <AccordionSection title="Invite a Friend">
           <div className={ls.sectionHint}>
-            Know someone who'd like souschef? Give them their own account.
+            Know someone who'd like mealrunner? Give them their own account.
           </div>
           <form onSubmit={handleBetaInvite} className={ls.addRow}>
             <input
@@ -404,8 +404,8 @@ export default function PreferencesSheet({ onClose }) {
         {/* Sign Out */}
         <button className={styles.prefsSignOut} onClick={async () => {
           await api.logout()
-          localStorage.removeItem('souschef_onboarded')
-          localStorage.removeItem('souschef_welcomed')
+          localStorage.removeItem('mealrunner_onboarded')
+          localStorage.removeItem('mealrunner_welcomed')
           window.location.reload()
         }}>
           Sign out

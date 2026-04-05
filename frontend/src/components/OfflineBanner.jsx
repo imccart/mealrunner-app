@@ -10,11 +10,11 @@ export default function OfflineBanner() {
     window.addEventListener('offline', goOffline)
     window.addEventListener('online', goOnline)
     // Also listen for fetch failures as a fallback signal
-    window.addEventListener('souschef-offline', goOffline)
+    window.addEventListener('mealrunner-offline', goOffline)
     return () => {
       window.removeEventListener('offline', goOffline)
       window.removeEventListener('online', goOnline)
-      window.removeEventListener('souschef-offline', goOffline)
+      window.removeEventListener('mealrunner-offline', goOffline)
     }
   }, [])
 

@@ -1,4 +1,4 @@
-# Souschef — "Shopping Now" Mode Spec
+# MealRunner — "Shopping Now" Mode Spec
 
 ## Concept
 

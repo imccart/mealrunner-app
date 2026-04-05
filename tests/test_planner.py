@@ -1,6 +1,6 @@
 """Tests for meal plan generation."""
 
-from souschef.planner import (
+from mealrunner.planner import (
     DAY_NAMES,
     accept_meals,
     detect_bulk_components,

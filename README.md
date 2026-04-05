@@ -1,4 +1,4 @@
-# Souschef
+# MealRunner
 
 Meal planning and grocery logistics for families. Plan meals, build a grocery list, order from Kroger, reconcile what arrived.
 
@@ -25,7 +25,7 @@ Meal planning and grocery logistics for families. Plan meals, build a grocery li
 ```bash
 # Backend
 pip install -e ".[web,kroger]"
-uvicorn souschef.web.app:app --reload --port 8000
+uvicorn mealrunner.web.app:app --reload --port 8000
 
 # Frontend
 cd frontend

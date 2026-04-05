@@ -95,7 +95,7 @@ export default function LoginPage() {
           <div className={styles.sent}>
             <div className={styles.sentTitle}>No Stairway. Denied!</div>
             <div className={styles.sentDesc}>
-              Souschef is in early access. We'll let you know when there's a spot for you.
+              MealRunner is in early access. We'll let you know when there's a spot for you.
             </div>
             <button
               className={styles.resend}

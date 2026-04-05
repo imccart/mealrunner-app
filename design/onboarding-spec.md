@@ -1,8 +1,8 @@
-# Souschef Onboarding — Full Design & Implementation Spec v2
+# MealRunner Onboarding — Full Design & Implementation Spec v2
 
 ## Product Context
 
-Souschef is a meal planning and grocery shopping app for families. It automates weekly dinner planning, grocery list generation, store ordering (Kroger), and receipt reconciliation. Parent company: Aletheia (consumer transparency apps).
+MealRunner is a meal planning and grocery shopping app for families. It automates weekly dinner planning, grocery list generation, store ordering (Kroger), and receipt reconciliation. Parent company: Aletheia (consumer transparency apps).
 
 **Key differentiator**: This is NOT a recipe app. We don't expect users to follow intricate recipes or buy 1 tbsp of cumin. We build grocery lists the way most people actually do — a simple list of things you cross off as you buy them. The app knows that "tacos" means ground beef, tortillas, cheese, salsa. Spices, oils, and baking staples are assumed to be in the pantry already.
 
@@ -79,12 +79,12 @@ Each step has a speech bubble with Clippy's commentary. These are the locked qui
 
 ### Step 1: Welcome
 
-**Purpose:** Set the tone. Explain what Souschef is and what it does.
+**Purpose:** Set the tone. Explain what MealRunner is and what it does.
 
 **Framing sentence at top:** *"Tell us how your household eats and we'll handle the rest."*
 
 **Content:**
-- Souschef logo + ladle animation (existing welcome screen animation)
+- MealRunner logo + ladle animation (existing welcome screen animation)
 - Warm greeting
 - Brief value prop: *"We help you plan dinners, build grocery lists, and order from your favorite store — so you spend less time thinking about what's for dinner."*
 - *"Let's get your kitchen set up. It takes about 5 minutes."*
@@ -224,7 +224,7 @@ Each step has a speech bubble with Clippy's commentary. These are the locked qui
 
 After the user selects their meals, show a single inline question before advancing:
 
-*"Before Souschef, how long did meal planning and grocery shopping take each week?"*
+*"Before MealRunner, how long did meal planning and grocery shopping take each week?"*
 - Less than 30 minutes
 - 30–60 minutes
 - 1–2 hours
@@ -248,7 +248,7 @@ User lands on Plan tab with:
 ## Tone & Voice
 
 - Warm, casual, encouraging
-- First person plural ("we") — souschef is a helper, not a tool
+- First person plural ("we") — mealrunner is a helper, not a tool
 - Never condescending
 - Short sentences, simple words
 - Clippy is wry and self-aware — classic Clippy energy, not mean

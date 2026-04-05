@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MealRunner — Mobile Flows</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FAF7F2;
+    --warm-white: #F5F0E8;
+    --tan: #E8DDD0;
+    --brown: #8B6F5E;
+    --dark: #2C2420;
+    --accent: #D4623A;
+    --accent-light: #F0A882;
+    --accent-bg: #FFF5F0;
+    --green: #4A7C59;
+    --green-light: #E8F0EB;
+    --text-muted: #9B8B80;
+    --text-light: #C4B8B0;
+    --overlay: rgba(44, 36, 32, 0.5);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #E8E0D8;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    gap: 40px;
+  }
+
+  .page-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 13px;
+    color: #8B7B70;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  /* PHONE FRAME */
+  .phone-row {
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .phone-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .phone-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #8B7B70;
+  }
+
+  .phone {
+    width: 320px;
+    height: 620px;
+    background: var(--cream);
+    border-radius: 36px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 0 0 8px #2C2420, 0 0 0 10px #3D3330;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* STATUS BAR */
+  .status-bar {
+    background: var(--cream);
+    padding: 12px 24px 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .status-time {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--dark);
+  }
+
+  .status-icons {
+    font-size: 11px;
+    color: var(--dark);
+    display: flex;
+    gap: 4px;
+  }
+
+  /* SCREEN CONTENT */
+  .screen {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 70px;
+    scrollbar-width: none;
+  }
+
+  .screen::-webkit-scrollbar { display: none; }
+
+  /* TOP NAV */
+  .top-nav {
+    padding: 12px 20px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--tan);
+    background: var(--cream);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--dark);
+  }
+
+  .logo em { color: var(--accent); font-style: italic; }
+
+  .nav-icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--warm-white);
+    border: 1px solid var(--tan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  /* SCREEN SECTIONS */
+  .screen-pad { padding: 16px 20px; }
+
+  .screen-heading {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--dark);
+    margin-bottom: 2px;
+  }
+
+  .screen-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 300;
+    margin-bottom: 16px;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    margin-top: 16px;
+  }
+
+  /* STATUS LINE */
+  .status-line {
+    background: var(--green-light);
+    border-radius: 20px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--green);
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .status-line.pending {
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+
+  /* MEAL ROWS */
+  .meal-row {
+    background: white;
+    border: 1px solid var(--tan);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .meal-row.today {
+    border-color: var(--accent-light);
+    background: linear-gradient(135deg, #fff 0%, #FDF5F0 100%);
+  }
+
+  .meal-day {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    width: 28px;
+    flex-shrink: 0;
+  }
+
+  .meal-row.today .meal-day { color: var(--accent); }
+
+  .meal-info { flex: 1; }
+
+  .meal-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--dark);
+    line-height: 1.3;
+  }
+
+  .meal-side {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  .meal-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .meal-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: var(--warm-white);
+    border: 1px solid var(--tan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+
+  .meal-btn.on-list {
+    background: var(--green-light);
+    border-color: #B8D4BF;
+    color: var(--green);
+  }
+
+  .add-meal-row {
+    background: white;
+    border: 1px dashed var(--tan);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+  }
+
+  .add-meal-row:active { background: var(--warm-white); }
+
+  .add-label {
+    font-size: 13px;
+    color: var(--text-light);
+    font-weight: 400;
+  }
+
+  /* BOTTOM ACTIONS */
+  .bottom-actions {
+    padding: 12px 20px;
+    display: flex;
+    gap: 8px;
+    border-top: 1px solid var(--tan);
+    background: var(--cream);
+    position: sticky;
+    bottom: 70px;
+  }
+
+  .btn-fill {
+    flex: 1;
+    background: white;
+    border: 1px solid var(--tan);
+    border-radius: 8px;
+    padding: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--dark);
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .btn-primary {
+    flex: 1;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  /* BOTTOM NAV */
+  .bottom-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 70px;
+    background: white;
+    border-top: 1px solid var(--tan);
+    display: flex;
+    align-items: center;
+    padding: 0 8px 8px;
+    z-index: 20;
+  }
+
+  .nav-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    padding: 8px 4px 0;
+    border-radius: 10px;
+    transition: all 0.15s;
+  }
+
+  .nav-tab.active .nav-tab-icon { color: var(--accent); }
+  .nav-tab.active .nav-tab-label { color: var(--accent); font-weight: 600; }
+
+  .nav-tab-icon { font-size: 18px; color: var(--text-light); }
+  .nav-tab-label { font-size: 10px; color: var(--text-muted); font-weight: 500; letter-spacing: 0.02em; }
+
+  .nav-tab.quick-btn {
+    flex: 0 0 56px;
+  }
+
+  .quick-circle {
+    width: 48px;
+    height: 48px;
+    background: var(--accent);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: white;
+    box-shadow: 0 4px 12px rgba(212,98,58,0.4);
+    margin-top: -16px;
+  }
+
+  /* GROCERY SCREEN */
+  .grocery-group {
+    margin-bottom: 4px;
+  }
+
+  .group-header {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 12px 20px 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .group-count { color: var(--text-light); font-weight: 400; }
+
+  .grocery-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 20px;
+    border-bottom: 1px solid var(--warm-white);
+    background: white;
+    cursor: pointer;
+  }
+
+  .grocery-item:first-of-type { border-top: 1px solid var(--warm-white); }
+
+  .g-check {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid var(--tan);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    transition: all 0.15s;
+  }
+
+  .g-check.done {
+    background: var(--green);
+    border-color: var(--green);
+    color: white;
+    font-weight: 700;
+  }
+
+  .g-name { flex: 1; font-size: 14px; font-weight: 400; color: var(--dark); }
+  .g-name.done-text { text-decoration: line-through; color: var(--text-light); }
+  .g-for { font-size: 11px; color: var(--text-light); }
+
+  .add-regulars-btn {
+    margin: 12px 20px;
+    width: calc(100% - 40px);
+    background: var(--warm-white);
+    border: 1px dashed var(--tan);
+    border-radius: 8px;
+    padding: 11px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--brown);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .order-btn {
+    margin: 8px 20px 0;
+    width: calc(100% - 40px);
+    background: var(--dark);
+    border: none;
+    border-radius: 8px;
+    padding: 13px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    letter-spacing: 0.02em;
+  }
+
+  /* QUICK SHEET — overlaid on phone */
+  .sheet-overlay {
+    position: absolute;
+    inset: 0;
+    background: var(--overlay);
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    border-radius: 36px;
+    overflow: hidden;
+  }
+
+  .sheet {
+    background: white;
+    border-radius: 24px 24px 0 0;
+    padding: 12px 20px 32px;
+  }
+
+  .sheet-handle {
+    width: 36px;
+    height: 4px;
+    background: var(--tan);
+    border-radius: 2px;
+    margin: 0 auto 16px;
+  }
+
+  .sheet-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--dark);
+    margin-bottom: 4px;
+  }
+
+  .sheet-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    font-weight: 300;
+  }
+
+  .sheet-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sheet-option {
+    background: var(--cream);
+    border: 1.5px solid var(--tan);
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .sheet-option:hover, .sheet-option:active {
+    border-color: var(--accent-light);
+    background: var(--accent-bg);
+  }
+
+  .sheet-opt-icon {
+    width: 40px;
+    height: 40px;
+    background: white;
+    border-radius: 10px;
+    border: 1px solid var(--tan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .sheet-opt-info {}
+  .sheet-opt-title { font-size: 14px; font-weight: 600; color: var(--dark); margin-bottom: 2px; }
+  .sheet-opt-desc { font-size: 12px; color: var(--text-muted); font-weight: 300; }
+
+  /* CARRYOVER SHEET */
+  .carryover-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--warm-white);
+    font-size: 13px;
+    color: var(--dark);
+  }
+
+  .carry-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1.5px solid var(--tan);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    background: var(--green-light);
+    border-color: #B8D4BF;
+    color: var(--green);
+    font-weight: 700;
+  }
+
+  /* LISTS SCREEN */
+  .trip-card {
+    background: white;
+    border: 1px solid var(--tan);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 8px;
+  }
+
+  .trip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 6px;
+  }
+
+  .trip-title { font-size: 14px; font-weight: 600; color: var(--dark); }
+
+  .trip-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  .trip-badge.complete { background: var(--green-light); color: var(--green); }
+  .trip-badge.partial { background: #FFF3E0; color: var(--accent); }
+  .trip-badge.active { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent-light); }
+
+  .trip-meta { font-size: 12px; color: var(--text-muted); }
+  .trip-items-preview { font-size: 11px; color: var(--text-light); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="page-title">MealRunner — Mobile Screens</div>
+
+<div class="phone-row">
+
+  <!-- SCREEN 1: PLAN -->
+  <div class="phone-wrap">
+    <div class="phone-label">Plan</div>
+    <div class="phone">
+      <div class="status-bar">
+        <div class="status-time">9:41</div>
+        <div class="status-icons">●●● WiFi 🔋</div>
+      </div>
+      <div class="screen">
+        <div class="top-nav">
+          <div class="logo">sous<em>chef</em></div>
+          <div class="nav-icon-btn">⚙</div>
+        </div>
+        <div class="screen-pad">
+          <div class="screen-heading">Your meals</div>
+          <div class="screen-sub">Mar 10 – 16</div>
+          <div class="status-line">✓ List ready to order</div>
+
+          <div class="meal-row today">
+            <div class="meal-day">TUE</div>
+            <div class="meal-info">
+              <div class="meal-name">Beans, Rice & Sausage</div>
+            </div>
+            <div class="meal-actions">
+              <div class="meal-btn">⇄</div>
+              <div class="meal-btn on-list">🛒</div>
+            </div>
+          </div>
+
+          <div class="meal-row">
+            <div class="meal-day">WED</div>
+            <div class="meal-info">
+              <div class="meal-name">Empanadas</div>
+              <div class="meal-side">refried beans</div>
+            </div>
+            <div class="meal-actions">
+              <div class="meal-btn">⇄</div>
+              <div class="meal-btn on-list">🛒</div>
+            </div>
+          </div>
+
+          <div class="meal-row">
+            <div class="meal-day">THU</div>
+            <div class="meal-info">
+              <div class="meal-name">Mac and Cheese Plate</div>
+              <div class="meal-side">green peas, corn</div>
+            </div>
+            <div class="meal-actions">
+              <div class="meal-btn">⇄</div>
+              <div class="meal-btn on-list">🛒</div>
+            </div>
+          </div>
+
+          <div class="meal-row">
+            <div class="meal-day">FRI</div>
+            <div class="meal-info">
+              <div class="meal-name">Breakfast for Dinner</div>
+            </div>
+            <div class="meal-actions">
+              <div class="meal-btn">⇄</div>
+              <div class="meal-btn on-list">🛒</div>
+            </div>
+          </div>
+
+          <div class="meal-row">
+            <div class="meal-day">SAT</div>
+            <div class="meal-info">
+              <div class="meal-name" style="color: var(--text-muted); font-weight:400;">Eating Out</div>
+            </div>
+            <div class="meal-actions">
+              <div class="meal-btn">⇄</div>
+            </div>
+          </div>
+
+          <div class="meal-row">
+            <div class="meal-day">SUN</div>
+            <div class="meal-info">
+              <div class="meal-name">Turkey Burgers</div>
+              <div class="meal-side">corn on the cob</div>
+            </div>
+            <div class="meal-actions">
+              <div class="meal-btn">⇄</div>
+              <div class="meal-btn on-list">🛒</div>
+            </div>
+          </div>
+
+          <div class="add-meal-row" style="border-color: var(--accent-light); background: #FFFAF8;">
+            <div class="meal-day" style="color: var(--text-light)">MON</div>
+            <div class="add-label" style="color: var(--accent-light);">Tap to add a meal</div>
+          </div>
+
+          <div style="text-align:center; padding: 14px 0 4px;">
+            <span style="font-size:12px; color: var(--text-light); cursor:pointer; border-bottom: 1px dashed var(--text-light); padding-bottom:1px;">Start a new plan</span>
+          </div>
+
+        </div>
+      </div>
+      <div class="bottom-actions" style="justify-content: center;">
+        <button class="btn-primary" style="flex: none; padding: 11px 32px; font-size: 14px; font-weight: 600; border-radius: 10px;">Build My List →</button>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab active">
+          <div class="nav-tab-icon">🗓</div>
+          <div class="nav-tab-label">Plan</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">🛒</div>
+          <div class="nav-tab-label">Grocery</div>
+        </div>
+        <div class="nav-tab quick-btn">
+          <div class="quick-circle">+</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">📋</div>
+          <div class="nav-tab-label">Lists</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">☰</div>
+          <div class="nav-tab-label">More</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: QUICK SHEET -->
+  <div class="phone-wrap">
+    <div class="phone-label">+ Quick</div>
+    <div class="phone">
+      <div class="status-bar">
+        <div class="status-time">9:41</div>
+        <div class="status-icons">●●● WiFi 🔋</div>
+      </div>
+      <div class="screen">
+        <div class="top-nav">
+          <div class="logo">sous<em>chef</em></div>
+          <div class="nav-icon-btn">⚙</div>
+        </div>
+        <div class="screen-pad" style="opacity:0.4">
+          <div class="screen-heading">Your meals</div>
+          <div class="screen-sub">Mar 10 – 16</div>
+          <div class="meal-row today">
+            <div class="meal-day">TUE</div>
+            <div class="meal-info"><div class="meal-name">Beans, Rice & Sausage</div></div>
+          </div>
+          <div class="meal-row">
+            <div class="meal-day">WED</div>
+            <div class="meal-info"><div class="meal-name">Empanadas</div></div>
+          </div>
+        </div>
+      </div>
+      <!-- SHEET OVERLAY -->
+      <div class="sheet-overlay">
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">What do you need?</div>
+          <div class="sheet-sub">Add to your plan or start a focused list</div>
+          <div class="sheet-options">
+            <div class="sheet-option">
+              <div class="sheet-opt-icon">🗓</div>
+              <div class="sheet-opt-info">
+                <div class="sheet-opt-title">Add a Meal</div>
+                <div class="sheet-opt-desc">Add one meal to your current plan</div>
+              </div>
+            </div>
+            <div class="sheet-option">
+              <div class="sheet-opt-icon">🍽</div>
+              <div class="sheet-opt-info">
+                <div class="sheet-opt-title">Single Meal List</div>
+                <div class="sheet-opt-desc">One meal, quick focused list</div>
+              </div>
+            </div>
+            <div class="sheet-option">
+              <div class="sheet-opt-icon">🏃</div>
+              <div class="sheet-opt-info">
+                <div class="sheet-opt-title">Grocery Run</div>
+                <div class="sheet-opt-desc">Quick trip, start from your regulars</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab">
+          <div class="nav-tab-icon">🗓</div>
+          <div class="nav-tab-label">Plan</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">🛒</div>
+          <div class="nav-tab-label">Grocery</div>
+        </div>
+        <div class="nav-tab quick-btn">
+          <div class="quick-circle">+</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">📋</div>
+          <div class="nav-tab-label">Lists</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">☰</div>
+          <div class="nav-tab-label">More</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 3: GROCERY -->
+  <div class="phone-wrap">
+    <div class="phone-label">Grocery</div>
+    <div class="phone">
+      <div class="status-bar">
+        <div class="status-time">9:41</div>
+        <div class="status-icons">●●● WiFi 🔋</div>
+      </div>
+      <div class="screen">
+        <div class="top-nav">
+          <div class="logo">sous<em>chef</em></div>
+          <div class="nav-icon-btn">⚙</div>
+        </div>
+        <div class="screen-pad" style="padding-bottom:8px">
+          <div class="screen-heading">Grocery List</div>
+          <div class="screen-sub">Mar 10 trip · 14 items left</div>
+        </div>
+
+        <div class="grocery-group">
+          <div class="group-header">Meat <span class="group-count">3 left</span></div>
+          <div class="grocery-item">
+            <div class="g-check done">✓</div>
+            <div class="g-name done-text">chicken thighs</div>
+            <div class="g-for">Tacos</div>
+          </div>
+          <div class="grocery-item">
+            <div class="g-check"></div>
+            <div class="g-name">ground turkey</div>
+            <div class="g-for">Burgers</div>
+          </div>
+          <div class="grocery-item">
+            <div class="g-check"></div>
+            <div class="g-name">pork shoulder</div>
+            <div class="g-for">Pulled Pork</div>
+          </div>
+        </div>
+
+        <div class="grocery-group">
+          <div class="group-header">Bread & Pasta <span class="group-count">2 left</span></div>
+          <div class="grocery-item">
+            <div class="g-check"></div>
+            <div class="g-name">flour tortillas</div>
+            <div class="g-for">Tacos</div>
+          </div>
+          <div class="grocery-item">
+            <div class="g-check"></div>
+            <div class="g-name">hamburger buns</div>
+            <div class="g-for">Burgers</div>
+          </div>
+        </div>
+
+        <div class="grocery-group">
+          <div class="group-header">Regulars <span class="group-count">3 left</span></div>
+          <div class="grocery-item">
+            <div class="g-check done">✓</div>
+            <div class="g-name done-text">milk</div>
+          </div>
+          <div class="grocery-item">
+            <div class="g-check"></div>
+            <div class="g-name">eggs</div>
+          </div>
+          <div class="grocery-item">
+            <div class="g-check"></div>
+            <div class="g-name">oat milk creamer</div>
+          </div>
+        </div>
+
+        <button class="add-regulars-btn">+ Anything else while you're there?</button>
+        <button class="order-btn">Order via KROGER →</button>
+
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab">
+          <div class="nav-tab-icon">🗓</div>
+          <div class="nav-tab-label">Plan</div>
+        </div>
+        <div class="nav-tab active">
+          <div class="nav-tab-icon">🛒</div>
+          <div class="nav-tab-label">Grocery</div>
+        </div>
+        <div class="nav-tab quick-btn">
+          <div class="quick-circle">+</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">📋</div>
+          <div class="nav-tab-label">Lists</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">☰</div>
+          <div class="nav-tab-label">More</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 3b: MEAL PICKER -->
+  <div class="phone-wrap">
+    <div class="phone-label">Tap Empty Day</div>
+    <div class="phone">
+      <div class="status-bar">
+        <div class="status-time">9:41</div>
+        <div class="status-icons">●●● WiFi 🔋</div>
+      </div>
+      <div class="screen">
+        <div class="top-nav">
+          <div class="logo">sous<em>chef</em></div>
+          <div class="nav-icon-btn">⚙</div>
+        </div>
+        <div class="screen-pad" style="opacity:0.35">
+          <div class="screen-heading">Your meals</div>
+          <div class="screen-sub">Mar 10 – 16</div>
+          <div class="meal-row today">
+            <div class="meal-day">TUE</div>
+            <div class="meal-info"><div class="meal-name">Beans, Rice & Sausage</div></div>
+          </div>
+          <div class="add-meal-row" style="border-color:var(--accent); background:var(--accent-bg);">
+            <div class="meal-day" style="color:var(--accent)">MON</div>
+            <div class="add-label" style="color:var(--accent);">Tap to add a meal</div>
+          </div>
+        </div>
+      </div>
+      <div class="sheet-overlay">
+        <div class="sheet" style="padding-bottom:24px;">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Monday</div>
+          <div class="sheet-sub">What are you making?</div>
+          <div style="margin-bottom:12px;">
+            <input style="width:100%;border:1px solid var(--tan);border-radius:8px;padding:10px 14px;font-family:'DM Sans',sans-serif;font-size:13px;background:var(--warm-white);outline:none;color:var(--dark);" placeholder="Search or type a meal...">
+          </div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;">Recent meals</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <div style="background:white;border:1px solid var(--tan);border-radius:20px;padding:7px 14px;font-size:13px;color:var(--dark);cursor:pointer;">Chicken Tacos</div>
+            <div style="background:white;border:1px solid var(--tan);border-radius:20px;padding:7px 14px;font-size:13px;color:var(--dark);cursor:pointer;">Spaghetti</div>
+            <div style="background:white;border:1px solid var(--tan);border-radius:20px;padding:7px 14px;font-size:13px;color:var(--dark);cursor:pointer;">Stir Fry</div>
+            <div style="background:white;border:1px solid var(--tan);border-radius:20px;padding:7px 14px;font-size:13px;color:var(--dark);cursor:pointer;">Pizza Night</div>
+            <div style="background:white;border:1px solid var(--tan);border-radius:20px;padding:7px 14px;font-size:13px;color:var(--dark);cursor:pointer;">Pork Chops</div>
+            <div style="background:white;border:1px solid var(--tan);border-radius:20px;padding:7px 14px;font-size:13px;color:var(--dark);cursor:pointer;">Salmon</div>
+            <div style="background:var(--accent-bg);border:1px solid var(--accent-light);border-radius:20px;padding:7px 14px;font-size:13px;color:var(--accent);cursor:pointer;">Eating Out</div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab active"><div class="nav-tab-icon">🗓</div><div class="nav-tab-label">Plan</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">🛒</div><div class="nav-tab-label">Grocery</div></div>
+        <div class="nav-tab quick-btn"><div class="quick-circle">+</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">📋</div><div class="nav-tab-label">Lists</div></div>
+        <div class="nav-tab"><div class="nav-tab-icon">☰</div><div class="nav-tab-label">More</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 4: CARRYOVER PROMPT -->
+  <div class="phone-wrap">
+    <div class="phone-label">Carryover Prompt</div>
+    <div class="phone">
+      <div class="status-bar">
+        <div class="status-time">9:41</div>
+        <div class="status-icons">●●● WiFi 🔋</div>
+      </div>
+      <div class="screen">
+        <div class="top-nav">
+          <div class="logo">sous<em>chef</em></div>
+          <div class="nav-icon-btn">⚙</div>
+        </div>
+        <div class="screen-pad" style="opacity:0.3">
+          <div class="screen-heading">Your meals</div>
+          <div class="screen-sub">Mar 10 – 16</div>
+        </div>
+      </div>
+      <div class="sheet-overlay">
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-title">Still need these?</div>
+          <div class="sheet-sub">3 items weren't checked off last trip</div>
+          <div style="margin-bottom: 16px;">
+            <div class="carryover-item">
+              <div class="carry-check">✓</div>
+              ground turkey
+            </div>
+            <div class="carryover-item">
+              <div class="carry-check">✓</div>
+              hamburger buns
+            </div>
+            <div class="carryover-item">
+              <div class="carry-check">✓</div>
+              oat milk creamer
+            </div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-fill" style="background:var(--warm-white); border:1px solid var(--tan); border-radius:8px; padding:11px; font-family:'DM Sans',sans-serif; font-size:13px; cursor:pointer; flex:1;">Skip</button>
+            <button class="btn-primary" style="background:var(--accent); border:none; border-radius:8px; padding:11px; font-family:'DM Sans',sans-serif; font-size:13px; color:white; cursor:pointer; flex:2;">Carry over selected</button>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab active">
+          <div class="nav-tab-icon">🗓</div>
+          <div class="nav-tab-label">Plan</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">🛒</div>
+          <div class="nav-tab-label">Grocery</div>
+        </div>
+        <div class="nav-tab quick-btn">
+          <div class="quick-circle">+</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">📋</div>
+          <div class="nav-tab-label">Lists</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">☰</div>
+          <div class="nav-tab-label">More</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 5: LISTS HISTORY -->
+  <div class="phone-wrap">
+    <div class="phone-label">Lists History</div>
+    <div class="phone">
+      <div class="status-bar">
+        <div class="status-time">9:41</div>
+        <div class="status-icons">●●● WiFi 🔋</div>
+      </div>
+      <div class="screen">
+        <div class="top-nav">
+          <div class="logo">sous<em>chef</em></div>
+          <div class="nav-icon-btn">⚙</div>
+        </div>
+        <div class="screen-pad">
+          <div class="screen-heading">Your Lists</div>
+          <div class="screen-sub">All grocery trips</div>
+
+          <div class="section-label">Active</div>
+
+          <div class="trip-card">
+            <div class="trip-header">
+              <div class="trip-title">Mar 10 — Weekly Shop</div>
+              <div class="trip-badge active">In progress</div>
+            </div>
+            <div class="trip-meta">6 meals · 14 of 22 items checked</div>
+            <div class="trip-items-preview">chicken thighs, ground turkey, flour tortillas...</div>
+          </div>
+
+          <div class="section-label" style="margin-top:16px">Past Trips</div>
+
+          <div class="trip-card">
+            <div class="trip-header">
+              <div class="trip-title">Mar 5 — Quick Run</div>
+              <div class="trip-badge complete">Complete</div>
+            </div>
+            <div class="trip-meta">5 items · all checked</div>
+            <div class="trip-items-preview">milk, eggs, bananas, bread, coffee</div>
+          </div>
+
+          <div class="trip-card">
+            <div class="trip-header">
+              <div class="trip-title">Mar 3 — Weekly Shop</div>
+              <div class="trip-badge complete">Complete</div>
+            </div>
+            <div class="trip-meta">5 meals · 18 of 18 items checked</div>
+            <div class="trip-items-preview">ground beef, pasta, salmon, tortillas...</div>
+          </div>
+
+          <div class="trip-card">
+            <div class="trip-header">
+              <div class="trip-title">Feb 24 — Weekly Shop</div>
+              <div class="trip-badge partial">Partial</div>
+            </div>
+            <div class="trip-meta">4 meals · 14 of 19 items checked</div>
+            <div class="trip-items-preview">pork shoulder, rice, black beans...</div>
+          </div>
+
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-tab">
+          <div class="nav-tab-icon">🗓</div>
+          <div class="nav-tab-label">Plan</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">🛒</div>
+          <div class="nav-tab-label">Grocery</div>
+        </div>
+        <div class="nav-tab quick-btn">
+          <div class="quick-circle">+</div>
+        </div>
+        <div class="nav-tab active">
+          <div class="nav-tab-icon">📋</div>
+          <div class="nav-tab-label">Lists</div>
+        </div>
+        <div class="nav-tab">
+          <div class="nav-tab-icon">☰</div>
+          <div class="nav-tab-label">More</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

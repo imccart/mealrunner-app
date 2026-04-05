@@ -2,7 +2,7 @@
 
 import pytest
 
-from souschef.db import ensure_db
+from mealrunner.db import ensure_db
 
 
 @pytest.fixture

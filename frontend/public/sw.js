@@ -1,5 +1,5 @@
-const CACHE_NAME = 'souschef-v1'
-const API_CACHE = 'souschef-api-v1'
+const CACHE_NAME = 'mealrunner-v1'
+const API_CACHE = 'mealrunner-api-v1'
 
 // API paths to cache for offline use
 const CACHED_API_PATHS = ['/api/grocery', '/api/meals', '/api/auth/me']

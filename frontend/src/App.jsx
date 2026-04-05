@@ -42,7 +42,7 @@ function App() {
   const [showKitchen, setShowKitchen] = useState(false)
   const [authed, setAuthed] = useState(null)
   const [onboardingDone, setOnboardingDone] = useState(null)
-  const [welcomed, setWelcomed] = useState(() => localStorage.getItem('souschef_welcomed') === 'true')
+  const [welcomed, setWelcomed] = useState(() => localStorage.getItem('mealrunner_welcomed') === 'true')
   const [pendingInvite, setPendingInvite] = useState(null) // { inviter_name } or null
   const [householdInfo, setHouseholdInfo] = useState(null) // { household_member, household_owner_name } or null
   const [inviteChecked, setInviteChecked] = useState(false)
@@ -74,7 +74,7 @@ function App() {
           if (data.responses?.length) setFeedbackResponses(data.responses)
         }).catch(() => {})
         // Fast path: skip round trip if localStorage says onboarded
-        if (localStorage.getItem('souschef_onboarded') === 'true') {
+        if (localStorage.getItem('mealrunner_onboarded') === 'true') {
           setOnboardingDone(true)
           return
         }
@@ -82,7 +82,7 @@ function App() {
         return api.getOnboardingStatus()
           .then(data => {
             setOnboardingDone(data.completed)
-            if (data.completed) localStorage.setItem('souschef_onboarded', 'true')
+            if (data.completed) localStorage.setItem('mealrunner_onboarded', 'true')
             if (data.household_member) setHouseholdInfo({ ownerName: data.household_owner_name })
           })
       })
@@ -95,7 +95,7 @@ function App() {
 
   const dateRange = mealData ? formatDateRange(mealData.start_date, mealData.end_date) : null
 
-  // Test route: getsouschef.app/app#oops
+  // Test route: getmealrunner.app/app#oops
   if (window.location.hash === '#oops') {
     return <CrashTest />
   }
@@ -107,7 +107,7 @@ function App() {
   // Welcome → Login → Onboarding → App
   if (!authed && !welcomed) {
     return <WelcomeScreen onStart={() => {
-      localStorage.setItem('souschef_welcomed', 'true')
+      localStorage.setItem('mealrunner_welcomed', 'true')
       setWelcomed(true)
     }} />
   }

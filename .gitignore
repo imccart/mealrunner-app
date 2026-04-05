@@ -28,7 +28,7 @@ Thumbs.db
 *.db-wal
 *.db.corrupted
 
-# Credentials & secrets (all live in ~/.souschef/, not in repo)
+# Credentials & secrets (all live in ~/.mealrunner/, not in repo)
 # Just in case someone copies them here:
 *credentials*.json
 *token*.json

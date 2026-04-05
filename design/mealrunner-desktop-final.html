@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MealRunner — Desktop Final</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FAF7F2; --warm-white: #F5F0E8; --tan: #E8DDD0;
+    --brown: #8B6F5E; --dark: #2C2420; --accent: #D4623A;
+    --accent-light: #F0A882; --accent-bg: #FFF5F0;
+    --green: #4A7C59; --green-light: #E8F0EB;
+    --text-muted: #9B8B80; --text-light: #C4B8B0;
+    --nova1: #4A7C59; --nova1-bg: #E8F0EB;
+    --nova2: #7A8C3A; --nova2-bg: #F0F4DC;
+    --nova3: #C47F2A; --nova3-bg: #FDF0DC;
+    --nova4: #C43A2A; --nova4-bg: #FDECEA;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', sans-serif; background: #E0D8D0;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; padding: 40px 24px; gap: 48px;
+  }
+  .page-title {
+    font-family: 'Playfair Display', serif; font-size: 13px; color: #8B7B70;
+    letter-spacing: 0.12em; text-transform: uppercase; text-align: center;
+  }
+  .view-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #8B7B70; text-align: center; margin-bottom: -36px;
+  }
+
+  /* BROWSER */
+  .browser { width: 100%; max-width: 1200px; background: #F0EBE4; border-radius: 12px; box-shadow: 0 24px 80px rgba(0,0,0,0.18); overflow: hidden; }
+  .browser-bar { background: #E8E0D8; padding: 10px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #D8D0C8; }
+  .browser-dots { display: flex; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot-red { background: #FF6058; } .dot-yellow { background: #FFBD2E; } .dot-green { background: #28CA41; }
+  .url-bar { flex: 1; background: white; border-radius: 6px; padding: 5px 12px; font-size: 12px; color: var(--text-muted); border: 1px solid var(--tan); }
+
+  /* APP CHROME */
+  .app { background: var(--cream); height: 720px; display: flex; flex-direction: column; }
+
+  /* TOP NAV */
+  .top-nav {
+    background: white; border-bottom: 1px solid var(--tan);
+    padding: 0 32px; display: flex; align-items: center; gap: 0; height: 52px; flex-shrink: 0;
+  }
+  .nav-logo { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 600; color: var(--dark); margin-right: 32px; }
+  .nav-logo em { color: var(--accent); font-style: italic; }
+  .nav-tabs { display: flex; gap: 0; height: 100%; }
+  .nav-tab {
+    padding: 0 20px; font-size: 13px; font-weight: 500; color: var(--text-muted);
+    cursor: pointer; border-bottom: 2px solid transparent; display: flex; align-items: center;
+    transition: all 0.15s; height: 100%; white-space: nowrap;
+  }
+  .nav-tab:hover { color: var(--dark); }
+  .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .nav-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .btn-sm-ghost {
+    padding: 6px 12px; font-size: 12px; color: var(--text-muted); cursor: pointer;
+    border: 1px solid var(--tan); border-radius: 6px; background: transparent;
+    font-family: 'DM Sans', sans-serif; transition: all 0.15s;
+  }
+  .btn-sm-ghost:hover { border-color: var(--brown); color: var(--dark); }
+
+  /* MAIN LAYOUT */
+  .main { flex: 1; display: grid; overflow: hidden; }
+  .main.two-col { grid-template-columns: 1fr 360px; }
+  .main.three-col { grid-template-columns: 280px 1fr 340px; }
+
+  /* LEFT PANEL — PLAN */
+  .plan-left { background: var(--cream); display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--tan); }
+  .panel-header { padding: 20px 24px 12px; border-bottom: 1px solid var(--tan); flex-shrink: 0; }
+  .panel-title { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 600; color: var(--dark); margin-bottom: 2px; }
+  .panel-sub { font-size: 12px; color: var(--text-muted); font-weight: 300; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500;
+    padding: 4px 10px; border-radius: 20px; margin-top: 8px;
+  }
+  .sp-pending { background: var(--accent-bg); color: var(--accent); }
+  .sp-ready { background: var(--green-light); color: var(--green); }
+
+  .meal-scroll { flex: 1; overflow-y: auto; padding: 12px 16px; }
+  .meal-scroll::-webkit-scrollbar { width: 3px; }
+  .meal-scroll::-webkit-scrollbar-thumb { background: var(--tan); border-radius: 2px; }
+
+  .meal-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    background: white; border: 1px solid var(--tan); border-radius: 8px;
+    margin-bottom: 6px; cursor: pointer; transition: all 0.15s;
+  }
+  .meal-row:hover { border-color: var(--accent-light); }
+  .meal-row.today { border-color: var(--accent-light); background: linear-gradient(135deg,#fff 0%,#FDF5F0 100%); }
+  .meal-row.on-list { border-color: #B8D4BF; background: linear-gradient(135deg,#fff 0%,#F2F8F4 100%); }
+  .meal-day { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); width: 26px; flex-shrink: 0; }
+  .meal-row.today .meal-day { color: var(--accent); }
+  .meal-row.on-list .meal-day { color: var(--green); }
+  .meal-info { flex: 1; }
+  .meal-name { font-size: 13px; font-weight: 500; color: var(--dark); line-height: 1.3; }
+  .meal-side { font-size: 11px; color: var(--text-muted); }
+  .meal-actions { display: flex; gap: 4px; }
+  .meal-btn {
+    width: 26px; height: 26px; border-radius: 5px;
+    background: var(--warm-white); border: 1px solid var(--tan);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; cursor: pointer; color: var(--text-muted);
+  }
+  .meal-btn.on-list { background: var(--green-light); border-color: #B8D4BF; color: var(--green); }
+  .empty-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    background: white; border: 1px dashed var(--tan); border-radius: 8px;
+    margin-bottom: 6px; cursor: pointer; transition: all 0.15s;
+  }
+  .empty-row:hover { border-color: var(--accent-light); background: var(--accent-bg); }
+  .empty-row-label { font-size: 12px; color: var(--text-light); }
+  .empty-day { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-light); width: 26px; flex-shrink: 0; }
+
+  .plan-footer {
+    padding: 12px 16px; border-top: 1px solid var(--tan); background: var(--cream);
+    display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0;
+  }
+  .btn-build {
+    width: 100%; background: var(--accent); color: white; border: none;
+    padding: 11px; border-radius: 8px; font-family: 'DM Sans', sans-serif;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(212,98,58,0.2); transition: all 0.18s;
+  }
+  .btn-build:hover { background: #C0562F; }
+  .new-plan-link { font-size: 11px; color: var(--text-light); cursor: pointer; border-bottom: 1px dashed var(--text-light); }
+
+  /* CENTER PANEL — GROCERY */
+  .grocery-center { background: var(--cream); display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--tan); }
+  .grocery-scroll { flex: 1; overflow-y: auto; }
+  .grocery-scroll::-webkit-scrollbar { width: 3px; }
+  .grocery-scroll::-webkit-scrollbar-thumb { background: var(--tan); border-radius: 2px; }
+  .group-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-muted); padding: 12px 20px 5px; display: flex; justify-content: space-between;
+  }
+  .group-count { color: var(--text-light); font-weight: 400; }
+  .list-item {
+    display: flex; align-items: center; gap: 12px; padding: 10px 20px;
+    border-bottom: 1px solid var(--warm-white); background: white; cursor: pointer;
+  }
+  .li-check {
+    width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--tan);
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 9px; transition: all 0.15s;
+  }
+  .li-check.done { background: var(--green); border-color: var(--green); color: white; font-weight: 700; }
+  .li-check.ordered { background: var(--accent-bg); border-color: var(--accent-light); color: var(--accent); font-size: 8px; }
+  .li-name { font-size: 13px; color: var(--dark); flex: 1; }
+  .li-name.done-text { text-decoration: line-through; color: var(--text-light); }
+  .li-name.ordered-text { color: var(--text-muted); }
+  .li-for { font-size: 11px; color: var(--text-light); }
+  .grocery-footer {
+    padding: 10px 16px; border-top: 1px solid var(--tan); background: white;
+    display: flex; gap: 8px; flex-shrink: 0;
+  }
+  .quick-input {
+    flex: 1; border: 1px solid var(--tan); border-radius: 7px; padding: 8px 12px;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; background: var(--warm-white); outline: none; color: var(--dark);
+  }
+  .quick-input:focus { border-color: var(--accent); background: white; }
+  .quick-add-btn {
+    background: var(--accent); color: white; border: none; border-radius: 7px;
+    padding: 8px 14px; font-size: 16px; cursor: pointer;
+  }
+
+  /* RIGHT PANEL — ORDER / RECEIPT */
+  .right-panel { background: white; display: flex; flex-direction: column; overflow: hidden; }
+  .right-header { padding: 20px 20px 14px; border-bottom: 1px solid var(--warm-white); flex-shrink: 0; }
+  .right-title { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 600; color: var(--dark); margin-bottom: 2px; }
+  .right-sub { font-size: 12px; color: var(--text-muted); font-weight: 300; }
+  .right-scroll { flex: 1; overflow-y: auto; padding: 12px 16px; }
+  .right-scroll::-webkit-scrollbar { width: 3px; }
+  .right-scroll::-webkit-scrollbar-thumb { background: var(--tan); border-radius: 2px; }
+  .right-footer { padding: 12px 16px; border-top: 1px solid var(--warm-white); flex-shrink: 0; }
+
+  /* ORDER ITEMS */
+  .order-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border-radius: 7px; margin-bottom: 4px; cursor: pointer; transition: all 0.15s;
+    border: 1px solid transparent;
+  }
+  .order-item.active { background: var(--accent-bg); border-color: var(--accent-light); }
+  .order-item.selected-item { background: var(--green-light); border-color: #B8D4BF; }
+  .oi-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tan); flex-shrink: 0; }
+  .order-item.active .oi-dot { background: var(--accent); }
+  .order-item.selected-item .oi-dot { background: var(--green); }
+  .oi-info { flex: 1; }
+  .oi-name { font-size: 13px; font-weight: 500; color: var(--dark); }
+  .order-item.active .oi-name { color: var(--accent); font-weight: 600; }
+  .order-item.selected-item .oi-name { color: var(--green); }
+  .oi-detail { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+  /* PRODUCT CARDS */
+  .product-card {
+    border: 1.5px solid var(--tan); border-radius: 10px; padding: 12px 14px;
+    margin-bottom: 8px; cursor: pointer; transition: all 0.15s; background: var(--cream);
+  }
+  .product-card:hover { border-color: var(--accent-light); background: white; }
+  .product-card.chosen { border-color: var(--green); background: var(--green-light); }
+  .product-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+  .product-img { width: 40px; height: 40px; background: white; border-radius: 6px; border: 1px solid var(--tan); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .product-info { flex: 1; }
+  .product-name { font-size: 13px; font-weight: 600; color: var(--dark); line-height: 1.3; margin-bottom: 2px; }
+  .product-card.chosen .product-name { color: var(--green); }
+  .product-brand { font-size: 11px; color: var(--text-muted); }
+  .product-price { font-size: 14px; font-weight: 600; color: var(--dark); flex-shrink: 0; }
+  .product-badges { display: flex; gap: 5px; flex-wrap: wrap; }
+  .badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+  .nova-1 { background: var(--nova1-bg); color: var(--nova1); }
+  .nova-2 { background: var(--nova2-bg); color: var(--nova2); }
+  .nova-3 { background: var(--nova3-bg); color: var(--nova3); }
+  .nova-4 { background: var(--nova4-bg); color: var(--nova4); }
+  .badge-owned { background: var(--warm-white); color: var(--brown); }
+
+  .order-summary { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; color: var(--text-muted); }
+  .order-summary strong { color: var(--dark); }
+  .kroger-btn {
+    width: 100%; background: var(--dark); color: white; border: none; padding: 12px;
+    border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.18s; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .kroger-btn:hover { background: #3D3330; }
+
+  /* RECEIPT */
+  .receipt-item {
+    display: flex; align-items: flex-start; gap: 10px; padding: 10px 0;
+    border-bottom: 1px solid var(--warm-white);
+  }
+  .r-status {
+    width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; margin-top: 1px;
+  }
+  .rs-match { background: var(--green-light); color: var(--green); border: 1.5px solid #B8D4BF; }
+  .rs-sub { background: #FFF3E0; color: var(--accent); border: 1.5px solid var(--accent-light); font-size: 8px; }
+  .rs-missing { background: var(--nova4-bg); color: var(--nova4); border: 1.5px solid #F0B8B8; }
+  .r-info { flex: 1; }
+  .r-name { font-size: 13px; font-weight: 500; color: var(--dark); }
+  .r-note { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .r-price { font-size: 13px; font-weight: 500; color: var(--dark); white-space: nowrap; }
+  .r-total { display: flex; justify-content: space-between; padding: 12px 0 8px; font-size: 13px; color: var(--text-muted); }
+  .r-total strong { color: var(--dark); font-size: 14px; }
+  .section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); padding: 10px 0 6px; }
+  .resolve-btn {
+    width: 100%; background: var(--accent); color: white; border: none; padding: 11px;
+    border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">MealRunner — Desktop Final · Plan / Grocery / Order / Receipt</div>
+
+<!-- VIEW 1: PLAN + GROCERY -->
+<div class="view-label">View 1 — Plan & Grocery</div>
+<div class="browser">
+  <div class="browser-bar">
+    <div class="browser-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+    <div class="url-bar">app.mealrunner.co</div>
+  </div>
+  <div class="app">
+    <div class="top-nav">
+      <div class="nav-logo">sous<em>chef</em></div>
+      <div class="nav-tabs">
+        <div class="nav-tab active">Plan</div>
+        <div class="nav-tab">Grocery</div>
+        <div class="nav-tab">Order</div>
+        <div class="nav-tab">Receipt</div>
+      </div>
+      <div class="nav-right"><div class="btn-sm-ghost">Preferences</div></div>
+    </div>
+    <div class="main two-col">
+
+      <!-- LEFT: PLAN -->
+      <div class="plan-left">
+        <div class="panel-header">
+          <div class="panel-title">Your meals</div>
+          <div class="panel-sub">Mar 10 – 16 · rolling 7 days</div>
+          <div class="status-pill sp-pending">5 meals planned · list not started</div>
+        </div>
+        <div class="meal-scroll">
+          <div class="meal-row today on-list">
+            <div class="meal-day">TUE</div>
+            <div class="meal-info"><div class="meal-name">Beans, Rice & Sausage</div></div>
+            <div class="meal-actions"><div class="meal-btn">⇄</div><div class="meal-btn on-list">✓</div></div>
+          </div>
+          <div class="meal-row on-list">
+            <div class="meal-day">WED</div>
+            <div class="meal-info"><div class="meal-name">Empanadas</div><div class="meal-side">refried beans</div></div>
+            <div class="meal-actions"><div class="meal-btn">⇄</div><div class="meal-btn on-list">✓</div></div>
+          </div>
+          <div class="meal-row">
+            <div class="meal-day">THU</div>
+            <div class="meal-info"><div class="meal-name">Mac and Cheese</div><div class="meal-side">peas, corn</div></div>
+            <div class="meal-actions"><div class="meal-btn">⇄</div><div class="meal-btn">🛒</div></div>
+          </div>
+          <div class="meal-row">
+            <div class="meal-day">FRI</div>
+            <div class="meal-info"><div class="meal-name" style="color:var(--text-muted);font-weight:300;">Eating Out</div></div>
+            <div class="meal-actions"><div class="meal-btn">⇄</div></div>
+          </div>
+          <div class="meal-row">
+            <div class="meal-day">SAT</div>
+            <div class="meal-info"><div class="meal-name">Turkey Burgers</div><div class="meal-side">corn on the cob</div></div>
+            <div class="meal-actions"><div class="meal-btn">⇄</div><div class="meal-btn">🛒</div></div>
+          </div>
+          <div class="empty-row">
+            <div class="empty-day">SUN</div>
+            <div class="empty-row-label">Click to add a meal</div>
+          </div>
+          <div class="empty-row">
+            <div class="empty-day">MON</div>
+            <div class="empty-row-label">Click to add a meal</div>
+          </div>
+        </div>
+        <div class="plan-footer">
+          <button class="btn-build">Build My List →</button>
+          <span class="new-plan-link">Start a new plan</span>
+        </div>
+      </div>
+
+      <!-- RIGHT: GROCERY LIST -->
+      <div style="background:white;display:flex;flex-direction:column;overflow:hidden;">
+        <div class="panel-header" style="background:white;">
+          <div class="panel-title">Grocery List</div>
+          <div class="panel-sub">Mar 10 trip · 12 items · not yet ordered</div>
+        </div>
+        <div class="grocery-scroll" style="flex:1;overflow-y:auto;">
+          <div class="group-label">Meat <span class="group-count">3 left</span></div>
+          <div class="list-item"><div class="li-check done">✓</div><div class="li-name done-text">chicken thighs</div><div class="li-for">Beans & Rice</div></div>
+          <div class="list-item"><div class="li-check"></div><div class="li-name">ground turkey</div><div class="li-for">Burgers</div></div>
+          <div class="list-item"><div class="li-check"></div><div class="li-name">andouille sausage</div><div class="li-for">Beans & Rice</div></div>
+
+          <div class="group-label">Bread & Pasta <span class="group-count">2 left</span></div>
+          <div class="list-item"><div class="li-check"></div><div class="li-name">flour tortillas</div><div class="li-for">Empanadas</div></div>
+          <div class="list-item"><div class="li-check"></div><div class="li-name">hamburger buns</div><div class="li-for">Burgers</div></div>
+
+          <div class="group-label">Dairy <span class="group-count">2 left</span></div>
+          <div class="list-item"><div class="li-check"></div><div class="li-name">shredded cheese</div><div class="li-for">Mac & Cheese, Empanadas</div></div>
+          <div class="list-item"><div class="li-check"></div><div class="li-name">butter</div><div class="li-for">Mac & Cheese</div></div>
+
+          <div class="group-label">Other <span class="group-count">3 left</span></div>
+          <div class="list-item"><div class="li-check done">✓</div><div class="li-name done-text">milk</div></div>
+          <div class="list-item"><div class="li-check"></div><div class="li-name">eggs</div></div>
+          <div class="list-item"><div class="li-check"></div><div class="li-name">oat milk creamer</div></div>
+        </div>
+        <div class="grocery-footer">
+          <input class="quick-input" type="text" placeholder="Add item...">
+          <button class="quick-add-btn">+</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- VIEW 2: ORDER + PRODUCT SELECTION -->
+<div class="view-label">View 2 — Order</div>
+<div class="browser">
+  <div class="browser-bar">
+    <div class="browser-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+    <div class="url-bar">app.mealrunner.co/order</div>
+  </div>
+  <div class="app">
+    <div class="top-nav">
+      <div class="nav-logo">sous<em>chef</em></div>
+      <div class="nav-tabs">
+        <div class="nav-tab">Plan</div>
+        <div class="nav-tab">Grocery</div>
+        <div class="nav-tab active">Order</div>
+        <div class="nav-tab">Receipt</div>
+      </div>
+      <div class="nav-right"><div class="btn-sm-ghost">Preferences</div></div>
+    </div>
+    <div class="main three-col">
+
+      <!-- LEFT: ITEM QUEUE -->
+      <div style="background:var(--cream);display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--tan);">
+        <div class="panel-header">
+          <div class="panel-title" style="font-size:16px;">Unchecked items</div>
+          <div class="panel-sub">From your grocery list · 10 left</div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:10px 12px;">
+          <div class="order-item active">
+            <div class="oi-dot"></div>
+            <div class="oi-info"><div class="oi-name">ground turkey</div><div class="oi-detail">Burgers</div></div>
+          </div>
+          <div class="order-item">
+            <div class="oi-dot"></div>
+            <div class="oi-info"><div class="oi-name">andouille sausage</div><div class="oi-detail">Beans & Rice</div></div>
+          </div>
+          <div class="order-item">
+            <div class="oi-dot"></div>
+            <div class="oi-info"><div class="oi-name">flour tortillas</div><div class="oi-detail">Empanadas</div></div>
+          </div>
+          <div class="order-item selected-item">
+            <div class="oi-dot"></div>
+            <div class="oi-info"><div class="oi-name">hamburger buns</div><div class="oi-detail">Selected ✓</div></div>
+          </div>
+          <div class="order-item selected-item">
+            <div class="oi-dot"></div>
+            <div class="oi-info"><div class="oi-name">shredded cheese</div><div class="oi-detail">Selected ✓</div></div>
+          </div>
+          <div class="order-item selected-item">
+            <div class="oi-dot"></div>
+            <div class="oi-info"><div class="oi-name">butter</div><div class="oi-detail">Selected ✓</div></div>
+          </div>
+          <div class="order-item">
+            <div class="oi-dot"></div>
+            <div class="oi-info"><div class="oi-name">eggs</div><div class="oi-detail"></div></div>
+          </div>
+          <div class="order-item">
+            <div class="oi-dot"></div>
+            <div class="oi-info"><div class="oi-name">oat milk creamer</div><div class="oi-detail"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER: PRODUCT OPTIONS -->
+      <div style="background:var(--cream);display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--tan);">
+        <div class="panel-header">
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;">Selecting</div>
+          <div class="panel-title" style="font-size:18px;">ground turkey</div>
+          <div class="panel-sub">3 options from Kroger</div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:12px 16px;">
+          <div class="product-card chosen">
+            <div class="product-top">
+              <div class="product-img">🦃</div>
+              <div class="product-info">
+                <div class="product-name">Kroger 93% Lean Ground Turkey</div>
+                <div class="product-brand">Kroger · 1 lb</div>
+              </div>
+              <div class="product-price">$5.49</div>
+            </div>
+            <div class="product-badges">
+              <span class="badge nova-1">NOVA 1</span>
+              <span class="badge badge-owned">Kroger brand</span>
+            </div>
+          </div>
+          <div class="product-card">
+            <div class="product-top">
+              <div class="product-img">🦃</div>
+              <div class="product-info">
+                <div class="product-name">Butterball Fresh Ground Turkey</div>
+                <div class="product-brand">Butterball · 1 lb</div>
+              </div>
+              <div class="product-price">$6.29</div>
+            </div>
+            <div class="product-badges">
+              <span class="badge nova-1">NOVA 1</span>
+              <span class="badge badge-owned">Owned by Seaboard Corp</span>
+            </div>
+          </div>
+          <div class="product-card">
+            <div class="product-top">
+              <div class="product-img">🦃</div>
+              <div class="product-info">
+                <div class="product-name">Jennie-O Lean Ground Turkey</div>
+                <div class="product-brand">Jennie-O · 1 lb</div>
+              </div>
+              <div class="product-price">$5.99</div>
+            </div>
+            <div class="product-badges">
+              <span class="badge nova-2">NOVA 2</span>
+              <span class="badge badge-owned">Owned by Hormel Foods</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: ORDER SUMMARY / FINALIZE -->
+      <div class="right-panel">
+        <div class="right-header">
+          <div class="right-title">Order Summary</div>
+          <div class="right-sub">6 of 10 items selected</div>
+        </div>
+        <div class="right-scroll">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Selected so far</div>
+          <div style="font-size:13px;color:var(--dark);padding:6px 0;border-bottom:1px solid var(--warm-white);display:flex;justify-content:space-between;">hamburger buns <span style="color:var(--text-muted);">$3.49</span></div>
+          <div style="font-size:13px;color:var(--dark);padding:6px 0;border-bottom:1px solid var(--warm-white);display:flex;justify-content:space-between;">shredded cheese <span style="color:var(--text-muted);">$4.29</span></div>
+          <div style="font-size:13px;color:var(--dark);padding:6px 0;border-bottom:1px solid var(--warm-white);display:flex;justify-content:space-between;">butter <span style="color:var(--text-muted);">$5.19</span></div>
+          <div style="font-size:13px;color:var(--dark);padding:6px 0;border-bottom:1px solid var(--warm-white);display:flex;justify-content:space-between;">ground turkey <span style="color:var(--accent);font-weight:500;">selecting...</span></div>
+          <div style="margin-top:12px;padding:10px 0;border-top:1px solid var(--tan);display:flex;justify-content:space-between;font-size:13px;">
+            <span style="color:var(--text-muted);">Est. subtotal</span>
+            <strong style="color:var(--dark);">~$48.00</strong>
+          </div>
+          <div style="background:var(--warm-white);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:11px;color:var(--text-muted);line-height:1.5;">
+            4 items still need selection. Keep going, or finalize now and the rest will carry over.
+          </div>
+        </div>
+        <div class="right-footer">
+          <button class="kroger-btn">Finalize on Kroger →</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- VIEW 3: RECEIPT -->
+<div class="view-label">View 3 — Receipt</div>
+<div class="browser">
+  <div class="browser-bar">
+    <div class="browser-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+    <div class="url-bar">app.mealrunner.co/receipt</div>
+  </div>
+  <div class="app">
+    <div class="top-nav">
+      <div class="nav-logo">sous<em>chef</em></div>
+      <div class="nav-tabs">
+        <div class="nav-tab">Plan</div>
+        <div class="nav-tab">Grocery</div>
+        <div class="nav-tab">Order</div>
+        <div class="nav-tab active">Receipt</div>
+      </div>
+      <div class="nav-right"><div class="btn-sm-ghost">Preferences</div></div>
+    </div>
+    <div class="main two-col">
+
+      <!-- LEFT: RECEIPT DETAIL -->
+      <div style="background:var(--cream);display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--tan);">
+        <div class="panel-header">
+          <div class="panel-title">Mar 10 Receipt</div>
+          <div class="panel-sub">Kroger order · delivered · $61.42 total</div>
+          <div class="status-pill sp-ready">2 items need attention</div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 20px 16px;">
+          <div class="section-label">Matched</div>
+          <div class="receipt-item">
+            <div class="r-status rs-match">✓</div>
+            <div class="r-info"><div class="r-name">Kroger Ground Turkey 1lb</div><div class="r-note">As selected</div></div>
+            <div class="r-price">$5.49</div>
+          </div>
+          <div class="receipt-item">
+            <div class="r-status rs-match">✓</div>
+            <div class="r-info"><div class="r-name">Mission Flour Tortillas</div><div class="r-note">As selected</div></div>
+            <div class="r-price">$3.29</div>
+          </div>
+          <div class="receipt-item">
+            <div class="r-status rs-match">✓</div>
+            <div class="r-info"><div class="r-name">Kroger Shredded Mexican Cheese</div><div class="r-note">As selected</div></div>
+            <div class="r-price">$4.29</div>
+          </div>
+          <div class="receipt-item">
+            <div class="r-status rs-match">✓</div>
+            <div class="r-info"><div class="r-name">Kroger Unsalted Butter</div><div class="r-note">As selected</div></div>
+            <div class="r-price">$5.19</div>
+          </div>
+          <div class="receipt-item">
+            <div class="r-status rs-match">✓</div>
+            <div class="r-info"><div class="r-name">Kroger Large Eggs</div><div class="r-note">As selected</div></div>
+            <div class="r-price">$4.89</div>
+          </div>
+
+          <div class="section-label">Substituted</div>
+          <div class="receipt-item">
+            <div class="r-status rs-sub">⇄</div>
+            <div class="r-info">
+              <div class="r-name">Kroger Hamburger Buns <span style="color:var(--accent);font-size:11px;">→ Nature's Own</span></div>
+              <div class="r-note">Store substituted · accept or flag?</div>
+            </div>
+            <div class="r-price">$3.99</div>
+          </div>
+
+          <div class="section-label">Not fulfilled</div>
+          <div class="receipt-item">
+            <div class="r-status rs-missing">!</div>
+            <div class="r-info"><div class="r-name">Andouille Sausage</div><div class="r-note">Out of stock · returned to your list</div></div>
+            <div class="r-price">—</div>
+          </div>
+
+          <div class="r-total">
+            <span>Order total</span>
+            <strong>$61.42</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: ACTIONS -->
+      <div class="right-panel">
+        <div class="right-header">
+          <div class="right-title">Resolve & Close</div>
+          <div class="right-sub">2 items need a decision</div>
+        </div>
+        <div class="right-scroll">
+          <!-- Substitution decision -->
+          <div style="background:var(--accent-bg);border:1px solid var(--accent-light);border-radius:10px;padding:14px;margin-bottom:12px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;">Substitution</div>
+            <div style="font-size:13px;font-weight:600;color:var(--dark);margin-bottom:4px;">Hamburger Buns</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">You selected Nature's Own Classic Hamburger Buns instead of Kroger brand.</div>
+            <div style="display:flex;gap:8px;">
+              <button style="flex:1;background:white;border:1px solid var(--tan);border-radius:7px;padding:8px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;color:var(--dark);">That's fine</button>
+              <button style="flex:1;background:var(--accent);border:none;border-radius:7px;padding:8px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;color:white;font-weight:600;">Note for next time</button>
+            </div>
+          </div>
+
+          <!-- Out of stock -->
+          <div style="background:var(--nova4-bg);border:1px solid #F0B8B8;border-radius:10px;padding:14px;margin-bottom:12px;">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--nova4);margin-bottom:8px;">Out of stock</div>
+            <div style="font-size:13px;font-weight:600;color:var(--dark);margin-bottom:4px;">Andouille Sausage</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Added back to your grocery list. Pick it up in store or re-order next time.</div>
+            <div style="display:flex;gap:8px;">
+              <button style="flex:1;background:white;border:1px solid var(--tan);border-radius:7px;padding:8px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;color:var(--dark);">Remove from list</button>
+              <button style="flex:1;background:var(--dark);border:none;border-radius:7px;padding:8px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;color:white;font-weight:600;">Keep on list</button>
+            </div>
+          </div>
+
+          <div style="background:var(--warm-white);border-radius:8px;padding:10px 12px;font-size:11px;color:var(--text-muted);line-height:1.5;">
+            Resolving this receipt helps MealRunner learn what you actually want next time.
+          </div>
+        </div>
+        <div class="right-footer">
+          <button class="kroger-btn" style="background:var(--green);">Close Receipt ✓</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.list-item').forEach(el => {
+  el.addEventListener('click', () => {
+    const check = el.querySelector('.li-check');
+    const name = el.querySelector('.li-name');
+    if (!check || check.classList.contains('ordered')) return;
+    check.classList.toggle('done');
+    check.textContent = check.classList.contains('done') ? '✓' : '';
+    if (name) { name.classList.toggle('done-text'); }
+  });
+});
+document.querySelectorAll('.product-card').forEach(el => {
+  el.addEventListener('click', () => {
+    el.closest('.app').querySelectorAll('.product-card').forEach(p => p.classList.remove('chosen'));
+    el.classList.add('chosen');
+  });
+});
+</script>
+</body>
+</html>

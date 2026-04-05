@@ -16,7 +16,7 @@ Research date: 2026-03-13
 
 ### 1. Instacart Market Basket Analysis (Kaggle)
 
-**Best fit for souschef.** This is the dataset to use.
+**Best fit for mealrunner.** This is the dataset to use.
 
 - **Source**: Kaggle (`instacart-market-basket-analysis`), originally released by Instacart for a 2017 competition
 - **License**: Custom non-commercial research license (Instacart). Fine for a private/personal-use seeding script. For production, the generated mapping (not the raw data) would be the deliverable.
@@ -27,7 +27,7 @@ Research date: 2026-03-13
   - `aisles.csv` — `aisle_id, aisle` (134 aisles like "fresh vegetables", "packaged cheese", "energy granola bars")
   - `departments.csv` — `department_id, department` (21 departments like "produce", "dairy eggs", "snacks", "beverages", "frozen")
 - **Why it fits**:
-  - Real grocery store aisle/department structure maps naturally to souschef's shopping groups
+  - Real grocery store aisle/department structure maps naturally to mealrunner's shopping groups
   - Product names are actual grocery items (not USDA nutrient-science names)
   - Department-level grouping is very close to our 12 shopping groups
   - 49K products is far more than we need, so we can filter to common/staple items
@@ -54,7 +54,7 @@ Research date: 2026-03-13
 - **Size**: ~400,000+ foods across multiple datasets (SR Legacy, Foundation, Branded, Survey FNDDS)
 - **Categories**: Uses USDA food groups (25 groups like "Dairy and Egg Products", "Spices and Herbs", "Vegetables and Vegetable Products", "Cereal Grains and Pasta")
 - **Strengths**: Authoritative nutrition data, public domain, excellent API
-- **Weaknesses for souschef**:
+- **Weaknesses for mealrunner**:
   - Names are scientific/nutritional, not how shoppers think ("Chicken, broilers or fryers, breast, skinless, boneless, meat only, cooked, braised" vs "chicken breast")
   - No aisle/store layout information (it's a nutrition database, not a grocery database)
   - Food groups are nutrition-oriented, not shopping-oriented (e.g., "Legumes and Legume Products" spans canned beans, dried beans, tofu, peanut butter)
@@ -69,8 +69,8 @@ Research date: 2026-03-13
 - **Format**: CSV dump, MongoDB dump, or REST API
 - **Size**: ~3 million products (heavily European-skewed, growing US coverage)
 - **Categories**: Hierarchical category taxonomy (e.g., "en:plant-based-foods > en:plant-based-foods-and-beverages > en:beverages > en:juices")
-- **Strengths**: Already integrated for NOVA/Nutri-Score in souschef's Kroger order flow. Truly open license. Rich product-level data.
-- **Weaknesses for souschef**:
+- **Strengths**: Already integrated for NOVA/Nutri-Score in mealrunner's Kroger order flow. Truly open license. Rich product-level data.
+- **Weaknesses for mealrunner**:
   - Product-level, not ingredient-level (tracks "Kraft Macaroni & Cheese 7.25oz" not "elbow macaroni")
   - Category taxonomy is deep and inconsistent (user-contributed)
   - No aisle mapping (categories are food-science oriented)
@@ -138,9 +138,9 @@ Instacart product names are brand-specific ("Organic Hass Avocados" or "Honeycri
 
 Approach: For each Instacart aisle, extract the most common 20-50 "root" ingredient names. Many aisles will contribute few items (e.g., "energy drinks" -> just "energy drinks"). This naturally produces 500-800 ingredients.
 
-**Step 3: Map to souschef shopping groups**
+**Step 3: Map to mealrunner shopping groups**
 
-| Instacart Department | Instacart Aisles (examples) | Souschef Group |
+| Instacart Department | Instacart Aisles (examples) | MealRunner Group |
 |---|---|---|
 | produce | fresh fruits, fresh vegetables, fresh herbs | Produce |
 | meat seafood | packaged meat, fresh meat, seafood | Meat |
@@ -197,7 +197,7 @@ A Python script (`scripts/build_ingredient_seed.py`) would:
 1. Load the Instacart CSVs
 2. Filter to food departments
 3. For each aisle, extract normalized ingredient names (strip brands, sizes, "organic" prefix)
-4. Map aisles to souschef shopping groups
+4. Map aisles to mealrunner shopping groups
 5. Assign default units based on category heuristics
 6. Flag pantry staples (spices, oils, basic baking)
 7. Merge with existing `seed_ingredients.yaml` (preserve existing entries)

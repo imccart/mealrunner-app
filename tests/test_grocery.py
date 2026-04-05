@@ -1,8 +1,8 @@
 """Tests for grocery list generation."""
 
-from souschef.grocery import build_grocery_list, split_by_store
-from souschef.pantry import add_pantry_item
-from souschef.planner import fill_dates, week_range
+from mealrunner.grocery import build_grocery_list, split_by_store
+from mealrunner.pantry import add_pantry_item
+from mealrunner.planner import fill_dates, week_range
 
 
 def _make_meals(conn, week_of="2026-03-02"):

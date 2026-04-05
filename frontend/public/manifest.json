@@ -1,6 +1,6 @@
 {
-  "name": "Souschef",
-  "short_name": "Souschef",
+  "name": "MealRunner",
+  "short_name": "MealRunner",
   "start_url": "/app",
   "display": "standalone",
   "background_color": "#FAF7F2",

@@ -103,7 +103,7 @@ export default function OrderPage() {
   const [submitResult, setSubmitResult] = useState(null)
   const [krogerAccounts, setKrogerAccounts] = useState(null)
   const [selectedAccount, setSelectedAccount] = useState(null)
-  const [fulfillment, setFulfillment] = useState(() => localStorage.getItem('souschef_fulfillment') || 'curbside')
+  const [fulfillment, setFulfillment] = useState(() => localStorage.getItem('mealrunner_fulfillment') || 'curbside')
   const [storeInfo, setStoreInfo] = useState(null)
   const [showQueue, setShowQueue] = useState(false)
   const [mobileSection, setMobileSection] = useState(null) // 'ordered' | 'elsewhere' | null
@@ -358,11 +358,11 @@ export default function OrderPage() {
         <div className={styles.fulfillmentToggle}>
           <button
             className={`${styles.fulfillmentBtn}${fulfillment === 'curbside' ? ` ${styles.active}` : ''}`}
-            onClick={() => { setFulfillment('curbside'); localStorage.setItem('souschef_fulfillment', 'curbside') }}
+            onClick={() => { setFulfillment('curbside'); localStorage.setItem('mealrunner_fulfillment', 'curbside') }}
           >Pickup</button>
           <button
             className={`${styles.fulfillmentBtn}${fulfillment === 'delivery' ? ` ${styles.active}` : ''}`}
-            onClick={() => { setFulfillment('delivery'); localStorage.setItem('souschef_fulfillment', 'delivery') }}
+            onClick={() => { setFulfillment('delivery'); localStorage.setItem('mealrunner_fulfillment', 'delivery') }}
           >Delivery</button>
         </div>
       </div>

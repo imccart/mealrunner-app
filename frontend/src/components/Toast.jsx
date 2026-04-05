@@ -10,8 +10,8 @@ export default function Toast() {
       setMessage(e.detail)
       setVisible(true)
     }
-    window.addEventListener('souschef-toast', handleToast)
-    return () => window.removeEventListener('souschef-toast', handleToast)
+    window.addEventListener('mealrunner-toast', handleToast)
+    return () => window.removeEventListener('mealrunner-toast', handleToast)
   }, [])
 
   useEffect(() => {
