@@ -56,7 +56,7 @@ export function WelcomeScreen({ onStart }) {
         </div>
         <div className={`${styles.welcomeWordmark}${phase >= 4 ? ` ${styles.reveal}` : ''}`}>meal<em>runner</em></div>
         <div className={`${styles.welcomeTagline}${phase >= 4 ? ` ${styles.reveal}` : ''}`}>
-          because someone has to plan dinner<br />and get groceries
+          From planning to pantry.
         </div>
         <button className={`${styles.welcomeBtn}${phase >= 5 ? ` ${styles.reveal}` : ''}`} onClick={onStart}>
           Get started

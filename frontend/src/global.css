@@ -58,6 +58,17 @@ nav.top-nav {
   font-style: italic;
 }
 
+.logo .tagline {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--brown);
+  letter-spacing: 0.3px;
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--tan);
+}
+
 .nav-right {
   display: flex;
   align-items: center;

@@ -118,6 +118,7 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("regulars", "created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
         ("pantry", "last_bought_at", "TEXT"),
         ("recipes", "notes", "TEXT"),
+        ("brand_ownership", "category", "TEXT NOT NULL DEFAULT ''"),
     ]
 
     for table_name, col_name, col_def in migrations:
@@ -199,8 +200,10 @@ def _run_column_migrations(conn: DictConnection) -> None:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS brand_ownership (
                 id SERIAL PRIMARY KEY,
-                brand TEXT NOT NULL UNIQUE,
-                parent_company TEXT
+                brand TEXT NOT NULL,
+                parent_company TEXT,
+                category TEXT NOT NULL DEFAULT '',
+                UNIQUE(brand, category)
             )
         """))
         conn.commit()
@@ -333,6 +336,9 @@ def _run_column_migrations(conn: DictConnection) -> None:
 
     # Swap unique constraints: old (search_term, upc) / (user_id, upc) → new product_key-based
     _migrate_product_key_constraints(conn)
+
+    # brand_ownership: UNIQUE(brand) → UNIQUE(brand, category)
+    _migrate_brand_ownership_constraint(conn)
 
 
 def _migrate_accepted_to_on_grocery(conn: DictConnection) -> None:
@@ -875,6 +881,75 @@ def _migrate_product_key_constraints(conn: DictConnection) -> None:
             pass
 
 
+def _migrate_brand_ownership_constraint(conn: DictConnection) -> None:
+    """Replace UNIQUE(brand) with UNIQUE(brand, category) on brand_ownership."""
+    # Drop old unique constraint on brand alone
+    try:
+        rows = conn.execute(text("""
+            SELECT con.conname
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            WHERE rel.relname = 'brand_ownership'
+              AND con.contype = 'u'
+        """)).fetchall()
+        for row in rows:
+            name = row["conname"]
+            if "category" not in name:
+                conn.execute(text(f'ALTER TABLE brand_ownership DROP CONSTRAINT IF EXISTS "{name}"'))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   brand_ownership constraint drop skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+    # Also drop any unique index on just brand
+    try:
+        rows = conn.execute(text("""
+            SELECT indexname FROM pg_indexes
+            WHERE tablename = 'brand_ownership'
+              AND indexdef LIKE '%UNIQUE%'
+              AND indexdef LIKE '%(brand)%'
+              AND indexdef NOT LIKE '%(brand, category)%'
+        """)).fetchall()
+        for row in rows:
+            conn.execute(text(f'DROP INDEX IF EXISTS "{row["indexname"]}"'))
+        conn.commit()
+    except Exception:
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+    # Create new composite unique index
+    try:
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_brand_ownership_brand_cat "
+            "ON brand_ownership(brand, category)"
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   brand_ownership new constraint skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+    # Fix Häagen-Dazs: should be General Mills in US, not Nestlé
+    try:
+        conn.execute(text(
+            "UPDATE brand_ownership SET parent_company = 'General Mills' "
+            "WHERE LOWER(brand) = LOWER('Häagen-Dazs') AND category = ''"
+        ))
+        conn.commit()
+    except Exception:
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+
 # ── Seed Data ─────────────────────────────────────────────
 
 
@@ -959,11 +1034,12 @@ def _seed_brand_ownership(conn: DictConnection, path: Path) -> None:
         if not brand:
             continue
         parent = entry.get("parent")  # None means self-owned
+        category = entry.get("category", "")  # '' means all categories
         conn.execute(text(
-            """INSERT INTO brand_ownership (brand, parent_company)
-               VALUES (:brand, :parent)
-               ON CONFLICT (brand) DO NOTHING"""
-        ), {"brand": brand, "parent": parent})
+            """INSERT INTO brand_ownership (brand, parent_company, category)
+               VALUES (:brand, :parent, :category)
+               ON CONFLICT (brand, category) DO NOTHING"""
+        ), {"brand": brand, "parent": parent, "category": category})
 
 
 def _seed_recipes(conn: DictConnection, path: Path, user_id: str | None = None) -> None:

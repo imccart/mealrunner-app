@@ -1556,12 +1556,15 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
 
     # Also update preference brand from search results if available
     search_brands = {p.upc: p.brand for p in products if p.upc and p.brand}
+    # Map UPC → primary Kroger category for brand-by-category lookup
+    search_categories = {p.upc: p.categories[0] if p.categories else None for p in products if p.upc}
 
     pref_list = []
     for p in prefs:
         sc = pref_scores.get(p.upc, {})
         brand = search_brands.get(p.upc, p.brand)
-        parent = get_parent_company(brand, conn) if brand else "We're not sure"
+        cat = search_categories.get(p.upc)
+        parent = get_parent_company(brand, conn, category=cat) if brand else "We're not sure"
         violation_key = brand.strip() if parent == "Same as brand" else parent
         violations = get_company_violations(conn, violation_key) if violation_key not in ("We're not sure",) else None
         pref_item = {
@@ -1592,7 +1595,8 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
     product_parents = {}
     unknown_brands_batch = set()
     for p in products:
-        parent = get_parent_company(p.brand, conn)
+        cat = p.categories[0] if p.categories else None
+        parent = get_parent_company(p.brand, conn, category=cat)
         product_parents[p.upc or p.product_id] = parent
         if parent == "We're not sure" and p.brand:
             unknown_brands_batch.add(p.brand.strip())

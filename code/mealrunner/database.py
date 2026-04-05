@@ -442,8 +442,10 @@ unknown_brands = Table(
 brand_ownership = Table(
     "brand_ownership", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("brand", Text, nullable=False, unique=True),
+    Column("brand", Text, nullable=False),
     Column("parent_company", Text),  # NULL means self-owned (brand IS the company)
+    Column("category", Text, nullable=False, server_default=text("''")),  # '' = all categories
+    # Unique constraint: (brand, category) — managed via migration index
 )
 
 company_violations = Table(
