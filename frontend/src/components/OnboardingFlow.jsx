@@ -410,12 +410,11 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
                 maxLength={5}
                 style={{ maxWidth: 120 }}
               />
-              <span className={styles.inputHint}>Used to find nearby stores</span>
             </div>
 
             {!isHousehold && (
               <>
-                <div className={styles.stepTitle} style={{ marginTop: 20 }}>Invite your household</div>
+                <div className={styles.stepTitle} style={{ marginTop: 20 }}>Invite other household members?</div>
                 <div className={styles.stepDesc}>
                   Share your kitchen with a partner or family member. They'll see your meals and grocery list. You can always do this later from your account settings.
                 </div>
