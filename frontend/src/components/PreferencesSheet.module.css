@@ -73,6 +73,12 @@
   color: var(--brown);
   padding: 8px 0;
 }
+.prefsNameRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .prefsSaved {
   color: var(--green);
   font-size: 14px;
@@ -213,6 +219,31 @@
 
 .prefsVersion {
   /* version label in about section */
+}
+
+.prefsCompSection {
+  border-top: 1px solid var(--tan);
+  margin-top: 12px;
+  padding-top: 4px;
+}
+.prefsCompList {
+  margin-top: 8px;
+}
+.prefsCompItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--warm-white);
+}
+.prefsCompItem:last-child {
+  border-bottom: none;
+}
+.prefsCompAdd {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .prefsBtlInfo {

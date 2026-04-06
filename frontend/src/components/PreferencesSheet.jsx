@@ -25,7 +25,8 @@ export default function PreferencesSheet({ onClose }) {
   const [inviteStatus, setInviteStatus] = useState(null)
   const [betaInviteStatus, setBetaInviteStatus] = useState(null)
   const [userEmail, setUserEmail] = useState('')
-  const [displayName, setDisplayName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [nameSaved, setNameSaved] = useState(false)
   const [homeZip, setHomeZip] = useState('')
   const [zipSaved, setZipSaved] = useState(false)
@@ -37,6 +38,10 @@ export default function PreferencesSheet({ onClose }) {
   const [storeSearching, setStoreSearching] = useState(false)
   const [allowHousehold, setAllowHousehold] = useState(false)
   const [sharedAccountName, setSharedAccountName] = useState(null)
+  const [nearbyStores, setNearbyStores] = useState([])
+  const [compZip, setCompZip] = useState('')
+  const [compResults, setCompResults] = useState(null)
+  const [compSearching, setCompSearching] = useState(false)
   const [pricePolling, setPricePolling] = useState(false)
   const [priceSharing, setPriceSharing] = useState(false)
   const [showPriceInfo, setShowPriceInfo] = useState(false)
@@ -44,7 +49,8 @@ export default function PreferencesSheet({ onClose }) {
   useEffect(() => {
     api.getMe().then(data => {
       setUserEmail(data.email || '')
-      setDisplayName(data.display_name || '')
+      setFirstName(data.first_name || '')
+      setLastName(data.last_name || '')
       setHomeZip(data.home_zip || '')
     }).catch(() => {})
     api.getHouseholdMembers().then(data => setMembers(data.members)).catch(() => {})
@@ -59,6 +65,7 @@ export default function PreferencesSheet({ onClose }) {
       const shared = accounts.find(a => !a.is_you)
       if (!yours && shared) setSharedAccountName(shared.display_name)
     }).catch(() => {})
+    api.getNearbyStores().then(data => setNearbyStores(data.stores || [])).catch(() => {})
     api.getPriceTracking().then(data => {
       setPricePolling(data.price_polling || false)
       setPriceSharing(data.price_sharing || false)
@@ -144,7 +151,7 @@ export default function PreferencesSheet({ onClose }) {
 
   const handleSaveName = async () => {
     try {
-      await api.updateAccount({ display_name: displayName })
+      await api.updateAccount({ first_name: firstName, last_name: lastName })
       setNameSaved(true)
       setTimeout(() => setNameSaved(false), 2000)
     } catch { /* ignore */ }
@@ -158,14 +165,22 @@ export default function PreferencesSheet({ onClose }) {
         <AccordionSection title="You and Your Household" count={members?.length || 0}>
           <div className={styles.prefsAccountField}>
             <label className={styles.prefsFieldLabel}>Name</label>
-            <div className={ls.addRow}>
+            <div className={styles.prefsNameRow}>
               <input
                 className={ls.addInput}
                 type="text"
-                placeholder="Your name"
-                value={displayName}
-                onChange={(e) => { setDisplayName(e.target.value); setNameSaved(false) }}
-                onBlur={() => displayName.trim() && handleSaveName()}
+                placeholder="First"
+                value={firstName}
+                onChange={(e) => { setFirstName(e.target.value); setNameSaved(false) }}
+                onBlur={() => firstName.trim() && handleSaveName()}
+              />
+              <input
+                className={ls.addInput}
+                type="text"
+                placeholder="Last"
+                value={lastName}
+                onChange={(e) => { setLastName(e.target.value); setNameSaved(false) }}
+                onBlur={() => lastName.trim() && handleSaveName()}
               />
               {nameSaved && <span className={styles.prefsSaved}>{'\u2713'}</span>}
             </div>
@@ -301,6 +316,77 @@ export default function PreferencesSheet({ onClose }) {
                     <span>Let household members order through this account</span>
                     <div className={styles.prefsToggleHint}>They can place orders using your account and loyalty points.</div>
                   </label>
+                )}
+
+                {/* Comparison stores */}
+                {krogerLocationId && (
+                  <div className={styles.prefsCompSection}>
+                    <div className={styles.prefsFieldLabel} style={{ marginTop: 16 }}>Comparison stores</div>
+                    <div className={ls.sectionHint}>We compare prices at these nearby stores when you shop.</div>
+                    {nearbyStores.length > 0 && (
+                      <div className={styles.prefsCompList}>
+                        {nearbyStores.map(s => (
+                          <div key={s.location_id} className={styles.prefsCompItem}>
+                            <div>
+                              <div className={ls.listName}>{s.name.replace(/^Kroger\s*-?\s*/i, '')}</div>
+                              <div className={ls.listMeta}>{s.address}</div>
+                            </div>
+                            <button className={styles.prefsDisconnect} onClick={async () => {
+                              const updated = nearbyStores.filter(n => n.location_id !== s.location_id)
+                              setNearbyStores(updated)
+                              await api.saveNearbyStores(updated)
+                            }}>Remove</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <form onSubmit={async (e) => {
+                      e.preventDefault()
+                      if (!compZip.trim() || compZip.trim().length < 5) return
+                      setCompSearching(true)
+                      try {
+                        const data = await api.searchKrogerLocations(compZip.trim())
+                        setCompResults((data.locations || []).filter(
+                          l => l.location_id !== krogerLocationId && !nearbyStores.some(n => n.location_id === l.location_id)
+                        ))
+                      } catch { setCompResults([]) }
+                      setCompSearching(false)
+                    }} className={ls.addRow} style={{ marginTop: 8 }}>
+                      <input
+                        className={ls.addInput}
+                        type="text"
+                        placeholder="Search by zip..."
+                        value={compZip}
+                        onChange={(e) => setCompZip(e.target.value)}
+                        maxLength={5}
+                        inputMode="numeric"
+                      />
+                      <button className="btn primary" type="submit" disabled={compSearching}>
+                        {compSearching ? '...' : 'Search'}
+                      </button>
+                    </form>
+                    {compResults && compResults.length === 0 && (
+                      <div className={ls.sectionHint}>No additional stores found.</div>
+                    )}
+                    {compResults && compResults.length > 0 && (
+                      <div className={styles.prefsCompList}>
+                        {compResults.map(loc => (
+                          <div key={loc.location_id} className={`${styles.prefsCompItem} ${styles.prefsStoreResult}`} onClick={async () => {
+                            const updated = [...nearbyStores, { location_id: loc.location_id, name: loc.name, address: loc.address }]
+                            setNearbyStores(updated)
+                            setCompResults(prev => prev.filter(l => l.location_id !== loc.location_id))
+                            await api.saveNearbyStores(updated)
+                          }}>
+                            <div>
+                              <div className={ls.listName}>{loc.name.replace(/^Kroger\s*-?\s*/i, '')}</div>
+                              <div className={ls.listMeta}>{loc.address}</div>
+                            </div>
+                            <span className={styles.prefsCompAdd}>+ Add</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </>
             ) : (

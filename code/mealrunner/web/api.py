@@ -3337,6 +3337,32 @@ async def remove_store(key: str, request: Request):
     return {"ok": bool(removed), "name": removed}
 
 
+@router.get("/stores/nearby")
+async def get_nearby(request: Request):
+    """Get saved nearby/comparison stores."""
+    from mealrunner.stores import get_nearby_stores
+
+    user_id = request.state.user_id
+    conn = _conn()
+    stores = get_nearby_stores(conn, user_id)
+    return {"stores": stores}
+
+
+@router.post("/stores/nearby")
+async def save_nearby(body: dict, request: Request):
+    """Save user-selected nearby/comparison stores."""
+    from mealrunner.stores import save_nearby_stores
+
+    user_id = request.state.user_id
+    conn = _conn()
+    stores = body.get("stores", [])
+    # Validate each store has required fields
+    valid = [{"location_id": s["location_id"], "name": s["name"], "address": s.get("address", "")}
+             for s in stores if s.get("location_id") and s.get("name")]
+    count = save_nearby_stores(conn, user_id, valid)
+    return {"ok": True, "count": count}
+
+
 # ── Onboarding ─────────────────────────────────────────
 
 

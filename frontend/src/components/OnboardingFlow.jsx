@@ -243,6 +243,14 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
         if (selectedLocation) {
           await api.setKrogerLocation(selectedLocation, storeZip.trim())
         }
+        // Save comparison stores
+        if (comparisonStores.size > 0) {
+          const allResults = [...(storeResults || []), ...(compResults || [])]
+          const nearby = allResults
+            .filter(l => comparisonStores.has(l.location_id) && l.location_id !== selectedLocation)
+            .map(l => ({ location_id: l.location_id, name: l.name, address: l.address }))
+          if (nearby.length > 0) await api.saveNearbyStores(nearby)
+        }
         await api.setPriceTracking({ price_polling: true, price_sharing: true })
       } else if (step === 5) {
         // Tour complete — finish onboarding

@@ -125,6 +125,22 @@ def refresh_nearby_stores(conn: DictConnection, user_id: str, own_location_id: s
     return rank
 
 
+def save_nearby_stores(conn: DictConnection, user_id: str, stores: list[dict]) -> int:
+    """Save user-selected nearby stores (replaces any existing). Returns count saved."""
+    conn.execute(text("DELETE FROM nearby_stores WHERE user_id = :uid"), {"uid": user_id})
+    for rank, store in enumerate(stores, 1):
+        conn.execute(
+            text("""INSERT INTO nearby_stores (user_id, location_id, name, address, rank)
+                VALUES (:uid, :loc, :name, :addr, :rank)
+                ON CONFLICT(user_id, location_id) DO UPDATE SET
+                    name = excluded.name, address = excluded.address, rank = excluded.rank"""),
+            {"uid": user_id, "loc": store["location_id"], "name": store["name"],
+             "addr": store.get("address", ""), "rank": rank},
+        )
+    conn.commit()
+    return len(stores)
+
+
 def get_nearby_stores(conn: DictConnection, user_id: str) -> list[dict]:
     """Return cached nearby stores for a user, ordered by rank."""
     rows = conn.execute(
