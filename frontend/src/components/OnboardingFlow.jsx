@@ -121,6 +121,28 @@ const TOUR_STOPS = [
   { region: 'feedback', label: 'Talk to the Manager', desc: 'Send feedback, report bugs, or request features.' },
 ]
 
+// Desktop tour: grocery is a sidebar, not a tab
+const TOUR_STOPS_DESKTOP = [
+  { region: 'plan', label: 'Plan', desc: 'Your dinners for the week. Click a day to pick a meal.' },
+  { region: 'grocery', label: 'Grocery', desc: 'Always visible alongside your plan, organized by aisle.' },
+  { region: 'order', label: 'Order', desc: 'Pick products from your store and send your cart.' },
+  { region: 'receipt', label: 'Receipt', desc: 'Upload your receipt to track what you bought.' },
+  { region: 'kitchen', label: 'Kitchen', desc: 'Your meals, sides, staples, and product ratings.' },
+  { region: 'account', label: 'Account', desc: 'Store connections, household sharing, and settings.' },
+  { region: 'feedback', label: 'Talk to the Manager', desc: 'Send feedback, report bugs, or request features.' },
+]
+
+function useIsWide(breakpoint = 1024) {
+  const [wide, setWide] = useState(window.innerWidth >= breakpoint)
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${breakpoint}px)`)
+    const handler = (e) => setWide(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [breakpoint])
+  return wide
+}
+
 // ── Main Onboarding Flow ────────────────────────────────
 
 // Household members skip meals/sides/staples/regulars (steps 1-3)
@@ -129,6 +151,7 @@ const HH_STEPS = [0, 4, 5]
 
 export default function OnboardingFlow({ onComplete, householdInfo }) {
   const isHousehold = !!householdInfo
+  const isWide = useIsWide()
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
 
@@ -835,64 +858,114 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
           </div>
         )}
 
-        {/* Step 5: Tour — mini app mockup */}
+        {/* Step 5: Tour — app mockup */}
         {step === 5 && (
           <div className={styles.step}>
             <div className={styles.stepTitle}>Here's where everything lives</div>
-            <div className={styles.tourMockup}>
-              {/* Header bar */}
-              <div className={styles.mockHeader}>
-                <div className={styles.mockLogo}>meal<em>runner</em></div>
-                <div className={styles.mockIcons}>
-                  <div className={`${styles.mockIcon}${TOUR_STOPS[tourStep]?.region === 'kitchen' ? ` ${styles.mockHighlight}` : ''}`}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <ellipse cx="12" cy="5" rx="7" ry="4" />
-                      <path d="M5 5 C5 5 4 10 8 14 C8 14 9 15 9 17 L9 22" />
-                    </svg>
-                  </div>
-                  <div className={`${styles.mockIcon}${TOUR_STOPS[tourStep]?.region === 'account' ? ` ${styles.mockHighlight}` : ''}`}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                      <path d="M12 2C10.5 2 9 3.5 9 5V8H15V5C15 3.5 13.5 2 12 2Z" />
-                      <path d="M6 8H18L19 10V12L17 22H7L5 12V10L6 8Z" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-              {/* Content area */}
-              <div className={styles.mockContent}>
-                <div className={styles.mockPlaceholder}>
-                  {TOUR_STOPS[tourStep]?.region === 'feedback' && (
-                    <div className={styles.mockFab}>
-                      <span>Talk to the manager</span>
+
+            {isWide ? (
+              /* ── Desktop mockup ── */
+              <>
+                <div className={styles.deskMockup}>
+                  {/* Top nav bar */}
+                  <div className={styles.deskNav}>
+                    <div className={styles.mockLogo}>meal<em>runner</em></div>
+                    <div className={styles.deskNavLinks}>
+                      {['Plan', 'Order', 'Receipt'].map(label => (
+                        <span key={label} className={`${styles.deskNavLink}${TOUR_STOPS_DESKTOP[tourStep]?.region === label.toLowerCase() ? ` ${styles.mockHighlight}` : ''}`}>
+                          {label}
+                        </span>
+                      ))}
                     </div>
-                  )}
-                </div>
-              </div>
-              {/* Bottom nav */}
-              <div className={styles.mockNav}>
-                {[
-                  { region: 'plan', icon: '\u{1F5D3}', label: 'Plan' },
-                  { region: 'grocery', icon: '\u{1F6D2}', label: 'Grocery' },
-                  { region: 'order', icon: '\u{1F697}', label: 'Order' },
-                  { region: 'receipt', icon: '\u{1F9FE}', label: 'Receipt' },
-                ].map(tab => (
-                  <div key={tab.region} className={`${styles.mockTab}${TOUR_STOPS[tourStep]?.region === tab.region ? ` ${styles.mockHighlight}` : ''}`}>
-                    <span className={styles.mockTabIcon}>{tab.icon}</span>
-                    <span className={styles.mockTabLabel}>{tab.label}</span>
+                    <div className={styles.mockIcons}>
+                      <div className={`${styles.mockIcon}${TOUR_STOPS_DESKTOP[tourStep]?.region === 'kitchen' ? ` ${styles.mockHighlight}` : ''}`}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <ellipse cx="12" cy="5" rx="7" ry="4" />
+                          <path d="M5 5 C5 5 4 10 8 14 C8 14 9 15 9 17 L9 22" />
+                        </svg>
+                      </div>
+                      <div className={`${styles.mockIcon}${TOUR_STOPS_DESKTOP[tourStep]?.region === 'account' ? ` ${styles.mockHighlight}` : ''}`}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                          <path d="M12 2C10.5 2 9 3.5 9 5V8H15V5C15 3.5 13.5 2 12 2Z" />
+                          <path d="M6 8H18L19 10V12L17 22H7L5 12V10L6 8Z" />
+                        </svg>
+                      </div>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-            {/* Callout bubble — outside mockup for mobile layout */}
-            {TOUR_STOPS[tourStep] && (
-              <div className={styles.tourCalloutWrap}>
-                <div key={tourStep} className={`${styles.tourCallout} ${styles[`callout_${TOUR_STOPS[tourStep].region}`]}`}>
-                  <div className={styles.tourCalloutLabel}>{TOUR_STOPS[tourStep].label}</div>
-                  <div className={styles.tourCalloutDesc}>{TOUR_STOPS[tourStep].desc}</div>
+                  {/* Two-column body */}
+                  <div className={styles.deskBody}>
+                    <div className={`${styles.deskCol} ${styles.deskColPlan}${TOUR_STOPS_DESKTOP[tourStep]?.region === 'plan' ? ` ${styles.mockHighlight}` : ''}`}>
+                      <div className={styles.deskColLabel}>Plan</div>
+                    </div>
+                    <div className={`${styles.deskCol} ${styles.deskColGrocery}${TOUR_STOPS_DESKTOP[tourStep]?.region === 'grocery' ? ` ${styles.mockHighlight}` : ''}`}>
+                      <div className={styles.deskColLabel}>Grocery</div>
+                    </div>
+                    {TOUR_STOPS_DESKTOP[tourStep]?.region === 'feedback' && (
+                      <div className={styles.mockFab}>
+                        <span>Talk to the manager</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* ── Mobile mockup ── */
+              <div className={styles.tourMockup}>
+                {/* Header bar */}
+                <div className={styles.mockHeader}>
+                  <div className={styles.mockLogo}>meal<em>runner</em></div>
+                  <div className={styles.mockIcons}>
+                    <div className={`${styles.mockIcon}${TOUR_STOPS[tourStep]?.region === 'kitchen' ? ` ${styles.mockHighlight}` : ''}`}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <ellipse cx="12" cy="5" rx="7" ry="4" />
+                        <path d="M5 5 C5 5 4 10 8 14 C8 14 9 15 9 17 L9 22" />
+                      </svg>
+                    </div>
+                    <div className={`${styles.mockIcon}${TOUR_STOPS[tourStep]?.region === 'account' ? ` ${styles.mockHighlight}` : ''}`}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                        <path d="M12 2C10.5 2 9 3.5 9 5V8H15V5C15 3.5 13.5 2 12 2Z" />
+                        <path d="M6 8H18L19 10V12L17 22H7L5 12V10L6 8Z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+                {/* Content area */}
+                <div className={styles.mockContent}>
+                  <div className={styles.mockPlaceholder}>
+                    {TOUR_STOPS[tourStep]?.region === 'feedback' && (
+                      <div className={styles.mockFab}>
+                        <span>Talk to the manager</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Bottom nav */}
+                <div className={styles.mockNav}>
+                  {[
+                    { region: 'plan', icon: '\u{1F5D3}', label: 'Plan' },
+                    { region: 'grocery', icon: '\u{1F6D2}', label: 'Grocery' },
+                    { region: 'order', icon: '\u{1F697}', label: 'Order' },
+                    { region: 'receipt', icon: '\u{1F9FE}', label: 'Receipt' },
+                  ].map(tab => (
+                    <div key={tab.region} className={`${styles.mockTab}${TOUR_STOPS[tourStep]?.region === tab.region ? ` ${styles.mockHighlight}` : ''}`}>
+                      <span className={styles.mockTabIcon}>{tab.icon}</span>
+                      <span className={styles.mockTabLabel}>{tab.label}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
-            {tourStep < TOUR_STOPS.length - 1 ? (
+
+            {/* Callout bubble */}
+            {(isWide ? TOUR_STOPS_DESKTOP : TOUR_STOPS)[tourStep] && (
+              <div className={styles.tourCalloutWrap}>
+                <div key={tourStep} className={`${styles.tourCallout} ${styles[`callout_${(isWide ? TOUR_STOPS_DESKTOP : TOUR_STOPS)[tourStep].region}`]}`}>
+                  <div className={styles.tourCalloutLabel}>{(isWide ? TOUR_STOPS_DESKTOP : TOUR_STOPS)[tourStep].label}</div>
+                  <div className={styles.tourCalloutDesc}>{(isWide ? TOUR_STOPS_DESKTOP : TOUR_STOPS)[tourStep].desc}</div>
+                </div>
+              </div>
+            )}
+            {tourStep < (isWide ? TOUR_STOPS_DESKTOP : TOUR_STOPS).length - 1 ? (
               <button className={`${styles.obBtn} ${styles.primary}`} onClick={() => setTourStep(t => t + 1)}>
                 Next
               </button>
@@ -906,8 +979,8 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
             {step !== 5 && step !== 0 && (
               <button className={styles.skip} onClick={skipStep}>Skip for now</button>
             )}
-            {step === 5 && tourStep < TOUR_STOPS.length - 1 && (
-              <button className={styles.skip} onClick={() => { setTourStep(TOUR_STOPS.length - 1) }}>Skip tour</button>
+            {step === 5 && tourStep < (isWide ? TOUR_STOPS_DESKTOP : TOUR_STOPS).length - 1 && (
+              <button className={styles.skip} onClick={() => { setTourStep((isWide ? TOUR_STOPS_DESKTOP : TOUR_STOPS).length - 1) }}>Skip tour</button>
             )}
             <div className={styles.btnSpacer} />
             {activeSteps.indexOf(step) > 0 && (
@@ -923,7 +996,7 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
                 {saving ? '...' : 'Next'}
               </button>
             )}
-            {step === 5 && tourStep >= TOUR_STOPS.length - 1 && (
+            {step === 5 && tourStep >= (isWide ? TOUR_STOPS_DESKTOP : TOUR_STOPS).length - 1 && (
               <button className={`${styles.obBtn} ${styles.primary}`} onClick={goNext} disabled={saving}>
                 {saving ? '...' : "Let's cook!"}
               </button>
@@ -935,7 +1008,7 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
       {/* Clippy */}
       <ClippyGuide
         quip={CLIPPY_QUIPS[step] || ''}
-        showMouse={step === 5 && tourStep >= TOUR_STOPS.length - 1}
+        showMouse={step === 5 && tourStep >= (isWide ? TOUR_STOPS_DESKTOP : TOUR_STOPS).length - 1}
       />
     </div>
   )
