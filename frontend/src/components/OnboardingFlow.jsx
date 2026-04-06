@@ -242,8 +242,21 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
         onComplete()
         return
       }
-    } catch { /* continue anyway */ }
+    } catch {
+      // If step 4 fails partially, still finish onboarding
+      if (step === activeSteps[activeSteps.length - 1]) {
+        try { await api.completeOnboarding() } catch {}
+        localStorage.setItem('mealrunner_onboarded', 'true')
+        onComplete()
+        return
+      }
+    }
     setSaving(false)
+
+    // Don't advance past the last step
+    if (step === activeSteps[activeSteps.length - 1]) {
+      return
+    }
 
     const nextStep = getNextStep(step)
 
