@@ -593,3 +593,168 @@ brands:
     parent: "Hormel"
   - brand: "Diamond"
     parent: ~
+
+  # ── Kroger Store Brands ────────────────
+  - brand: "Smart Way"
+    parent: "Kroger"
+  - brand: "Heritage Farm"
+    parent: "Kroger"
+
+  # ── Nestlé (additional) ────────────────
+  - brand: "Coffee mate"
+    parent: "Nestlé"
+  - brand: "California Pizza Kitchen"
+    parent: "Nestlé"
+
+  # ── Starbucks ──────────────────────────
+  - brand: "Starbucks"
+    parent: ~
+  - brand: "Seattle's Best"
+    parent: "Starbucks"
+
+  # ── Bimbo ──────────────────────────────
+  - brand: "Martin's"
+    parent: "Bimbo"
+  - brand: "ACE Bakery"
+    parent: "Bimbo"
+  - brand: "St Pierre"
+    parent: "Bimbo"
+
+  # ── Flowers Foods ──────────────────────
+  - brand: "Bunny"
+    parent: "Flowers Foods"
+
+  # ── Unilever (additional) ──────────────
+  - brand: "Seventh Generation"
+    parent: "Unilever"
+
+  # ── Lancaster Colony ───────────────────
+  - brand: "New York"
+    parent: "Lancaster Colony"
+    category: "Bakery"
+  - brand: "Fresh Gourmet"
+    parent: "Lancaster Colony"
+
+  # ── Darden Restaurants ─────────────────
+  - brand: "Olive Garden"
+    parent: "Darden Restaurants"
+
+  # ── Reckitt Benckiser ──────────────────
+  - brand: "Lysol"
+    parent: "Reckitt Benckiser"
+
+  # ── Procter & Gamble (additional) ──────
+  - brand: "Dawn"
+    parent: "Procter & Gamble"
+
+  # ── Colgate-Palmolive ──────────────────
+  - brand: "Palmolive"
+    parent: "Colgate-Palmolive"
+  - brand: "Ajax"
+    parent: "Colgate-Palmolive"
+
+  # ── Keurig Dr Pepper (additional) ──────
+  - brand: "The Original Donut Shop"
+    parent: "Keurig Dr Pepper"
+
+  # ── PepsiCo (additional) ───────────────
+  - brand: "Pasta Roni"
+    parent: "PepsiCo"
+
+  # ── National Beverage Corp (additional) ─
+  - brand: "LaCroix"
+    parent: "National Beverage Corp"
+
+  # ── Campbell's (additional) ────────────
+  - brand: "Pacific Foods"
+    parent: "Campbell's"
+
+  # ── Conagra (additional) ───────────────
+  - brand: "Udi's"
+    parent: "Conagra"
+
+  # ── Hain Celestial ─────────────────────
+  - brand: "Earth's Best"
+    parent: "Hain Celestial"
+  - brand: "Sensible Portions"
+    parent: "Hain Celestial"
+  - brand: "The Greek Gods"
+    parent: "Hain Celestial"
+
+  # ── CJ CheilJedang ────────────────────
+  - brand: "Red Baron"
+    parent: "CJ CheilJedang"
+  - brand: "Freschetta"
+    parent: "CJ CheilJedang"
+
+  # ── Riviana Foods / Ebro Foods ─────────
+  - brand: "Success"
+    parent: "Riviana Foods"
+  - brand: "Mahatma"
+    parent: "Riviana Foods"
+  - brand: "Creamette"
+    parent: "Ebro Foods"
+
+  # ── Sigma Alimentos ────────────────────
+  - brand: "Bar-S"
+    parent: "Sigma Alimentos"
+
+  # ── Grupo Herdez ───────────────────────
+  - brand: "Herdez"
+    parent: "Grupo Herdez"
+
+  # ── Other mapped brands ────────────────
+  - brand: "Kauai Coffee"
+    parent: "Massimo Zanetti Beverage USA"
+  - brand: "La Banderita"
+    parent: "Ole Mexican Foods"
+  - brand: "Ziploc"
+    parent: "SC Johnson"
+  - brand: "Planet Oat"
+    parent: "HP Hood"
+  - brand: "Peet's"
+    parent: "JDE Peet's"
+  - brand: "JDE Peet's"
+    parent: ~
+
+  # ── Independents (seen frequently) ─────
+  - brand: "Clorox"
+    parent: ~
+  - brand: "Cedar's"
+    parent: ~
+  - brand: "Good Foods"
+    parent: ~
+  - brand: "La Preferida"
+    parent: ~
+  - brand: "Taylor Farms"
+    parent: ~
+  - brand: "King's Hawaiian"
+    parent: ~
+  - brand: "Welch's"
+    parent: ~
+  - brand: "Cabo Fresh"
+    parent: ~
+  - brand: "Nature's Path Organic"
+    parent: ~
+  - brand: "Kodiak"
+    parent: ~
+  - brand: "Wild Planet"
+    parent: ~
+  - brand: "Biena"
+    parent: ~
+  - brand: "Good Health"
+    parent: ~
+  - brand: "Purely Elizabeth"
+    parent: ~
+  - brand: "Miyoko's"
+    parent: ~
+  - brand: "Beech-Nut"
+    parent: ~
+  - brand: "Tru Fru"
+    parent: ~
+  - brand: "Lundberg Family Farms"
+    parent: ~
+  - brand: "Lunchskins"
+    parent: ~
+  - brand: "Seapoint Farms"
+    parent: ~
