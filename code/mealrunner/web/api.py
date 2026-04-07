@@ -1113,17 +1113,25 @@ async def remove_grocery_item(item_name: str, request: Request):
     return {"ok": True}
 
 
-@router.post("/grocery/undo-remove/{item_name:path}")
-async def undo_remove_grocery_item(item_name: str, request: Request):
-    """Undo a remove — clear the removed flag so the item reappears."""
+@router.post("/grocery/undo/{item_name:path}")
+async def undo_grocery_item(item_name: str, request: Request):
+    """Reset any checked/ordered/removed/have-it item back to active."""
     user_id = request.state.user_id
     conn = _conn()
     trip = _get_active_trip(conn, user_id)
     if not trip:
-        return {"ok": True}
+        return await get_grocery(request)
 
     conn.execute(
-        text("UPDATE trip_items SET removed = 0, removed_at = NULL WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"),
+        text("""UPDATE trip_items SET
+               checked = 0, checked_at = NULL,
+               have_it = 0, have_it_at = NULL,
+               removed = 0, removed_at = NULL,
+               ordered = 0, ordered_at = NULL, submitted_at = NULL,
+               selected_at = NULL, product_upc = '', product_name = '',
+               product_brand = '', product_size = '', product_price = NULL,
+               product_image = ''
+           WHERE trip_id = :trip_id AND LOWER(name) = LOWER(:name)"""),
         {"trip_id": trip["id"], "name": item_name},
     )
     conn.commit()

@@ -425,25 +425,18 @@ export default function GroceryPage({ sidebar = false }) {
 
   const handleUndoRecent = async (name) => {
     const prev = grocery
-    // Optimistic: remove from checked/have_it/removed
+    // Optimistic: remove from all non-active states
     setGrocery({
       ...grocery,
       checked: (grocery.checked || []).filter(n => n.toLowerCase() !== name.toLowerCase()),
       have_it: (grocery.have_it || []).filter(n => n.toLowerCase() !== name.toLowerCase()),
       removed: (grocery.removed || []).filter(n => n.toLowerCase() !== name.toLowerCase()),
+      ordered: (grocery.ordered || []).filter(n => n.toLowerCase() !== name.toLowerCase()),
       recently_checked: (grocery.recently_checked || []).filter(r => r.name.toLowerCase() !== name.toLowerCase()),
     })
     try {
-      const item = (grocery.recently_checked || []).find(r => r.name.toLowerCase() === name.toLowerCase())
-      if (item?.type === 'bought') {
-        await api.toggleGroceryItem(name)
-      } else if (item?.type === 'removed') {
-        const result = await api.undoRemoveGroceryItem(name)
-        setGrocery(result)
-        return
-      } else {
-        await api.haveItGroceryItem(name)
-      }
+      const result = await api.undoGroceryItem(name)
+      setGrocery(result)
     } catch { setGrocery(prev) }
   }
 
