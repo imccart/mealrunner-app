@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mealrunner-v1'
+const CACHE_NAME = 'mealrunner-v2'
 const API_CACHE = 'mealrunner-api-v1'
 
 // API paths to cache for offline use
@@ -88,19 +88,18 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Icons, manifest, favicon: cache first
+  // Icons, manifest, favicon: network first, cache fallback (so icon updates deploy immediately)
   if (url.pathname.match(/^\/(favicon\.ico|icon-\d+\.png|apple-touch-icon\.png|manifest\.json)$/)) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        if (cached) return cached
-        return fetch(event.request).then((response) => {
+      fetch(event.request)
+        .then((response) => {
           if (response.ok) {
             const clone = response.clone()
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
           }
           return response
         })
-      })
+        .catch(() => caches.match(event.request))
     )
     return
   }
