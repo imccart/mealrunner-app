@@ -138,6 +138,13 @@ export default function GroceryPage({ sidebar = false }) {
 
   useEffect(() => { load() }, [])
 
+  // Refetch when app regains focus (picks up changes from household members)
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') load() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+
   if (loading) return <><div className="loading">Gathering ingredients...</div><FeedbackFab page="grocery" /></>
   if (loadError) return <><div className="loading">Something went wrong loading your list. Try refreshing.</div><FeedbackFab page="grocery" /></>
 
