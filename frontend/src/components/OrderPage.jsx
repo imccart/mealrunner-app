@@ -212,19 +212,27 @@ export default function OrderPage() {
     const currentStillPending = pending.find(p => p.name === activeItem)
     if (currentStillPending) return
 
-    // Advance to the next pending item AFTER the current position in the full list
+    // Advance to the next pending item AFTER the current position, wrapping around.
+    // Only show end state when no pending items remain (handled above).
     const allNames = [...updatedOrder.pending.map(p => p.name), ...updatedOrder.selected.map(s => s.name)]
     const curIdx = allNames.indexOf(activeItem)
-    // Look forward from current position for the next pending name
     const pendingSet = new Set(pending.map(p => p.name))
+    // Look forward from current position
     for (let i = curIdx + 1; i < allNames.length; i++) {
       if (pendingSet.has(allNames[i])) {
         setActiveItem(allNames[i])
         return
       }
     }
-    // Nothing pending after current position — done state
-    setActiveItem(null)
+    // Wrap around from the beginning
+    for (let i = 0; i < curIdx; i++) {
+      if (pendingSet.has(allNames[i])) {
+        setActiveItem(allNames[i])
+        return
+      }
+    }
+    // Shouldn't reach here (pending.length > 0), but safety fallback
+    setActiveItem(pending[0].name)
   }
 
   const handleSelect = (product) => {
@@ -301,7 +309,8 @@ export default function OrderPage() {
     const allNames = [...order.pending.map(p => p.name), ...order.selected.map(s => s.name)]
     const idx = allNames.indexOf(activeItem)
     if (idx < allNames.length - 1) setActiveItem(allNames[idx + 1])
-    else setActiveItem(null) // reached the end → done state
+    else if (order.pending.length > 0) setActiveItem(allNames[0]) // wrap to start
+    else setActiveItem(null) // all done
   }
 
   const handleKeepShopping = () => {
@@ -645,7 +654,7 @@ export default function OrderPage() {
             <div className={styles.orderSection}>
               <div className={styles.orderSectionLabel}>Prior selections</div>
               {products.preferences.map(pref => (
-                <div key={pref.upc} className={`${styles.productCard} ${styles.preference}`} style={{ position: 'relative' }}>
+                <div key={pref.upc} className={`${styles.productCard} ${styles.preference}${pref.in_stock === false ? ` ${styles.outOfStock}` : ''}`} style={{ position: 'relative' }}>
                   <button
                     className={styles.prefDismiss}
                     onClick={(e) => {
@@ -657,12 +666,13 @@ export default function OrderPage() {
                   >{'\u00D7'}</button>
                   <button
                     className={styles.prefSelectBtn}
-                    onClick={() => handleSelect({
+                    onClick={() => pref.in_stock !== false && handleSelect({
                       upc: pref.upc, name: pref.name,
                       brand: pref.brand, size: pref.size,
                       price: pref.promo_price || pref.price || null,
                       image: pref.image || '',
                     })}
+                    disabled={pref.in_stock === false}
                   >
                     {pref.image && (
                       <div className={styles.productImage}>
@@ -692,6 +702,7 @@ export default function OrderPage() {
                           </>
                         )}
                       </div>
+                      {pref.in_stock === false && <div className={styles.outOfStockLabel}>Unavailable</div>}
                       <ProductInsights nova={pref.nova} nutriscore={pref.nutriscore} />
                       <ParentCoBadge brand={pref.brand} parentCompany={pref.parent_company} violations={pref.violations} onTapUnknown={(b) => setCommunityBrand(b || 'Unknown')} />
                     </div>

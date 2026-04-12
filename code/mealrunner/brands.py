@@ -35,7 +35,7 @@ def get_parent_company(brand: str, conn=None, category: str | None = None) -> st
     query = brand.strip()
 
     def _result(row):
-        return row["parent_company"] if row["parent_company"] else "Same as brand"
+        return row["parent_company"] if row["parent_company"] else query
 
     # 1. Exact match with specific category (if provided)
     if category:

@@ -1556,24 +1556,24 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
         ph = ", ".join(f":pu{i}" for i in range(len(pref_upcs)))
         ps = {f"pu{i}": u for i, u in enumerate(pref_upcs)}
         pref_score_rows = conn.execute(
-            text(f"SELECT upc, nova_group, nutriscore, price, promo_price FROM product_scores WHERE upc IN ({ph})"),
+            text(f"SELECT upc, nova_group, nutriscore, price, promo_price, in_stock FROM product_scores WHERE upc IN ({ph})"),
             ps,
         ).fetchall()
         pref_scores = {r["upc"]: dict(r) for r in pref_score_rows}
 
-    # Also update preference brand from search results if available
-    search_brands = {p.upc: p.brand for p in products if p.upc and p.brand}
-    # Map UPC → primary Kroger category for brand-by-category lookup
-    search_categories = {p.upc: p.categories[0] if p.categories else None for p in products if p.upc}
+    # Use search results to get fresh brand/category for preferences
+    search_products_by_upc = {p.upc: p for p in products if p.upc}
 
     pref_list = []
     for p in prefs:
         sc = pref_scores.get(p.upc, {})
-        brand = search_brands.get(p.upc, p.brand)
-        cat = search_categories.get(p.upc)
+        # Use fresh data from search results if this UPC appeared
+        search_p = search_products_by_upc.get(p.upc)
+        brand = search_p.brand if search_p and search_p.brand else p.brand
+        cat = search_p.categories[0] if search_p and search_p.categories else None
+        in_stock = search_p.in_stock if search_p else bool(sc.get("in_stock", 1))
         parent = get_parent_company(brand, conn, category=cat) if brand else "We're not sure"
-        violation_key = brand.strip() if parent == "Same as brand" else parent
-        violations = get_company_violations(conn, violation_key) if violation_key not in ("We're not sure",) else None
+        violations = get_company_violations(conn, parent) if parent not in ("We're not sure",) else None
         pref_item = {
             "upc": p.upc,
             "name": p.description,
@@ -1586,6 +1586,7 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
             "nova": sc.get("nova_group"),
             "nutriscore": sc.get("nutriscore", ""),
             "parent_company": parent,
+            "in_stock": in_stock,
         }
         if violations:
             pref_item["violations"] = violations
@@ -1612,22 +1613,16 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
     violation_cache = {}
     for p in products:
         parent = product_parents[p.upc or p.product_id]
-        if parent == "Same as brand":
-            key = p.brand.strip()
-        elif parent == "We're not sure":
+        if parent == "We're not sure":
             continue
-        else:
-            key = parent
-        if key and key not in violation_cache:
-            violation_cache[key] = get_company_violations(conn, key)
+        if parent and parent not in violation_cache:
+            violation_cache[parent] = get_company_violations(conn, parent)
 
     result = []
     for p in products:
         rating = product_ratings.get(p.upc, 0)
         parent = product_parents[p.upc or p.product_id]
-        # For self-owned brands, look up violations under the brand name
-        violation_key = p.brand.strip() if parent == "Same as brand" else parent
-        violations = violation_cache.get(violation_key) if violation_key not in ("We're not sure",) else None
+        violations = violation_cache.get(parent) if parent not in ("We're not sure",) else None
         item = {
             "upc": p.upc,
             "product_id": p.product_id,
