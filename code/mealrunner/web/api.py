@@ -1020,6 +1020,9 @@ async def recategorize_item(body: dict, request: Request):
 async def toggle_grocery_item(item_name: str, request: Request):
     """Toggle an item's checked state on the active trip."""
     user_id = request.state.user_id
+    real_uid = getattr(request.state, 'real_user_id', user_id)
+    if real_uid != user_id:
+        print(f"[grocery] toggle '{item_name}' by household member {real_uid} → owner {user_id}", flush=True)
     conn = _conn()
     trip = _get_active_trip(conn, user_id)
     if not trip:
@@ -1078,6 +1081,9 @@ async def remove_grocery_item(item_name: str, request: Request):
     """Remove an item from the grocery list. Sets removed flag (prevents re-add by refresh).
     Extra/regular items are deleted outright."""
     user_id = request.state.user_id
+    real_uid = getattr(request.state, 'real_user_id', user_id)
+    if real_uid != user_id:
+        print(f"[grocery] remove '{item_name}' by household member {real_uid} → owner {user_id}", flush=True)
     conn = _conn()
     trip = _get_active_trip(conn, user_id)
     if not trip:
@@ -1162,6 +1168,9 @@ async def buy_elsewhere_grocery_item(item_name: str, request: Request):
 async def have_it_grocery_item(item_name: str, request: Request):
     """Mark an item as already on hand."""
     user_id = request.state.user_id
+    real_uid = getattr(request.state, 'real_user_id', user_id)
+    if real_uid != user_id:
+        print(f"[grocery] have-it '{item_name}' by household member {real_uid} → owner {user_id}", flush=True)
     conn = _conn()
     trip = _get_active_trip(conn, user_id)
     if not trip:
