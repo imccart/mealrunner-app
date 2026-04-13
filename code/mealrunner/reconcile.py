@@ -505,15 +505,18 @@ def diff_grocery_list(grocery_names: list[str], receipt_items: list[dict]) -> di
     # AI-assisted matching for remaining unmatched receipt items against remaining grocery names
     if unmatched and remaining_names:
         try:
+            print(f"[receipt] AI matching: {len(unmatched)} unmatched receipt items vs {len(remaining_names)} grocery names", flush=True)
             ai_matches = _ai_match(list(remaining_names.values()), unmatched)
+            print(f"[receipt] AI returned {len(ai_matches)} matches", flush=True)
             for grocery_name, r_item in ai_matches:
                 g_norm = _norm(grocery_name)
                 if g_norm in remaining_names:
                     remaining_names.pop(g_norm)
                     matched.append({"grocery_name": grocery_name, "receipt": r_item})
                     unmatched = [u for u in unmatched if u is not r_item]
-        except Exception:
-            pass  # fall back to regex-only matches
+                    print(f"[receipt]   AI matched: {r_item.get('item', '?')!r} → {grocery_name!r}", flush=True)
+        except Exception as e:
+            print(f"[receipt] AI matching failed: {e}", flush=True)
 
     return {
         "matched": matched,
@@ -538,7 +541,8 @@ def _ai_match(grocery_names: list[str], receipt_items: list[dict]) -> list[tuple
             "content": (
                 "Match these grocery receipt items to items on a shopping list. "
                 "A match means the receipt product IS the shopping list item — same category of food. "
-                "Most items will NOT match. Only include matches you are very confident about. "
+                "For example, 'Caesar Dressing' IS 'salad dressing', 'Fuji Apples' IS 'apples'. "
+                "Most items will NOT match. Only include matches you are confident about. "
                 "Return [] if no matches.\n\n"
                 f"Grocery list: {json.dumps(grocery_names)}\n"
                 f"Receipt items: {json.dumps(receipt_descriptions)}\n\n"
