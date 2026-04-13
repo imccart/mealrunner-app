@@ -1401,6 +1401,15 @@ async def get_order(request: Request):
         if r["product_upc"] and r["product_price"] and not r["buy_elsewhere"]
     )
 
+    # Kick off background pre-warm for pending items so searches load fast
+    if pending:
+        import threading
+        pending_names = [p["name"] for p in pending]
+        threading.Thread(
+            target=_bg_prewarm_order, args=(user_id, trip["id"], pending_names),
+            daemon=True,
+        ).start()
+
     return {
         "pending": pending,
         "selected": selected,
@@ -1408,6 +1417,71 @@ async def get_order(request: Request):
         "total_items": len(selected),
         "total_price": round(total_price, 2),
     }
+
+
+def _bg_prewarm_order(user_id: str, trip_id: int, item_names: list[str]):
+    """Background thread: pre-warm product_scores for pending order items."""
+    from mealrunner.database import get_connection
+    from mealrunner.kroger import search_products_fast, fill_prices
+    from mealrunner.stores import get_kroger_location_id
+    import datetime as _dt
+    import time as _time
+
+    try:
+        with get_connection() as bg_conn:
+            location_id = get_kroger_location_id(bg_conn, user_id)
+            if not location_id:
+                return
+
+            _today = _dt.date.today().isoformat()
+            warmed = 0
+
+            for name in item_names:
+                try:
+                    products = search_products_fast(name, limit=12, fulfillment="curbside", location_id=location_id)
+                    if not products:
+                        continue
+
+                    # Skip items already cached today
+                    upcs = [p.upc for p in products]
+                    ph = ", ".join(f":p{i}" for i in range(len(upcs)))
+                    params = {f"p{i}": upc for i, upc in enumerate(upcs)}
+                    cached_rows = bg_conn.execute(
+                        text(f"SELECT upc FROM product_scores WHERE upc IN ({ph}) AND price_fetched_at::date::text = :today"),
+                        {**params, "today": _today},
+                    ).fetchall()
+                    cached_upcs = {r["upc"] for r in cached_rows}
+
+                    need_price = [p for p in products if p.upc not in cached_upcs and p.price is None]
+                    if need_price:
+                        fill_prices(need_price, location_id=location_id)
+
+                    # Save to cache
+                    for p in products:
+                        if p.upc in cached_upcs:
+                            continue
+                        bg_conn.execute(
+                            text("""INSERT INTO product_scores
+                               (upc, price, promo_price, in_stock, curbside, delivery, price_fetched_at)
+                               VALUES (:upc, :price, :promo, :stock, :curbside, :delivery, CURRENT_TIMESTAMP)
+                               ON CONFLICT(upc) DO UPDATE SET
+                                 price = excluded.price, promo_price = excluded.promo_price,
+                                 in_stock = excluded.in_stock, curbside = excluded.curbside,
+                                 delivery = excluded.delivery,
+                                 price_fetched_at = excluded.price_fetched_at"""),
+                            {"upc": p.upc, "price": p.price, "promo": p.promo_price,
+                             "stock": int(p.in_stock), "curbside": int(p.curbside),
+                             "delivery": int(p.delivery)},
+                        )
+                    bg_conn.commit()
+                    warmed += 1
+                    _time.sleep(0.3)
+                except Exception as e:
+                    print(f"[prewarm] Error for '{name}': {e}", flush=True)
+
+            print(f"[prewarm] Warmed {warmed}/{len(item_names)} items for user {user_id[:8]}...", flush=True)
+    except Exception as e:
+        print(f"[prewarm] Background error: {e}", flush=True)
 
 
 _search_cache: dict[str, tuple[float, dict]] = {}  # {term: (timestamp, response)}

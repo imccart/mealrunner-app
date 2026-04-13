@@ -1268,15 +1268,17 @@ def ensure_db_initialized() -> None:
             while True:
                 bg_conn = get_connection()
                 try:
-                    from mealrunner.pricing import run_price_polling
-                    print("[db] Background: running price polling...", flush=True)
+                    from mealrunner.pricing import run_price_polling, prewarm_grocery_prices
+                    print("[db] Background: pre-warming grocery prices...", flush=True)
+                    prewarm_grocery_prices(bg_conn)
+                    print("[db] Background: pre-warm done, running price polling...", flush=True)
                     run_price_polling(bg_conn)
                     print("[db] Background: price polling done", flush=True)
                 except Exception as e:
                     print(f"[db] Background: price polling error (non-fatal): {e}", flush=True)
                 finally:
                     bg_conn.close()
-                _sleep.sleep(12 * 3600)  # 12 hours
+                _sleep.sleep(6 * 3600)  # 6 hours
         threading.Thread(target=_background_price_polling, daemon=True).start()
 
         _db_initialized = True
