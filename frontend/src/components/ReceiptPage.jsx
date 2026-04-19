@@ -203,9 +203,11 @@ export default function ReceiptPage() {
       <div className="page-header">
         <h2 className="screen-heading">Receipt</h2>
         <div className="screen-sub">
-          {hasReconciled
-            ? `${receipt.matched.filter(i => i.checked).length} confirmed`
-            : 'Upload a receipt to reconcile'}
+          {unmatchedMatches.length > 0
+            ? `${unmatchedMatches.length} to confirm`
+            : (receipt.extras && receipt.extras.length > 0
+                ? `${receipt.extras.length} extra to review`
+                : 'Upload a receipt to reconcile')}
         </div>
       </div>
 
