@@ -278,13 +278,16 @@ export default function GroceryPage({ sidebar = false }) {
         <div className={styles.shoppingList} ref={shopListRef}>
           {sortedGroups.map(group => {
             const items = items_by_group[group]
+            const recentSet = new Set((recently_checked || []).map(r => r.name.toLowerCase()))
             const active = items.filter(i => {
               const nl = i.name.toLowerCase()
               return !checkedSet.has(nl) && !haveItSet.has(nl) && !removedSet.has(nl) && !orderedSet.has(nl)
             })
+            // Only surface items checked within the 24-hour undo window — matches
+            // the main grocery view's "Recently checked" section.
             const done = items.filter(i => {
               const nl = i.name.toLowerCase()
-              return checkedSet.has(nl) || haveItSet.has(nl)
+              return (checkedSet.has(nl) || haveItSet.has(nl)) && recentSet.has(nl)
             })
             done.forEach(item => allChecked.push(item))
             if (active.length === 0) return null

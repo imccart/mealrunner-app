@@ -825,7 +825,9 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
 
     # Get existing meal-sourced items and their checked/receipt/removed state
     existing = conn.execute(
-        text("SELECT id, name, checked, receipt_status, removed FROM trip_items WHERE trip_id = :trip_id AND source = 'meal'"),
+        text("""SELECT id, name, checked, checked_at, have_it, have_it_at,
+                       removed, removed_at, for_meals, receipt_status
+                FROM trip_items WHERE trip_id = :trip_id AND source = 'meal'"""),
         {"trip_id": trip_id},
     ).fetchall()
     existing_map = {r["name"].lower(): r for r in existing}
@@ -841,14 +843,37 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
     # Add or update meal items
     for name_lower, info in fresh_meal_items.items():
         if name_lower in existing_map:
-            # Update meal associations only — don't touch product/ordered state
+            row = existing_map[name_lower]
+            old_meals = {m.strip() for m in (row["for_meals"] or "").split(",") if m.strip()}
+            new_meals = {m.strip() for m in info["for_meals"].split(",") if m.strip()}
+            meals_added = bool(new_meals - old_meals)
+
+            if meals_added:
+                # A new meal pulled this ingredient in — give it a fresh status
+                # so the user sees it on the active list again.
+                reset_clause = """checked = 0, checked_at = NULL,
+                                  have_it = 0, have_it_at = NULL,
+                                  removed = 0, removed_at = NULL,"""
+            else:
+                # Same meals as before — only clear stale checked/have_it
+                # (3-day threshold mirrors the auto-prune for extras).
+                # Removed stays sticky until the user explicitly undoes.
+                reset_clause = """checked = CASE WHEN checked = 1 AND checked_at < NOW() - INTERVAL '3 days' THEN 0 ELSE checked END,
+                                  checked_at = CASE WHEN checked = 1 AND checked_at < NOW() - INTERVAL '3 days' THEN NULL ELSE checked_at END,
+                                  have_it = CASE WHEN have_it = 1 AND have_it_at < NOW() - INTERVAL '3 days' THEN 0 ELSE have_it END,
+                                  have_it_at = CASE WHEN have_it = 1 AND have_it_at < NOW() - INTERVAL '3 days' THEN NULL ELSE have_it_at END,"""
+
             conn.execute(
-                text("""UPDATE trip_items SET for_meals = :for_meals, meal_count = :meal_count, shopping_group = :group
+                text(f"""UPDATE trip_items SET
+                       {reset_clause}
+                       for_meals = :for_meals, meal_count = :meal_count, shopping_group = :group
                    WHERE id = :id"""),
                 {"for_meals": info["for_meals"], "meal_count": info["meal_count"],
-                 "group": info["shopping_group"], "id": existing_map[name_lower]["id"]},
+                 "group": info["shopping_group"], "id": row["id"]},
             )
         else:
+            # New meal item — if a non-meal row exists with the same name, treat
+            # it as a fresh need (clear bought/have-it/removed state).
             conn.execute(
                 text("""INSERT INTO trip_items
                    (trip_id, name, shopping_group, source, for_meals, meal_count)
@@ -856,7 +881,10 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
                    ON CONFLICT (trip_id, name) DO UPDATE SET
                      for_meals = EXCLUDED.for_meals,
                      meal_count = EXCLUDED.meal_count,
-                     shopping_group = EXCLUDED.shopping_group"""),
+                     shopping_group = EXCLUDED.shopping_group,
+                     checked = 0, checked_at = NULL,
+                     have_it = 0, have_it_at = NULL,
+                     removed = 0, removed_at = NULL"""),
                 {"trip_id": trip_id, "name": info["name"], "group": info["shopping_group"],
                  "for_meals": info["for_meals"], "meal_count": info["meal_count"]},
             )
