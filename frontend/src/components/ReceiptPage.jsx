@@ -301,15 +301,16 @@ export default function ReceiptPage() {
           {unmatchedMatches.map(item => {
             const key = `match-${item.name}`
             const isExpanded = !collapsedItems.has(key)
+            const receiptText = item.receipt_item || item.product_name
             return (
               <div key={item.name} className={styles.receiptItemRow}>
                 <div className={styles.receiptItemTop} onClick={() => toggleExpand(key)}>
                   <div className={styles.receiptItemInfo}>
-                    <div className={styles.receiptItemName}>
-                      {item.receipt_item || item.product_name || item.name}
-                    </div>
-                    {(item.receipt_item || item.product_name) && item.receipt_item !== item.name && (
-                      <div className={styles.receiptItemDetail}>{'\u2192'} {item.name}</div>
+                    <div className={styles.receiptItemName}>{item.name}</div>
+                    {receiptText && (
+                      <div className={styles.receiptItemDetail}>
+                        from receipt: {receiptText}
+                      </div>
                     )}
                     <div className={styles.receiptItemMeta}>
                       {item.product_brand && <span>{item.product_brand}</span>}
