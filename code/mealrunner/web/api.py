@@ -869,40 +869,27 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
                                   product_brand = '', product_size = '',
                                   product_price = NULL, product_image = '',
                                   selected_at = NULL, ordered_at = NULL,"""
+                conn.execute(
+                    text(f"""UPDATE trip_items SET
+                           {reset_clause}
+                           for_meals = :for_meals, meal_count = :meal_count, shopping_group = :group
+                       WHERE id = :id"""),
+                    {"for_meals": info["for_meals"], "meal_count": info["meal_count"],
+                     "group": info["shopping_group"], "id": row["id"]},
+                )
             else:
-                # Same meals as before — only clear stale checked/have_it
-                # (3-day threshold mirrors the auto-prune for extras).
-                # Removed stays sticky until the user explicitly undoes.
-                # When checked/have_it ages out, also drop receipt + prior
-                # product selection so the order/receipt pages don't show
-                # stale "already in cart" / "already received" state.
-                stale_cond = """((checked = 1 AND checked_at::timestamptz < NOW() - INTERVAL '3 days')
-                                 OR (have_it = 1 AND have_it_at::timestamptz < NOW() - INTERVAL '3 days'))"""
-                reset_clause = f"""checked = CASE WHEN checked = 1 AND checked_at::timestamptz < NOW() - INTERVAL '3 days' THEN 0 ELSE checked END,
-                                  checked_at = CASE WHEN checked = 1 AND checked_at::timestamptz < NOW() - INTERVAL '3 days' THEN NULL ELSE checked_at END,
-                                  have_it = CASE WHEN have_it = 1 AND have_it_at::timestamptz < NOW() - INTERVAL '3 days' THEN 0 ELSE have_it END,
-                                  have_it_at = CASE WHEN have_it = 1 AND have_it_at::timestamptz < NOW() - INTERVAL '3 days' THEN NULL ELSE have_it_at END,
-                                  receipt_status = CASE WHEN {stale_cond} THEN '' ELSE receipt_status END,
-                                  receipt_item = CASE WHEN {stale_cond} THEN '' ELSE receipt_item END,
-                                  receipt_upc = CASE WHEN {stale_cond} THEN '' ELSE receipt_upc END,
-                                  receipt_price = CASE WHEN {stale_cond} THEN NULL ELSE receipt_price END,
-                                  product_upc = CASE WHEN {stale_cond} THEN '' ELSE product_upc END,
-                                  product_name = CASE WHEN {stale_cond} THEN '' ELSE product_name END,
-                                  product_brand = CASE WHEN {stale_cond} THEN '' ELSE product_brand END,
-                                  product_size = CASE WHEN {stale_cond} THEN '' ELSE product_size END,
-                                  product_price = CASE WHEN {stale_cond} THEN NULL ELSE product_price END,
-                                  product_image = CASE WHEN {stale_cond} THEN '' ELSE product_image END,
-                                  selected_at = CASE WHEN {stale_cond} THEN NULL ELSE selected_at END,
-                                  ordered_at = CASE WHEN {stale_cond} THEN NULL ELSE ordered_at END,"""
-
-            conn.execute(
-                text(f"""UPDATE trip_items SET
-                       {reset_clause}
-                       for_meals = :for_meals, meal_count = :meal_count, shopping_group = :group
-                   WHERE id = :id"""),
-                {"for_meals": info["for_meals"], "meal_count": info["meal_count"],
-                 "group": info["shopping_group"], "id": row["id"]},
-            )
+                # Same meals as before — preserve all state (checked, have_it,
+                # receipt, product selection). The user bought this for a meal
+                # still on the plan; don't un-buy it. When the meal eventually
+                # leaves the rolling window, the item is deleted (or preserved
+                # by receipt_status) above.
+                conn.execute(
+                    text("""UPDATE trip_items SET
+                           for_meals = :for_meals, meal_count = :meal_count, shopping_group = :group
+                       WHERE id = :id"""),
+                    {"for_meals": info["for_meals"], "meal_count": info["meal_count"],
+                     "group": info["shopping_group"], "id": row["id"]},
+                )
         else:
             # Genuinely new item (no row exists with this name)
             conn.execute(
@@ -1015,6 +1002,12 @@ async def add_grocery_item(body: dict, request: Request):
     trip = _ensure_active_trip(conn, mw, user_id)
 
     group = _infer_item_group(conn, name, user_id)
+    # Re-adding an item is the user saying "I need this again" — full state
+    # reset so the item behaves like a brand-new need on grocery, order, and
+    # receipt pages. Preserve source/for_meals so meal-sourced attribution
+    # isn't lost when the user manually re-adds something a meal also needs.
+    # submitted_at stays put: if there's an in-flight order, keep it visible
+    # for reconciliation.
     conn.execute(
         text("""INSERT INTO trip_items
            (trip_id, name, shopping_group, source, for_meals, meal_count)
@@ -1023,8 +1016,13 @@ async def add_grocery_item(body: dict, request: Request):
              checked = 0, checked_at = NULL,
              have_it = 0, have_it_at = NULL,
              removed = 0, removed_at = NULL,
-             shopping_group = :group,
-             source = 'extra', for_meals = '', meal_count = 0"""),
+             receipt_status = '', receipt_item = '',
+             receipt_upc = '', receipt_price = NULL,
+             product_upc = '', product_name = '',
+             product_brand = '', product_size = '',
+             product_price = NULL, product_image = '',
+             selected_at = NULL, ordered_at = NULL,
+             shopping_group = :group"""),
         {"trip_id": trip["id"], "name": name, "group": group},
     )
     conn.commit()
@@ -1294,7 +1292,8 @@ async def add_regulars_to_grocery(body: dict, request: Request):
     mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
-    # Add selected regulars
+    # Add selected regulars. If a regular is already on the trip (even checked
+    # off), give it a fresh state — the user is asking for it again.
     for name in selected:
         name_lower = name.lower()
         group = _infer_item_group(conn, name_lower, user_id)
@@ -1302,7 +1301,17 @@ async def add_regulars_to_grocery(body: dict, request: Request):
             text("""INSERT INTO trip_items
                (trip_id, name, shopping_group, source, for_meals, meal_count)
                VALUES (:trip_id, :name, :group, 'regular', '', 0)
-               ON CONFLICT DO NOTHING"""),
+               ON CONFLICT (trip_id, name) DO UPDATE SET
+                 checked = 0, checked_at = NULL,
+                 have_it = 0, have_it_at = NULL,
+                 removed = 0, removed_at = NULL,
+                 receipt_status = '', receipt_item = '',
+                 receipt_upc = '', receipt_price = NULL,
+                 product_upc = '', product_name = '',
+                 product_brand = '', product_size = '',
+                 product_price = NULL, product_image = '',
+                 selected_at = NULL, ordered_at = NULL,
+                 shopping_group = :group"""),
             {"trip_id": trip["id"], "name": name_lower, "group": group},
         )
 
@@ -1328,6 +1337,8 @@ async def add_pantry_to_grocery(body: dict, request: Request):
     mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
+    # Add selected pantry items. Fresh state on conflict — same "trust the
+    # user" principle as /grocery/add and /grocery/add-regulars.
     for name in selected:
         name_lower = name.lower()
         group = _infer_item_group(conn, name_lower, user_id)
@@ -1335,7 +1346,17 @@ async def add_pantry_to_grocery(body: dict, request: Request):
             text("""INSERT INTO trip_items
                (trip_id, name, shopping_group, source, for_meals, meal_count)
                VALUES (:trip_id, :name, :group, 'pantry', '', 0)
-               ON CONFLICT DO NOTHING"""),
+               ON CONFLICT (trip_id, name) DO UPDATE SET
+                 checked = 0, checked_at = NULL,
+                 have_it = 0, have_it_at = NULL,
+                 removed = 0, removed_at = NULL,
+                 receipt_status = '', receipt_item = '',
+                 receipt_upc = '', receipt_price = NULL,
+                 product_upc = '', product_name = '',
+                 product_brand = '', product_size = '',
+                 product_price = NULL, product_image = '',
+                 selected_at = NULL, ordered_at = NULL,
+                 shopping_group = :group"""),
             {"trip_id": trip["id"], "name": name_lower, "group": group},
         )
 
