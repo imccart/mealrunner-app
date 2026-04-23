@@ -74,11 +74,11 @@ test.describe("App basics", () => {
       .trim();
     expect(firstName.length).toBeGreaterThan(0);
 
-    // Tap to expand the action bar, then click "Bought"
-    await groceryItems.first().click();
-    await authedPage
-      .getByRole("button", { name: /^Bought$/ })
+    // Expand the action bar via the hamburger (☰) button, then click "Bought"
+    await groceryItems.first().getByTitle("Actions").click();
+    await groceryItems
       .first()
+      .getByRole("button", { name: /^Bought$/ })
       .click();
 
     // The row with that name should no longer appear in active items
