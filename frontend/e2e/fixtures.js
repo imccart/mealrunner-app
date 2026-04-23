@@ -48,6 +48,33 @@ export const test = base.extend({
     await loginAs(page, testEmail);
     await use(page);
   },
+  // A factory that returns { page, email } for additional fresh users in
+  // the same test. Used by the household-invite test which needs two
+  // authed sessions. Contexts are closed in teardown.
+  makeAuthedUser: async ({ browser }, use) => {
+    const created = [];
+    async function create(opts = {}) {
+      const context = await browser.newContext();
+      const p = await context.newPage();
+      const email = opts.email || makeTestEmail();
+      const resp = await p.request.post("/api/auth/e2e-login", {
+        data: { email, secret: TEST_SECRET, ...opts },
+      });
+      if (!resp.ok()) {
+        throw new Error(
+          `e2e-login failed (${resp.status()}): ${await resp.text()}`,
+        );
+      }
+      created.push(context);
+      return { page: p, email };
+    }
+    await use(create);
+    for (const c of created) {
+      try {
+        await c.close();
+      } catch {}
+    }
+  },
 });
 
-export { expect, deleteAllTestUsers };
+export { expect, deleteAllTestUsers, makeTestEmail };
