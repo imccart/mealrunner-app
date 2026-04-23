@@ -4677,10 +4677,14 @@ async def e2e_cleanup(body: dict):
 
     def safe_exec(sql: str, params: dict, label: str) -> None:
         """Run a statement inside a savepoint so a failure doesn't abort the
-        surrounding transaction. Records the error for the response body."""
+        surrounding transaction. Records the error for the response body.
+
+        Uses conn.raw.begin_nested() because DictConnection is a thin wrapper
+        that only forwards execute/commit/begin/close.
+        """
         sp = None
         try:
-            sp = conn.begin_nested()
+            sp = conn.raw.begin_nested()
             conn.execute(text(sql), params)
             sp.commit()
         except Exception as e:
@@ -4745,7 +4749,7 @@ async def e2e_cleanup(body: dict):
         conn.commit()
     except Exception as e:
         try:
-            conn.rollback()
+            conn.raw.rollback()
         except Exception:
             pass
         return JSONResponse(
@@ -4753,7 +4757,21 @@ async def e2e_cleanup(body: dict):
             status_code=500,
         )
 
-    return {"ok": True, "deleted": len(user_ids), "errors": errors}
+    # Verify actual deletion by re-counting.
+    try:
+        remaining = conn.execute(
+            text("SELECT COUNT(*) AS n FROM users WHERE email LIKE :pattern"),
+            {"pattern": pattern},
+        ).fetchone()["n"]
+    except Exception:
+        remaining = None
+    return {
+        "ok": True,
+        "attempted": len(user_ids),
+        "deleted": (len(user_ids) - remaining) if remaining is not None else None,
+        "remaining": remaining,
+        "errors": errors,
+    }
 
 
 @router.post("/feedback/{feedback_id}/respond")
