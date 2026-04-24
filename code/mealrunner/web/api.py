@@ -800,11 +800,27 @@ def _ensure_active_trip(conn, mw, user_id: str):
 
 
 def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
-    """Re-derive meal-sourced items while preserving extras and checked state."""
+    """Re-derive meal-sourced items while preserving extras and checked state.
+
+    Occurrence tracking via meal_ids: a trip_item records which meal_ids
+    currently contribute it. A new meal_id appearing in the fresh set means
+    a new occurrence pulled this ingredient in — reset the bought/matched
+    state so the ingredient re-surfaces on the active list. Comparing names
+    alone would treat "Hot Dogs on 4/10" and "Hot Dogs on 4/26" as the same
+    need; meal_ids distinguish them.
+    """
     from mealrunner.grocery import build_grocery_list, split_by_store
 
     grocery_meals = [m for m in mw.meals if m.on_grocery]
     resolve = _build_group_resolver(conn, user_id)
+
+    # recipe_name → [meal_id, ...] for all meals currently on the plan.
+    # Sides in build_grocery_list are labeled by their parent meal's name,
+    # so the parent's id is what ends up tracked against side ingredients.
+    meal_ids_by_name: dict[str, list[int]] = {}
+    for m in grocery_meals:
+        if m.id is not None:
+            meal_ids_by_name.setdefault(m.recipe_name, []).append(m.id)
 
     # Build fresh meal items
     fresh_meal_items: dict[str, dict] = {}
@@ -816,10 +832,15 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
                 name_lower = item.ingredient_name.lower()
                 group = resolve(name_lower)
                 for_meals = ",".join(item.meals) if item.meals else ""
+                mids: set[int] = set()
+                for mn in item.meals:
+                    for mid in meal_ids_by_name.get(mn, []):
+                        mids.add(mid)
                 fresh_meal_items[name_lower] = {
                     "name": name_lower,
                     "shopping_group": group,
                     "for_meals": for_meals,
+                    "meal_ids": mids,
                     "meal_count": len(item.meals),
                 }
 
@@ -828,7 +849,7 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
     # row's checked state gets reset on every refresh by the INSERT...ON CONFLICT.
     existing = conn.execute(
         text("""SELECT id, name, source, checked, checked_at, have_it, have_it_at,
-                       removed, removed_at, for_meals, receipt_status
+                       removed, removed_at, for_meals, meal_ids, receipt_status
                 FROM trip_items WHERE trip_id = :trip_id"""),
         {"trip_id": trip_id},
     ).fetchall()
@@ -847,19 +868,36 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
 
     # Add or update items needed by meals
     for name_lower, info in fresh_meal_items.items():
+        meal_ids_str = ",".join(str(i) for i in sorted(info["meal_ids"]))
         if name_lower in existing_map:
             row = existing_map[name_lower]
-            old_meals = {m.strip() for m in (row["for_meals"] or "").split(",") if m.strip()}
-            new_meals = {m.strip() for m in info["for_meals"].split(",") if m.strip()}
-            meals_added = bool(new_meals - old_meals)
+            old_meal_ids = {
+                int(x) for x in (row["meal_ids"] or "").split(",") if x.strip().isdigit()
+            }
+            new_meal_ids = info["meal_ids"]
+            new_occurrence = bool(new_meal_ids - old_meal_ids)
 
-            if meals_added:
-                # A new meal pulled this ingredient in — give it a fresh status
-                # so the user sees it on the active list again. Decouple from
-                # any prior receipt match AND prior product/order selection,
-                # since this is a new need, not the same one that was previously
-                # fulfilled. submitted_at is left alone — if there's an
-                # in-flight order, it should remain visible until reconciled.
+            # Legacy state: row pre-dates the meal_ids column and is in a
+            # completed state (checked / have-it / removed / receipt).
+            # We can't tell whether this was the same occurrence or an old
+            # one — treat as old so a fresh meal needing this ingredient
+            # re-surfaces it. Fires once per legacy row; subsequent refreshes
+            # have meal_ids populated and this branch no longer applies.
+            legacy_completed = (
+                not old_meal_ids and (
+                    row["checked"]
+                    or row["have_it"]
+                    or row["removed"]
+                    or (row["receipt_status"] or "") != ""
+                )
+            )
+
+            if new_occurrence or legacy_completed:
+                # A new meal occurrence is pulling this ingredient in.
+                # Decouple from any prior receipt match AND prior product /
+                # order selection — this is a new need, not the same one
+                # that was previously fulfilled. submitted_at is left alone
+                # so in-flight orders remain visible until reconciled.
                 reset_clause = """checked = 0, checked_at = NULL,
                                   have_it = 0, have_it_at = NULL,
                                   removed = 0, removed_at = NULL,
@@ -872,33 +910,36 @@ def _refresh_trip_meal_items(conn, trip_id: int, mw, user_id: str) -> None:
                 conn.execute(
                     text(f"""UPDATE trip_items SET
                            {reset_clause}
-                           for_meals = :for_meals, meal_count = :meal_count, shopping_group = :group
+                           for_meals = :for_meals, meal_ids = :meal_ids,
+                           meal_count = :meal_count, shopping_group = :group
                        WHERE id = :id"""),
-                    {"for_meals": info["for_meals"], "meal_count": info["meal_count"],
+                    {"for_meals": info["for_meals"], "meal_ids": meal_ids_str,
+                     "meal_count": info["meal_count"],
                      "group": info["shopping_group"], "id": row["id"]},
                 )
             else:
-                # Same meals as before — preserve all state (checked, have_it,
-                # receipt, product selection). The user bought this for a meal
-                # still on the plan; don't un-buy it. When the meal eventually
-                # leaves the rolling window, the item is deleted (or preserved
-                # by receipt_status) above.
+                # Same meal occurrences as before — preserve all state
+                # (checked, have_it, receipt, product selection). The user
+                # bought this for a meal still on the plan; don't un-buy it.
                 conn.execute(
                     text("""UPDATE trip_items SET
-                           for_meals = :for_meals, meal_count = :meal_count, shopping_group = :group
+                           for_meals = :for_meals, meal_ids = :meal_ids,
+                           meal_count = :meal_count, shopping_group = :group
                        WHERE id = :id"""),
-                    {"for_meals": info["for_meals"], "meal_count": info["meal_count"],
+                    {"for_meals": info["for_meals"], "meal_ids": meal_ids_str,
+                     "meal_count": info["meal_count"],
                      "group": info["shopping_group"], "id": row["id"]},
                 )
         else:
             # Genuinely new item (no row exists with this name)
             conn.execute(
                 text("""INSERT INTO trip_items
-                   (trip_id, name, shopping_group, source, for_meals, meal_count)
-                   VALUES (:trip_id, :name, :group, 'meal', :for_meals, :meal_count)
+                   (trip_id, name, shopping_group, source, for_meals, meal_ids, meal_count)
+                   VALUES (:trip_id, :name, :group, 'meal', :for_meals, :meal_ids, :meal_count)
                    ON CONFLICT (trip_id, name) DO NOTHING"""),
                 {"trip_id": trip_id, "name": info["name"], "group": info["shopping_group"],
-                 "for_meals": info["for_meals"], "meal_count": info["meal_count"]},
+                 "for_meals": info["for_meals"], "meal_ids": meal_ids_str,
+                 "meal_count": info["meal_count"]},
             )
 
     conn.commit()

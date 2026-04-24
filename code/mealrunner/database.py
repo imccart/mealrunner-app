@@ -301,6 +301,7 @@ trip_items = Table(
     Column("shopping_group", Text, nullable=False, server_default=text("'Other'")),
     Column("source", Text, nullable=False, server_default=text("'extra'")),
     Column("for_meals", Text, nullable=False, server_default=text("''")),
+    Column("meal_ids", Text, nullable=False, server_default=text("''")),
     Column("meal_count", Integer, nullable=False, server_default=text("0")),
     Column("checked", Integer, nullable=False, server_default=text("0")),
     Column("checked_at", TS),
