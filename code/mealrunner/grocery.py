@@ -48,8 +48,7 @@ def build_grocery_list(
                         "store": sr["store_pref"],
                         "aisle": sr["aisle"],
                         "name": sr["name"],
-                        "is_staple": bool(sr["is_pantry_staple"]),
-                        "category": sr["category"],
+                            "category": sr["category"],
                         "meals": {side_label},
                     }
 
@@ -80,21 +79,20 @@ def build_grocery_list(
                     "store": r["store_pref"],
                     "aisle": r["aisle"],
                     "name": r["name"],
-                    "is_staple": bool(r["is_pantry_staple"]),
                     "category": r["category"],
                     "meals": {meal.recipe_name},
                 }
 
-    # Subtract pantry stock; skip regulars (handled separately via checklist)
+    # Skip ingredients the user has explicitly told us they handle elsewhere:
+    # active regulars (the "every trip" checklist) and pantry items they've
+    # said they have on hand. The ingredient-level is_pantry_staple flag is
+    # NOT used for filtering — that's a hint for onboarding / "add to pantry?"
+    # suggestions, not a silent gate on what reaches the grocery list.
     from mealrunner.regulars import list_regulars
     regular_names = {r.name.lower() for r in list_regulars(conn, user_id)}
 
     items: list[GroceryListItem] = []
-    staples_used: list[str] = []
     for iid, info in sorted(agg.items(), key=lambda x: (x[1]["store"], x[1]["aisle"], x[1]["name"])):
-        if info["is_staple"]:
-            staples_used.append(info["name"])
-            continue
         if info["name"].lower() in regular_names:
             continue
 
@@ -117,9 +115,7 @@ def build_grocery_list(
             meals=sorted(info["meals"]),
         ))
 
-    gl = GroceryList(id=None, start_date=start_date, end_date=end_date, items=items)
-    gl.staples_used = staples_used
-    return gl
+    return GroceryList(id=None, start_date=start_date, end_date=end_date, items=items)
 
 
 

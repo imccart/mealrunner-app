@@ -161,7 +161,6 @@ class GroceryList:
     end_date: str = ""
     created_at: str = ""
     items: list[GroceryListItem] = field(default_factory=list)
-    staples_used: list[str] = field(default_factory=list)
 
 
 @dataclass
