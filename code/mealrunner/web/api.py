@@ -2273,11 +2273,15 @@ async def price_comparison(request: Request):
     mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
-    # Get selected order items with prices
+    # Get selected order items with prices. Match the same active-set filters
+    # as /order so we don't count stale picks (have-it, checked off, or otherwise
+    # no longer in the user's "to be ordered" list — the perpetual-trip model
+    # keeps historical rows around with product_upc still populated).
     rows = conn.execute(text("""
         SELECT product_upc, product_price, quantity FROM trip_items
         WHERE trip_id = :tid AND product_upc != '' AND product_price IS NOT NULL
         AND submitted_at IS NULL AND removed = 0 AND buy_elsewhere = 0
+        AND checked = 0 AND have_it = 0 AND skipped = 0
     """), {"tid": trip["id"]}).fetchall()
 
     if not rows:
