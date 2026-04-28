@@ -433,19 +433,20 @@ export default function GroceryPage({ sidebar = false }) {
     setPantryExpanded(false)
   }
 
-  const handleUndoRecent = async (name) => {
+  const handleUndoRecent = async (id, name) => {
     const prev = grocery
-    // Optimistic: remove from all non-active states
+    // Optimistic: remove from all non-active states. Filter recently_checked
+    // by id (multiple completed rows can share a name now).
     setGrocery({
       ...grocery,
       checked: (grocery.checked || []).filter(n => n.toLowerCase() !== name.toLowerCase()),
       have_it: (grocery.have_it || []).filter(n => n.toLowerCase() !== name.toLowerCase()),
       removed: (grocery.removed || []).filter(n => n.toLowerCase() !== name.toLowerCase()),
       ordered: (grocery.ordered || []).filter(n => n.toLowerCase() !== name.toLowerCase()),
-      recently_checked: (grocery.recently_checked || []).filter(r => r.name.toLowerCase() !== name.toLowerCase()),
+      recently_checked: (grocery.recently_checked || []).filter(r => r.id !== id),
     })
     try {
-      const result = await api.undoGroceryItem(name)
+      const result = await api.undoGroceryItem(id)
       setGrocery(result)
     } catch { setGrocery(prev) }
   }
@@ -671,10 +672,10 @@ export default function GroceryPage({ sidebar = false }) {
           {showRecent && (
             <div className={styles.recentlyCheckedList}>
               {recently_checked.map(r => (
-                <div key={r.name} className={styles.recentlyCheckedItem}>
+                <div key={r.id} className={styles.recentlyCheckedItem}>
                   <span>{r.name}</span>
                   <span className={styles.recentlyCheckedType}>{r.type === 'bought' ? 'Bought' : r.type === 'removed' ? 'Removed' : r.type === 'ordered' ? 'Ordered' : 'Have it'}</span>
-                  <button className={styles.recentlyCheckedUndo} onClick={() => handleUndoRecent(r.name)}>Undo</button>
+                  <button className={styles.recentlyCheckedUndo} onClick={() => handleUndoRecent(r.id, r.name)}>Undo</button>
                 </div>
               ))}
             </div>

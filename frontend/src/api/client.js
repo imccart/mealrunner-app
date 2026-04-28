@@ -133,7 +133,7 @@ export const api = {
   getGrocerySuggestions: () => request('/grocery/suggestions'),
   haveItGroceryItem: (name) => request(`/grocery/have-it/${encodeURIComponent(name)}`, { method: 'POST' }),
   removeGroceryItem: (name) => request(`/grocery/item/${encodeURIComponent(name)}`, { method: 'DELETE' }),
-  undoGroceryItem: (name) => request(`/grocery/undo/${encodeURIComponent(name)}`, { method: 'POST' }),
+  undoGroceryItem: (id) => request(`/grocery/undo/${id}`, { method: 'POST' }),
   buyElsewhere: (name) => request(`/grocery/buy-elsewhere/${encodeURIComponent(name)}`, { method: 'POST' }),
   addRegulars: (selected) => request('/grocery/add-regulars', {
     method: 'POST',

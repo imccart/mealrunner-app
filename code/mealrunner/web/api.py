@@ -999,6 +999,7 @@ async def get_grocery(request: Request):
         except (KeyError, Exception):
             notes = ""
         items_by_group.setdefault(group, []).append({
+            "id": r["id"],
             "name": r["name"],
             "for_meals": for_meals,
             "meal_count": r["meal_count"],
@@ -1012,21 +1013,21 @@ async def get_grocery(request: Request):
             checked_names.append(r["name"].lower())
             t = _parse_ts(r["checked_at"] if "checked_at" in r.keys() else None)
             if t and t > cutoff:
-                recently_checked.append({"name": r["name"], "type": "bought"})
+                recently_checked.append({"id": r["id"], "name": r["name"], "type": "bought"})
         elif r.get("removed"):
             removed_names.append(r["name"].lower())
             t = _parse_ts(r["removed_at"] if "removed_at" in r.keys() else None)
             if t and t > cutoff:
-                recently_checked.append({"name": r["name"], "type": "removed"})
+                recently_checked.append({"id": r["id"], "name": r["name"], "type": "removed"})
         elif r.get("have_it"):
             have_it_names.append(r["name"].lower())
             t = _parse_ts(r["have_it_at"] if "have_it_at" in r.keys() else None)
             if t and t > cutoff:
-                recently_checked.append({"name": r["name"], "type": "have_it"})
+                recently_checked.append({"id": r["id"], "name": r["name"], "type": "have_it"})
         elif r.get("submitted_at"):
             t = _parse_ts(r["submitted_at"])
             if t and t > cutoff:
-                recently_checked.append({"name": r["name"], "type": "ordered"})
+                recently_checked.append({"id": r["id"], "name": r["name"], "type": "ordered"})
 
     return {
         "start_date": mw.start_date,
@@ -1042,9 +1043,14 @@ async def get_grocery(request: Request):
 
 @router.post("/grocery/add")
 async def add_grocery_item(body: dict, request: Request):
-    """Add a free-form item to the active trip."""
-    from mealrunner.planner import load_rolling_week
+    """Add a free-form item to the user's grocery list.
 
+    Partial-unique semantics on (user_id, name): if an active row with this
+    name already exists (not have-it'd, checked, or removed), no-op. Otherwise
+    insert a fresh `source='extra'` row alongside any completed-state rows
+    with the same name. This means a have-it'd or already-bought row stays
+    intact and a brand-new active row is added — they coexist as separate ids.
+    """
     user_id = request.state.user_id
     raw = body.get("name", "").strip()
     if not raw:
@@ -1053,44 +1059,23 @@ async def add_grocery_item(body: dict, request: Request):
     conn = _conn()
     name, _ = _normalize_name(conn, raw)
 
-    mw = load_rolling_week(conn, user_id)
-    trip = _ensure_active_trip(conn, mw, user_id)
-
-    group = _infer_item_group(conn, name, user_id)
-    # Re-adding an item is the user saying "I need this again" — full state
-    # reset so the item behaves like a brand-new need on grocery, order, and
-    # receipt pages. Preserve source/for_meals so meal-sourced attribution
-    # isn't lost when the user manually re-adds something a meal also needs.
-    # submitted_at stays put: if there's an in-flight order, keep it visible
-    # for reconciliation.
-    existing = conn.execute(
-        text("SELECT id FROM grocery_items WHERE user_id = :user_id AND LOWER(name) = LOWER(:name) LIMIT 1"),
+    existing_active = conn.execute(
+        text("""SELECT id FROM grocery_items
+                WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
+                  AND have_it = 0 AND checked = 0 AND removed = 0
+                LIMIT 1"""),
         {"user_id": user_id, "name": name},
     ).fetchone()
-    if existing:
-        conn.execute(
-            text("""UPDATE grocery_items SET
-                 checked = 0, checked_at = NULL,
-                 have_it = 0, have_it_at = NULL,
-                 removed = 0, removed_at = NULL,
-                 receipt_status = '', receipt_item = '',
-                 receipt_upc = '', receipt_price = NULL,
-                 product_upc = '', product_name = '',
-                 product_brand = '', product_size = '',
-                 product_price = NULL, product_image = '',
-                 selected_at = NULL, ordered_at = NULL,
-                 shopping_group = :group
-               WHERE id = :id"""),
-            {"id": existing["id"], "group": group},
-        )
-    else:
+
+    if not existing_active:
+        group = _infer_item_group(conn, name, user_id)
         conn.execute(
             text("""INSERT INTO grocery_items
-                 (user_id, name, shopping_group, source, for_meals, meal_count)
-                 VALUES (:user_id, :name, :group, 'extra', '', 0)"""),
+                  (user_id, name, shopping_group, source, for_meals, meal_count)
+                  VALUES (:user_id, :name, :group, 'extra', '', 0)"""),
             {"user_id": user_id, "name": name, "group": group},
         )
-    conn.commit()
+        conn.commit()
 
     return await get_grocery(request)
 
@@ -1107,7 +1092,9 @@ async def update_grocery_note(body: dict, request: Request):
     trip = _get_active_trip(conn, user_id)
     if trip:
         conn.execute(
-            text("UPDATE grocery_items SET notes = :notes WHERE user_id = :uid AND LOWER(name) = LOWER(:name)"),
+            text("""UPDATE grocery_items SET notes = :notes
+               WHERE user_id = :uid AND LOWER(name) = LOWER(:name)
+                 AND have_it = 0 AND checked = 0 AND removed = 0"""),
             {"notes": notes, "uid": user_id, "name": name},
         )
         conn.commit()
@@ -1132,11 +1119,13 @@ async def recategorize_item(body: dict, request: Request):
         {"user_id": user_id, "name": name, "group": group},
     )
 
-    # Update current trip item too
+    # Update current trip item too — only the active row, not historical completed ones
     trip = _get_active_trip(conn, user_id)
     if trip:
         conn.execute(
-            text("UPDATE grocery_items SET shopping_group = :group WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)"),
+            text("""UPDATE grocery_items SET shopping_group = :group
+               WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
+                 AND have_it = 0 AND checked = 0 AND removed = 0"""),
             {"group": group, "user_id": user_id, "name": name},
         )
     conn.commit()
@@ -1156,49 +1145,44 @@ async def toggle_grocery_item(item_name: str, request: Request):
         return {"name": item_name, "checked": False}
 
     row = conn.execute(
-        text("SELECT id, checked, ordered, source FROM grocery_items WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)"),
+        text("""SELECT id, checked, ordered, source FROM grocery_items
+                WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
+                  AND have_it = 0 AND checked = 0 AND removed = 0
+                LIMIT 1"""),
         {"user_id": user_id, "name": item_name},
     ).fetchone()
 
     if row:
-        new_checked = 0 if row["checked"] else 1
-        if new_checked:
+        # Active filter on the SELECT means checked is always 0 here, so this
+        # endpoint marks-checked one-way. Un-checking goes through /grocery/undo.
+        conn.execute(
+            text("UPDATE grocery_items SET checked = 1, checked_at = CURRENT_TIMESTAMP WHERE id = :id"),
+            {"id": row["id"]},
+        )
+        # If checking off an item not ordered via Kroger, it's in-store
+        if not row["ordered"]:
             conn.execute(
-                text("UPDATE grocery_items SET checked = 1, checked_at = CURRENT_TIMESTAMP, have_it = 0, have_it_at = NULL WHERE id = :id"),
-                {"id": row["id"]},
+                text("""UPDATE grocery_state SET order_source = CASE
+                       WHEN order_source IN ('none', 'in_store') THEN 'in_store'
+                       ELSE 'mixed'
+                   END WHERE user_id = :user_id"""),
+                {"user_id": user_id},
             )
-            # If checking off an item not ordered via Kroger, it's in-store
-            if not row["ordered"]:
-                conn.execute(
-                    text("""UPDATE grocery_state SET order_source = CASE
-                           WHEN order_source IN ('none', 'in_store') THEN 'in_store'
-                           ELSE 'mixed'
-                       END WHERE user_id = :user_id"""),
-                    {"user_id": user_id},
-                )
-            # Track last_bought_at on source table
-            if row["source"] == "regular":
-                conn.execute(
-                    text("UPDATE regulars SET last_bought_at = CURRENT_TIMESTAMP::text WHERE user_id = :uid AND LOWER(name) = LOWER(:name)"),
-                    {"uid": user_id, "name": item_name},
-                )
-            elif row["source"] == "pantry":
-                conn.execute(
-                    text("""UPDATE pantry SET last_bought_at = CURRENT_TIMESTAMP::text
-                        WHERE user_id = :uid AND ingredient_id IN (
-                            SELECT id FROM ingredients WHERE LOWER(name) = LOWER(:name)
-                        )"""),
-                    {"uid": user_id, "name": item_name},
-                )
-        else:
+        # Track last_bought_at on source table
+        if row["source"] == "regular":
             conn.execute(
-                text("UPDATE grocery_items SET checked = 0, checked_at = NULL WHERE id = :id"),
-                {"id": row["id"]},
+                text("UPDATE regulars SET last_bought_at = CURRENT_TIMESTAMP::text WHERE user_id = :uid AND LOWER(name) = LOWER(:name)"),
+                {"uid": user_id, "name": item_name},
+            )
+        elif row["source"] == "pantry":
+            conn.execute(
+                text("""UPDATE pantry SET last_bought_at = CURRENT_TIMESTAMP::text
+                    WHERE user_id = :uid AND ingredient_id IN (
+                        SELECT id FROM ingredients WHERE LOWER(name) = LOWER(:name)
+                    )"""),
+                {"uid": user_id, "name": item_name},
             )
         conn.commit()
-        checked = bool(new_checked)
-    else:
-        checked = False
 
     return await get_grocery(request)
 
@@ -1217,7 +1201,10 @@ async def remove_grocery_item(item_name: str, request: Request):
         return {"ok": True}
 
     row = conn.execute(
-        text("SELECT id, source FROM grocery_items WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)"),
+        text("""SELECT id, source FROM grocery_items
+                WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
+                  AND have_it = 0 AND checked = 0 AND removed = 0
+                LIMIT 1"""),
         {"user_id": user_id, "name": item_name},
     ).fetchone()
 
@@ -1236,15 +1223,16 @@ async def remove_grocery_item(item_name: str, request: Request):
     return {"ok": True}
 
 
-@router.post("/grocery/undo/{item_name:path}")
-async def undo_grocery_item(item_name: str, request: Request):
-    """Reset any checked/ordered/removed/have-it item back to active."""
+@router.post("/grocery/undo/{item_id:int}")
+async def undo_grocery_item(item_id: int, request: Request):
+    """Reset a specific completed grocery row back to active state.
+
+    Takes the row's `id` rather than its name because multiple completed rows
+    can share a name (have-it'd, then bought, then have-it'd again etc.) and
+    the user is undoing one specific action from the Recently Checked list.
+    """
     user_id = request.state.user_id
     conn = _conn()
-    trip = _get_active_trip(conn, user_id)
-    if not trip:
-        return await get_grocery(request)
-
     conn.execute(
         text("""UPDATE grocery_items SET
                checked = 0, checked_at = NULL,
@@ -1254,8 +1242,8 @@ async def undo_grocery_item(item_name: str, request: Request):
                selected_at = NULL, product_upc = '', product_name = '',
                product_brand = '', product_size = '', product_price = NULL,
                product_image = ''
-           WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)"""),
-        {"user_id": user_id, "name": item_name},
+           WHERE id = :id AND user_id = :user_id"""),
+        {"id": item_id, "user_id": user_id},
     )
     conn.commit()
     return await get_grocery(request)
@@ -1270,8 +1258,13 @@ async def buy_elsewhere_grocery_item(item_name: str, request: Request):
     if not trip:
         return {"ok": True}
 
+    # Buy-elsewhere is orthogonal to checked/have_it/removed (the row is still
+    # active either way), so the active filter scopes to the single active row.
     row = conn.execute(
-        text("SELECT id, buy_elsewhere FROM grocery_items WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)"),
+        text("""SELECT id, buy_elsewhere FROM grocery_items
+                WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
+                  AND have_it = 0 AND checked = 0 AND removed = 0
+                LIMIT 1"""),
         {"user_id": user_id, "name": item_name},
     ).fetchone()
 
@@ -1303,38 +1296,36 @@ async def have_it_grocery_item(item_name: str, request: Request):
     if not trip:
         return await get_grocery(request)
 
+    # Active filter on the SELECT scopes to the single active row. Un-have-it
+    # is via /grocery/undo (the row is no longer active after have-it).
     row = conn.execute(
-        text("SELECT id, have_it FROM grocery_items WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)"),
+        text("""SELECT id FROM grocery_items
+                WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
+                  AND have_it = 0 AND checked = 0 AND removed = 0
+                LIMIT 1"""),
         {"user_id": user_id, "name": item_name},
     ).fetchone()
 
     suggest_staple = None
     if row:
-        if row["have_it"]:
-            # Un-have-it: return to active
-            conn.execute(
-                text("UPDATE grocery_items SET have_it = 0, have_it_at = NULL WHERE id = :id"),
-                {"id": row["id"]},
-            )
-        else:
-            conn.execute(
-                text("UPDATE grocery_items SET have_it = 1, have_it_at = CURRENT_TIMESTAMP, checked = 0, checked_at = NULL WHERE id = :id"),
-                {"id": row["id"]},
-            )
-            # Check if this item has been marked "have it" 3+ times — suggest as staple
-            from mealrunner.regulars import list_regulars
-            from mealrunner.pantry import list_pantry
-            reg_names = {r.name.lower() for r in list_regulars(conn, user_id)}
-            pantry_names = {p.ingredient_name.lower() for p in list_pantry(conn, user_id)}
-            name_lower = item_name.strip().lower()
-            if name_lower not in reg_names and name_lower not in pantry_names:
-                have_it_count = conn.execute(
-                    text("""SELECT COUNT(*) as cnt FROM grocery_items ti
-                       WHERE ti.user_id = :uid AND LOWER(ti.name) = LOWER(:name) AND ti.have_it = 1"""),
-                    {"uid": user_id, "name": item_name},
-                ).fetchone()
-                if have_it_count and have_it_count["cnt"] >= 3:
-                    suggest_staple = item_name
+        conn.execute(
+            text("UPDATE grocery_items SET have_it = 1, have_it_at = CURRENT_TIMESTAMP WHERE id = :id"),
+            {"id": row["id"]},
+        )
+        # Check if this item has been marked "have it" 3+ times — suggest as staple
+        from mealrunner.regulars import list_regulars
+        from mealrunner.pantry import list_pantry
+        reg_names = {r.name.lower() for r in list_regulars(conn, user_id)}
+        pantry_names = {p.ingredient_name.lower() for p in list_pantry(conn, user_id)}
+        name_lower = item_name.strip().lower()
+        if name_lower not in reg_names and name_lower not in pantry_names:
+            have_it_count = conn.execute(
+                text("""SELECT COUNT(*) as cnt FROM grocery_items ti
+                   WHERE ti.user_id = :uid AND LOWER(ti.name) = LOWER(:name) AND ti.have_it = 1"""),
+                {"uid": user_id, "name": item_name},
+            ).fetchone()
+            if have_it_count and have_it_count["cnt"] >= 3:
+                suggest_staple = item_name
     conn.commit()
     result = await get_grocery(request)
     if suggest_staple:
@@ -1356,38 +1347,26 @@ async def add_regulars_to_grocery(body: dict, request: Request):
     mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
-    # Add selected regulars. If a regular is already on the trip (even checked
-    # off), give it a fresh state — the user is asking for it again.
+    # Add selected regulars. Partial-unique semantics: if there's already an
+    # active row with this name (any source), no-op. Otherwise insert fresh.
     for name in selected:
         name_lower = name.lower()
-        group = _infer_item_group(conn, name_lower, user_id)
-        existing = conn.execute(
-            text("SELECT id FROM grocery_items WHERE user_id = :user_id AND LOWER(name) = LOWER(:name) LIMIT 1"),
+        existing_active = conn.execute(
+            text("""SELECT id FROM grocery_items
+                    WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
+                      AND have_it = 0 AND checked = 0 AND removed = 0
+                    LIMIT 1"""),
             {"user_id": user_id, "name": name_lower},
         ).fetchone()
-        if existing:
-            conn.execute(
-                text("""UPDATE grocery_items SET
-                     checked = 0, checked_at = NULL,
-                     have_it = 0, have_it_at = NULL,
-                     removed = 0, removed_at = NULL,
-                     receipt_status = '', receipt_item = '',
-                     receipt_upc = '', receipt_price = NULL,
-                     product_upc = '', product_name = '',
-                     product_brand = '', product_size = '',
-                     product_price = NULL, product_image = '',
-                     selected_at = NULL, ordered_at = NULL,
-                     shopping_group = :group
-                   WHERE id = :id"""),
-                {"id": existing["id"], "group": group},
-            )
-        else:
-            conn.execute(
-                text("""INSERT INTO grocery_items
-                     (user_id, name, shopping_group, source, for_meals, meal_count)
-                     VALUES (:user_id, :name, :group, 'regular', '', 0)"""),
-                {"user_id": user_id, "name": name_lower, "group": group},
-            )
+        if existing_active:
+            continue
+        group = _infer_item_group(conn, name_lower, user_id)
+        conn.execute(
+            text("""INSERT INTO grocery_items
+                 (user_id, name, shopping_group, source, for_meals, meal_count)
+                 VALUES (:user_id, :name, :group, 'regular', '', 0)"""),
+            {"user_id": user_id, "name": name_lower, "group": group},
+        )
 
     # Mark regulars as handled for this trip
     conn.execute(
@@ -1411,38 +1390,25 @@ async def add_pantry_to_grocery(body: dict, request: Request):
     mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
-    # Add selected pantry items. Fresh state on conflict — same "trust the
-    # user" principle as /grocery/add and /grocery/add-regulars.
+    # Add selected pantry items. Same partial-unique semantics as add-regulars.
     for name in selected:
         name_lower = name.lower()
-        group = _infer_item_group(conn, name_lower, user_id)
-        existing = conn.execute(
-            text("SELECT id FROM grocery_items WHERE user_id = :user_id AND LOWER(name) = LOWER(:name) LIMIT 1"),
+        existing_active = conn.execute(
+            text("""SELECT id FROM grocery_items
+                    WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
+                      AND have_it = 0 AND checked = 0 AND removed = 0
+                    LIMIT 1"""),
             {"user_id": user_id, "name": name_lower},
         ).fetchone()
-        if existing:
-            conn.execute(
-                text("""UPDATE grocery_items SET
-                     checked = 0, checked_at = NULL,
-                     have_it = 0, have_it_at = NULL,
-                     removed = 0, removed_at = NULL,
-                     receipt_status = '', receipt_item = '',
-                     receipt_upc = '', receipt_price = NULL,
-                     product_upc = '', product_name = '',
-                     product_brand = '', product_size = '',
-                     product_price = NULL, product_image = '',
-                     selected_at = NULL, ordered_at = NULL,
-                     shopping_group = :group
-                   WHERE id = :id"""),
-                {"id": existing["id"], "group": group},
-            )
-        else:
-            conn.execute(
-                text("""INSERT INTO grocery_items
-                     (user_id, name, shopping_group, source, for_meals, meal_count)
-                     VALUES (:user_id, :name, :group, 'pantry', '', 0)"""),
-                {"user_id": user_id, "name": name_lower, "group": group},
-            )
+        if existing_active:
+            continue
+        group = _infer_item_group(conn, name_lower, user_id)
+        conn.execute(
+            text("""INSERT INTO grocery_items
+                 (user_id, name, shopping_group, source, for_meals, meal_count)
+                 VALUES (:user_id, :name, :group, 'pantry', '', 0)"""),
+            {"user_id": user_id, "name": name_lower, "group": group},
+        )
 
     # Mark pantry as handled for this trip
     conn.execute(
