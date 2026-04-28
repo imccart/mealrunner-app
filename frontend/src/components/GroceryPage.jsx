@@ -149,6 +149,12 @@ export default function GroceryPage({ sidebar = false }) {
   if (loadError) return <><div className="loading">Something went wrong loading your list. Try refreshing.</div><FeedbackFab page="grocery" /></>
 
   const { items_by_group, checked, ordered, have_it, removed, recently_checked, start_date } = grocery
+  // items_by_group from the backend now contains ONLY active rows (not have-it'd,
+  // checked, or removed). The checked / have_it / removed name lists below still
+  // include completed-state rows, but they're only for the recently-checked
+  // section and "ordered" badge — they no longer drive active-list filtering
+  // (would incorrectly hide a fresh active row sharing a name with a stale
+  // completed one).
   const checkedSet = new Set((checked || []).map(n => n.toLowerCase()))
   const orderedSet = new Set((ordered || []).map(n => n.toLowerCase()))
   const haveItSet = new Set((have_it || []).map(n => n.toLowerCase()))
@@ -157,25 +163,15 @@ export default function GroceryPage({ sidebar = false }) {
   const onListSet = new Set()
   for (const group of Object.values(items_by_group)) {
     for (const item of group) {
-      const nl = item.name.toLowerCase()
-      if (!checkedSet.has(nl) && !haveItSet.has(nl) && !removedSet.has(nl)) {
-        onListSet.add(nl)
-      }
+      onListSet.add(item.name.toLowerCase())
     }
   }
 
-  // Count only active (not checked/have_it/ordered) items per group
   let totalActive = 0
   const groupCounts = {}
   for (const [group, items] of Object.entries(items_by_group)) {
-    let groupRemaining = 0
-    for (const item of items) {
-      const nameLower = item.name.toLowerCase()
-      if (!checkedSet.has(nameLower) && !haveItSet.has(nameLower) && !orderedSet.has(nameLower) && !removedSet.has(nameLower)) {
-        groupRemaining++
-        totalActive++
-      }
-    }
+    const groupRemaining = items.filter(i => !orderedSet.has(i.name.toLowerCase())).length
+    totalActive += groupRemaining
     groupCounts[group] = { remaining: groupRemaining }
   }
 
@@ -186,11 +182,10 @@ export default function GroceryPage({ sidebar = false }) {
   })
 
   const hasItems = sortedGroups.length > 0
-  const totalItems = totalActive + Object.values(groupCounts).reduce((sum, g) => sum - g.remaining, 0) + totalActive
-  const checkedCount = Object.values(items_by_group).flat().filter(i => {
-    const nl = i.name.toLowerCase()
-    return checkedSet.has(nl) || haveItSet.has(nl)
-  }).length
+  // totalItems was only used for the in-shopping-mode "X of Y" header; active
+  // count + completed count gives the same value.
+  const checkedCount = (checked || []).length + (have_it || []).length
+  const totalItems = totalActive + checkedCount
 
   // Shopping mode enter/exit
   const enterShoppingMode = async () => {
@@ -224,19 +219,18 @@ export default function GroceryPage({ sidebar = false }) {
       return
     }
 
-    // Bought or have_it — optimistically add to the right set
-    const sets = {
-      checked: new Set(checkedSet),
-      have_it: new Set(haveItSet),
+    // Bought or have_it — optimistically remove the row from items_by_group
+    // (it's no longer active) and add the name to the right list.
+    const optimisticGroups = {}
+    for (const [g, gItems] of Object.entries(items_by_group)) {
+      optimisticGroups[g] = gItems.filter(i => i.id !== item.id)
     }
-    const targetKey = action === 'bought' ? 'checked' : 'have_it'
-    if (sets[targetKey].has(nl)) {
-      sets[targetKey].delete(nl)
-    } else {
-      sets[targetKey].add(nl)
-      Object.keys(sets).filter(k => k !== targetKey).forEach(k => sets[k].delete(nl))
-    }
-    setGrocery({ ...grocery, checked: [...sets.checked], have_it: [...sets.have_it] })
+    const targetField = action === 'bought' ? 'checked' : 'have_it'
+    setGrocery({
+      ...grocery,
+      items_by_group: optimisticGroups,
+      [targetField]: [...(grocery[targetField] || []), item.name],
+    })
 
     const apiCall = { bought: api.toggleGroceryItem, have_it: api.haveItGroceryItem }
     try {
@@ -267,7 +261,11 @@ export default function GroceryPage({ sidebar = false }) {
 
   // Shopping mode render
   if (shoppingMode) {
-    const allChecked = []
+    // The "checked" section in walk-the-aisles is sourced from recently_checked
+    // (24-hour undo window items). recently_checked entries carry id + name +
+    // type, which is everything the unchecked-row click path needs.
+    const allChecked = (recently_checked || [])
+      .filter(r => r.type === 'bought' || r.type === 'have_it')
     const handleShopCheckAndScroll = async (item) => {
       await handleShopCheck(item)
       requestAnimationFrame(() => {
@@ -286,18 +284,10 @@ export default function GroceryPage({ sidebar = false }) {
         <div className={styles.shoppingList} ref={shopListRef}>
           {sortedGroups.map(group => {
             const items = items_by_group[group]
-            const recentSet = new Set((recently_checked || []).map(r => r.name.toLowerCase()))
-            const active = items.filter(i => {
-              const nl = i.name.toLowerCase()
-              return !checkedSet.has(nl) && !haveItSet.has(nl) && !removedSet.has(nl) && !orderedSet.has(nl)
-            })
-            // Only surface items checked within the 24-hour undo window — matches
-            // the main grocery view's "Recently checked" section.
-            const done = items.filter(i => {
-              const nl = i.name.toLowerCase()
-              return (checkedSet.has(nl) || haveItSet.has(nl)) && recentSet.has(nl)
-            })
-            done.forEach(item => allChecked.push(item))
+            // items_by_group is active-only from the backend; the "ordered"
+            // filter below excludes items that are sent to Kroger (they show
+            // up in the Order page instead, not in walk-the-aisles).
+            const active = items.filter(i => !orderedSet.has(i.name.toLowerCase()))
             if (active.length === 0) return null
             return (
               <div key={group} className={styles.shoppingGroup}>
@@ -338,7 +328,7 @@ export default function GroceryPage({ sidebar = false }) {
               </div>
               {showShopChecked && allChecked.map(item => (
                 <div
-                  key={item.name}
+                  key={item.id}
                   className={`${styles.shoppingItem} ${styles.checked}`}
                   onClick={() => handleShopUncheck(item)}
                 >
@@ -542,16 +532,14 @@ export default function GroceryPage({ sidebar = false }) {
 
   const renderItem = (item) => {
     const nameLower = item.name.toLowerCase()
-    const isChecked = checkedSet.has(nameLower)
+    // items_by_group from the backend is already active-only (no have-it'd /
+    // checked / removed rows). Only need to suppress 'ordered' here, since
+    // ordered rows are active but live on the Order page, not the grocery list.
     const isOrdered = orderedSet.has(nameLower)
-    const isHaveIt = haveItSet.has(nameLower)
-    const isRemoved = removedSet.has(nameLower)
-    const isDone = isChecked || isHaveIt || isRemoved || isOrdered
     const hasMeals = item.for_meals && item.for_meals.length > 0
     const isSelected = selectedItem === item.name
 
-    // Hide checked/have_it/removed/ordered items — they go to "recently checked" section
-    if (isDone) return null
+    if (isOrdered) return null
 
     const handleToggle = (e) => {
       e.stopPropagation()

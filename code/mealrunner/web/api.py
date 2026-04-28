@@ -1005,15 +1005,27 @@ async def get_grocery(request: Request):
             notes = r["notes"]
         except (KeyError, Exception):
             notes = ""
-        items_by_group.setdefault(group, []).append({
-            "id": r["id"],
-            "name": r["name"],
-            "for_meals": for_meals,
-            "meal_count": r["meal_count"],
-            "source": r["source"],
-            "added_at": added_at,
-            "notes": notes or "",
-        })
+
+        # Only include active rows in items_by_group. Completed-state rows
+        # (have_it / checked / removed) can share a name with an active row
+        # post-Phase A, so name-based filtering on the frontend would hide
+        # the fresh active row alongside the stale completed one. The
+        # checked / have_it / removed name lists below are kept for any
+        # downstream consumers, but items_by_group is the source of truth
+        # for what's on the active list.
+        is_active = (
+            not r["checked"] and not r.get("have_it") and not r.get("removed")
+        )
+        if is_active:
+            items_by_group.setdefault(group, []).append({
+                "id": r["id"],
+                "name": r["name"],
+                "for_meals": for_meals,
+                "meal_count": r["meal_count"],
+                "source": r["source"],
+                "added_at": added_at,
+                "notes": notes or "",
+            })
         if r["ordered"]:
             ordered_names.append(r["name"].lower())
         if r["checked"]:
