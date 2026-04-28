@@ -1082,79 +1082,84 @@ async def add_grocery_item(body: dict, request: Request):
 
 @router.post("/grocery/note")
 async def update_grocery_note(body: dict, request: Request):
-    """Update the note on a grocery item."""
+    """Update the note on a grocery item. Lookup by row id."""
     user_id = request.state.user_id
     conn = _conn()
-    name = body.get("name", "").strip()
+    item_id = body.get("id")
     notes = body.get("notes", "")
-    if not name:
+    if not item_id:
         return {"ok": False}
-    trip = _get_active_trip(conn, user_id)
-    if trip:
-        conn.execute(
-            text("""UPDATE grocery_items SET notes = :notes
-               WHERE user_id = :uid AND LOWER(name) = LOWER(:name)
-                 AND have_it = 0 AND checked = 0 AND removed = 0"""),
-            {"notes": notes, "uid": user_id, "name": name},
-        )
-        conn.commit()
+    conn.execute(
+        text("""UPDATE grocery_items SET notes = :notes
+           WHERE id = :id AND user_id = :uid"""),
+        {"notes": notes, "id": item_id, "uid": user_id},
+    )
+    conn.commit()
     return await get_grocery(request)
 
 
 @router.post("/grocery/recategorize")
 async def recategorize_item(body: dict, request: Request):
-    """Move an item to a different shopping group. Persists as a user override."""
+    """Move an item to a different shopping group. Persists as a user override.
+
+    Lookup target row by id; the cross-trip override in `user_item_groups` is
+    keyed on (user_id, item_name) and stays name-based since it must apply to
+    future trips with the same name.
+    """
     user_id = request.state.user_id
     conn = _conn()
-    name = body.get("name", "").strip().lower()
+    item_id = body.get("id")
     group = body.get("shopping_group", "").strip()
-    if not name or not group:
+    if not item_id or not group:
         return {"ok": False}
 
-    # Save override for future trips
+    # Fetch the target row to get its name (needed for the persistent override)
+    row = conn.execute(
+        text("SELECT name FROM grocery_items WHERE id = :id AND user_id = :uid"),
+        {"id": item_id, "uid": user_id},
+    ).fetchone()
+    if not row:
+        return {"ok": False}
+    name_lower = row["name"].lower()
+
+    # Save override for future trips (keyed on name)
     conn.execute(
         text("""INSERT INTO user_item_groups (user_id, item_name, shopping_group)
            VALUES (:user_id, :name, :group)
            ON CONFLICT (user_id, item_name) DO UPDATE SET shopping_group = :group, updated_at = CURRENT_TIMESTAMP"""),
-        {"user_id": user_id, "name": name, "group": group},
+        {"user_id": user_id, "name": name_lower, "group": group},
     )
 
-    # Update current trip item too — only the active row, not historical completed ones
-    trip = _get_active_trip(conn, user_id)
-    if trip:
-        conn.execute(
-            text("""UPDATE grocery_items SET shopping_group = :group
-               WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
-                 AND have_it = 0 AND checked = 0 AND removed = 0"""),
-            {"group": group, "user_id": user_id, "name": name},
-        )
+    # Update the specific trip row by id
+    conn.execute(
+        text("UPDATE grocery_items SET shopping_group = :group WHERE id = :id AND user_id = :uid"),
+        {"group": group, "id": item_id, "uid": user_id},
+    )
     conn.commit()
     return await get_grocery(request)
 
 
-@router.post("/grocery/toggle/{item_name:path}")
-async def toggle_grocery_item(item_name: str, request: Request):
-    """Toggle an item's checked state on the active trip."""
+@router.post("/grocery/toggle/{id:int}")
+async def toggle_grocery_item(id: int, request: Request):
+    """Mark a grocery row as checked. Lookup by row id.
+
+    One-way: this endpoint marks-checked. Un-checking goes through /grocery/undo.
+    """
     user_id = request.state.user_id
     real_uid = getattr(request.state, 'real_user_id', user_id)
-    if real_uid != user_id:
-        print(f"[grocery] toggle '{item_name}' by household member {real_uid} → owner {user_id}", flush=True)
     conn = _conn()
-    trip = _get_active_trip(conn, user_id)
-    if not trip:
-        return {"name": item_name, "checked": False}
 
     row = conn.execute(
-        text("""SELECT id, checked, ordered, source FROM grocery_items
-                WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
-                  AND have_it = 0 AND checked = 0 AND removed = 0
+        text("""SELECT id, name, checked, ordered, source FROM grocery_items
+                WHERE id = :id AND user_id = :user_id
                 LIMIT 1"""),
-        {"user_id": user_id, "name": item_name},
+        {"id": id, "user_id": user_id},
     ).fetchone()
 
     if row:
-        # Active filter on the SELECT means checked is always 0 here, so this
-        # endpoint marks-checked one-way. Un-checking goes through /grocery/undo.
+        item_name = row["name"]
+        if real_uid != user_id:
+            print(f"[grocery] toggle '{item_name}' by household member {real_uid} → owner {user_id}", flush=True)
         conn.execute(
             text("UPDATE grocery_items SET checked = 1, checked_at = CURRENT_TIMESTAMP WHERE id = :id"),
             {"id": row["id"]},
@@ -1168,7 +1173,7 @@ async def toggle_grocery_item(item_name: str, request: Request):
                    END WHERE user_id = :user_id"""),
                 {"user_id": user_id},
             )
-        # Track last_bought_at on source table
+        # Track last_bought_at on source table (keyed on name)
         if row["source"] == "regular":
             conn.execute(
                 text("UPDATE regulars SET last_bought_at = CURRENT_TIMESTAMP::text WHERE user_id = :uid AND LOWER(name) = LOWER(:name)"),
@@ -1187,28 +1192,24 @@ async def toggle_grocery_item(item_name: str, request: Request):
     return await get_grocery(request)
 
 
-@router.delete("/grocery/item/{item_name:path}")
-async def remove_grocery_item(item_name: str, request: Request):
-    """Remove an item from the grocery list. Sets removed flag (prevents re-add by refresh).
-    Extra/regular items are deleted outright."""
+@router.delete("/grocery/item/{id:int}")
+async def remove_grocery_item(id: int, request: Request):
+    """Remove a grocery row by id. Meal-sourced rows set removed=1 (prevents
+    re-add by refresh); extra/regular rows are deleted outright."""
     user_id = request.state.user_id
     real_uid = getattr(request.state, 'real_user_id', user_id)
-    if real_uid != user_id:
-        print(f"[grocery] remove '{item_name}' by household member {real_uid} → owner {user_id}", flush=True)
     conn = _conn()
-    trip = _get_active_trip(conn, user_id)
-    if not trip:
-        return {"ok": True}
 
     row = conn.execute(
-        text("""SELECT id, source FROM grocery_items
-                WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
-                  AND have_it = 0 AND checked = 0 AND removed = 0
+        text("""SELECT id, name, source FROM grocery_items
+                WHERE id = :id AND user_id = :user_id
                 LIMIT 1"""),
-        {"user_id": user_id, "name": item_name},
+        {"id": id, "user_id": user_id},
     ).fetchone()
 
     if row:
+        if real_uid != user_id:
+            print(f"[grocery] remove '{row['name']}' by household member {real_uid} → owner {user_id}", flush=True)
         if row["source"] == "meal":
             conn.execute(
                 text("UPDATE grocery_items SET removed = 1, removed_at = CURRENT_TIMESTAMP WHERE id = :id"),
@@ -1249,23 +1250,18 @@ async def undo_grocery_item(item_id: int, request: Request):
     return await get_grocery(request)
 
 
-@router.post("/grocery/buy-elsewhere/{item_name:path}")
-async def buy_elsewhere_grocery_item(item_name: str, request: Request):
-    """Mark an item as 'buying elsewhere' — removes from ordering flow but stays on grocery list."""
+@router.post("/grocery/buy-elsewhere/{id:int}")
+async def buy_elsewhere_grocery_item(id: int, request: Request):
+    """Toggle 'buying elsewhere' on a grocery row by id — removes from ordering
+    flow but stays on grocery list."""
     user_id = request.state.user_id
     conn = _conn()
-    trip = _get_active_trip(conn, user_id)
-    if not trip:
-        return {"ok": True}
 
-    # Buy-elsewhere is orthogonal to checked/have_it/removed (the row is still
-    # active either way), so the active filter scopes to the single active row.
     row = conn.execute(
         text("""SELECT id, buy_elsewhere FROM grocery_items
-                WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
-                  AND have_it = 0 AND checked = 0 AND removed = 0
+                WHERE id = :id AND user_id = :user_id
                 LIMIT 1"""),
-        {"user_id": user_id, "name": item_name},
+        {"id": id, "user_id": user_id},
     ).fetchone()
 
     if row:
@@ -1284,30 +1280,28 @@ async def buy_elsewhere_grocery_item(item_name: str, request: Request):
     return await get_order(request)
 
 
-@router.post("/grocery/have-it/{item_name:path}")
-async def have_it_grocery_item(item_name: str, request: Request):
-    """Mark an item as already on hand."""
+@router.post("/grocery/have-it/{id:int}")
+async def have_it_grocery_item(id: int, request: Request):
+    """Mark a grocery row as already on hand. Lookup by row id.
+
+    Un-have-it is via /grocery/undo.
+    """
     user_id = request.state.user_id
     real_uid = getattr(request.state, 'real_user_id', user_id)
-    if real_uid != user_id:
-        print(f"[grocery] have-it '{item_name}' by household member {real_uid} → owner {user_id}", flush=True)
     conn = _conn()
-    trip = _get_active_trip(conn, user_id)
-    if not trip:
-        return await get_grocery(request)
 
-    # Active filter on the SELECT scopes to the single active row. Un-have-it
-    # is via /grocery/undo (the row is no longer active after have-it).
     row = conn.execute(
-        text("""SELECT id FROM grocery_items
-                WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
-                  AND have_it = 0 AND checked = 0 AND removed = 0
+        text("""SELECT id, name FROM grocery_items
+                WHERE id = :id AND user_id = :user_id
                 LIMIT 1"""),
-        {"user_id": user_id, "name": item_name},
+        {"id": id, "user_id": user_id},
     ).fetchone()
 
     suggest_staple = None
     if row:
+        item_name = row["name"]
+        if real_uid != user_id:
+            print(f"[grocery] have-it '{item_name}' by household member {real_uid} → owner {user_id}", flush=True)
         conn.execute(
             text("UPDATE grocery_items SET have_it = 1, have_it_at = CURRENT_TIMESTAMP WHERE id = :id"),
             {"id": row["id"]},
@@ -1465,6 +1459,7 @@ async def get_order(request: Request):
         except (KeyError, Exception):
             notes = ""
         item = {
+            "id": r["id"],
             "name": r["name"],
             "shopping_group": r["shopping_group"],
             "source": r["source"],

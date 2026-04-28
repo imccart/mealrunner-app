@@ -266,30 +266,30 @@ export default function OrderPage() {
   }
 
   const handleBuyElsewhere = async () => {
-    if (!activeItem) return
+    if (!activeItem || !activeItemData) return
     try {
-      const data = await api.buyElsewhere(activeItem)
+      const data = await api.buyElsewhere(activeItemData.id)
       setOrder(data)
       advanceToNext(data)
     } catch { /* silent */ }
   }
 
-  const handleUndoBuyElsewhere = async (itemName) => {
+  const handleUndoBuyElsewhere = async (item) => {
     try {
-      const data = await api.buyElsewhere(itemName) // toggles off
+      const data = await api.buyElsewhere(item.id) // toggles off
       setOrder(data)
-      setActiveItem(itemName)
+      setActiveItem(item.name)
       setMobileSection(null)
     } catch { /* silent */ }
   }
 
   // Grocery-level actions — mark item on the trip and remove from order
   const handleGroceryAction = async (action) => {
-    if (!activeItem) return
+    if (!activeItem || !activeItemData) return
     try {
-      if (action === 'bought') await api.toggleGroceryItem(activeItem)
-      else if (action === 'have_it') await api.haveItGroceryItem(activeItem)
-      else if (action === 'remove') await api.removeGroceryItem(activeItem)
+      if (action === 'bought') await api.toggleGroceryItem(activeItemData.id)
+      else if (action === 'have_it') await api.haveItGroceryItem(activeItemData.id)
+      else if (action === 'remove') await api.removeGroceryItem(activeItemData.id)
       const data = await api.getOrder()
       setOrder(data)
       advanceToNext(data)
@@ -543,7 +543,7 @@ export default function OrderPage() {
               <button
                 key={item.name}
                 className={`${styles.queueItem} ${styles.elsewhere}`}
-                onClick={() => handleUndoBuyElsewhere(item.name)}
+                onClick={() => handleUndoBuyElsewhere(item)}
                 title="Bring back to ordering"
               >
                 <span className={styles.queueItemName}>{item.name}</span>
@@ -976,7 +976,7 @@ export default function OrderPage() {
                   <button
                     key={item.name}
                     className={`${styles.queueSheetItem} ${styles.elsewhere}`}
-                    onClick={() => { handleUndoBuyElsewhere(item.name); setShowQueue(false) }}
+                    onClick={() => { handleUndoBuyElsewhere(item); setShowQueue(false) }}
                   >
                     <span>{item.name}</span>
                     <span className={styles.queueSheetElsewhere}>elsewhere</span>
@@ -1021,7 +1021,7 @@ export default function OrderPage() {
               <button
                 key={item.name}
                 className={`${styles.queueSheetItem} ${styles.elsewhere}`}
-                onClick={() => handleUndoBuyElsewhere(item.name)}
+                onClick={() => handleUndoBuyElsewhere(item)}
               >
                 <span>{item.name}</span>
                 <span className={styles.queueSheetElsewhere}>tap to bring back</span>

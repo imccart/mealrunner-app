@@ -121,20 +121,20 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ name }),
   }),
-  toggleGroceryItem: (name) => request(`/grocery/toggle/${encodeURIComponent(name)}`, { method: 'POST' }),
-  updateGroceryNote: (name, notes) => request('/grocery/note', {
+  toggleGroceryItem: (id) => request(`/grocery/toggle/${id}`, { method: 'POST' }),
+  updateGroceryNote: (id, notes) => request('/grocery/note', {
     method: 'POST',
-    body: JSON.stringify({ name, notes }),
+    body: JSON.stringify({ id, notes }),
   }),
-  recategorizeItem: (name, shoppingGroup) => request('/grocery/recategorize', {
+  recategorizeItem: (id, shoppingGroup) => request('/grocery/recategorize', {
     method: 'POST',
-    body: JSON.stringify({ name, shopping_group: shoppingGroup }),
+    body: JSON.stringify({ id, shopping_group: shoppingGroup }),
   }),
   getGrocerySuggestions: () => request('/grocery/suggestions'),
-  haveItGroceryItem: (name) => request(`/grocery/have-it/${encodeURIComponent(name)}`, { method: 'POST' }),
-  removeGroceryItem: (name) => request(`/grocery/item/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  haveItGroceryItem: (id) => request(`/grocery/have-it/${id}`, { method: 'POST' }),
+  removeGroceryItem: (id) => request(`/grocery/item/${id}`, { method: 'DELETE' }),
   undoGroceryItem: (id) => request(`/grocery/undo/${id}`, { method: 'POST' }),
-  buyElsewhere: (name) => request(`/grocery/buy-elsewhere/${encodeURIComponent(name)}`, { method: 'POST' }),
+  buyElsewhere: (id) => request(`/grocery/buy-elsewhere/${id}`, { method: 'POST' }),
   addRegulars: (selected) => request('/grocery/add-regulars', {
     method: 'POST',
     body: JSON.stringify({ selected }),

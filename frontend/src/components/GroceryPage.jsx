@@ -209,18 +209,18 @@ export default function GroceryPage({ sidebar = false }) {
     }
   }
 
-  const handleItemAction = async (name, action) => {
+  const handleItemAction = async (item, action) => {
     const prev = grocery
-    const nl = name.toLowerCase()
+    const nl = item.name.toLowerCase()
 
     if (action === 'remove') {
       // Optimistic: remove from all groups
       const updated = {}
       for (const [g, items] of Object.entries(items_by_group)) {
-        updated[g] = items.filter(i => i.name.toLowerCase() !== nl)
+        updated[g] = items.filter(i => i.id !== item.id)
       }
       setGrocery({ ...grocery, items_by_group: updated })
-      try { await api.removeGroceryItem(name) } catch { setGrocery(prev) }
+      try { await api.removeGroceryItem(item.id) } catch { setGrocery(prev) }
       return
     }
 
@@ -240,7 +240,7 @@ export default function GroceryPage({ sidebar = false }) {
 
     const apiCall = { bought: api.toggleGroceryItem, have_it: api.haveItGroceryItem }
     try {
-      const result = await apiCall[action](name)
+      const result = await apiCall[action](item.id)
       setGrocery(result)
       if (result.suggest_staple) {
         setStapleSuggestion(result.suggest_staple)
@@ -248,20 +248,28 @@ export default function GroceryPage({ sidebar = false }) {
     } catch { setGrocery(prev) }
   }
 
-  const handleShopCheck = async (name) => {
-    await handleItemAction(name, 'bought')
+  const handleShopCheck = async (item) => {
+    await handleItemAction(item, 'bought')
   }
 
-  const handleShopUncheck = async (name) => {
-    // Toggle bought back off
-    await handleItemAction(name, 'bought')
+  const handleShopUncheck = async (item) => {
+    // The check endpoint is now one-way mark-checked; un-checking goes through
+    // /grocery/undo. Optimistically remove from the checked set, then call undo.
+    const prev = grocery
+    const nl = item.name.toLowerCase()
+    const newChecked = (grocery.checked || []).filter(n => n.toLowerCase() !== nl)
+    setGrocery({ ...grocery, checked: newChecked })
+    try {
+      const result = await api.undoGroceryItem(item.id)
+      setGrocery(result)
+    } catch { setGrocery(prev) }
   }
 
   // Shopping mode render
   if (shoppingMode) {
     const allChecked = []
-    const handleShopCheckAndScroll = async (name) => {
-      await handleShopCheck(name)
+    const handleShopCheckAndScroll = async (item) => {
+      await handleShopCheck(item)
       requestAnimationFrame(() => {
         if (shopListRef.current) shopListRef.current.scrollTop = 0
       })
@@ -298,9 +306,9 @@ export default function GroceryPage({ sidebar = false }) {
                   <SwipeableItem
                     key={item.name}
                     className={styles.shoppingItem}
-                    onSwipeRight={() => handleShopCheckAndScroll(item.name)}
+                    onSwipeRight={() => handleShopCheckAndScroll(item)}
                   >
-                    <div className={styles.shoppingItemName} onClick={() => handleShopCheckAndScroll(item.name)}>
+                    <div className={styles.shoppingItemName} onClick={() => handleShopCheckAndScroll(item)}>
                       {item.name}
                       {item.meal_count > 1 && <span className={styles.shoppingMulti}>x{item.meal_count}</span>}
                       {item.for_meals && item.for_meals.length > 0 && (
@@ -332,7 +340,7 @@ export default function GroceryPage({ sidebar = false }) {
                 <div
                   key={item.name}
                   className={`${styles.shoppingItem} ${styles.checked}`}
-                  onClick={() => handleShopUncheck(item.name)}
+                  onClick={() => handleShopUncheck(item)}
                 >
                   <div className={styles.shoppingItemName}>{item.name}</div>
                 </div>
@@ -362,7 +370,7 @@ export default function GroceryPage({ sidebar = false }) {
   const handleRecategorize = async (group) => {
     if (!recatItem) return
     try {
-      const result = await api.recategorizeItem(recatItem, group)
+      const result = await api.recategorizeItem(recatItem.id, group)
       setGrocery(result)
     } catch {
       // stay on current state
@@ -583,7 +591,7 @@ export default function GroceryPage({ sidebar = false }) {
                 onChange={(e) => setNoteText(e.target.value)}
                 onBlur={() => {
                   if (noteText !== (item.notes || '')) {
-                    api.updateGroceryNote(item.name, noteText).then(result => setGrocery(result)).catch(() => {})
+                    api.updateGroceryNote(item.id, noteText).then(result => setGrocery(result)).catch(() => {})
                   }
                   setEditingNote(null)
                 }}
@@ -592,11 +600,11 @@ export default function GroceryPage({ sidebar = false }) {
               />
             ) : null}
             <div className={styles.groceryActionBar}>
-              <button className={styles.groceryActionBtnItem} onClick={() => handleItemAction(item.name, 'bought')}>Bought</button>
-              <button className={styles.groceryActionBtnItem} onClick={() => handleItemAction(item.name, 'have_it')}>Have it</button>
+              <button className={styles.groceryActionBtnItem} onClick={() => handleItemAction(item, 'bought')}>Bought</button>
+              <button className={styles.groceryActionBtnItem} onClick={() => handleItemAction(item, 'have_it')}>Have it</button>
               <button className={styles.groceryActionBtnItem} onClick={(e) => { e.stopPropagation(); setEditingNote(item.name); setNoteText(item.notes || '') }}>Note</button>
-              <button className={styles.groceryActionBtnItem} onClick={(e) => { e.stopPropagation(); setRecatItem(item.name) }}>Aisle</button>
-              <button className={`${styles.groceryActionBtnItem} ${styles.remove}`} onClick={() => handleItemAction(item.name, 'remove')}>{'\u00D7'}</button>
+              <button className={styles.groceryActionBtnItem} onClick={(e) => { e.stopPropagation(); setRecatItem(item) }}>Aisle</button>
+              <button className={`${styles.groceryActionBtnItem} ${styles.remove}`} onClick={() => handleItemAction(item, 'remove')}>{'\u00D7'}</button>
             </div>
           </>
         )}
@@ -607,7 +615,7 @@ export default function GroceryPage({ sidebar = false }) {
       <SwipeableItem
         key={item.name}
         className={`${styles.groceryItemRow}${isSelected ? ` ${styles.selected}` : ''}`}
-        onSwipeRight={() => handleItemAction(item.name, 'bought')}
+        onSwipeRight={() => handleItemAction(item, 'bought')}
       >
         {itemContent}
       </SwipeableItem>
@@ -760,7 +768,7 @@ export default function GroceryPage({ sidebar = false }) {
 
       {recatItem && (
         <Sheet onClose={() => setRecatItem(null)}>
-          <div className="sheet-title">Move "{recatItem}"</div>
+          <div className="sheet-title">Move "{recatItem.name}"</div>
           <div className="sheet-sub">Pick a shopping group</div>
           <div className="recat-options">
             {GROUP_ORDER.map(g => (
