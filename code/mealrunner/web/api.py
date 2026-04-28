@@ -859,31 +859,23 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                     "meal_count": len(item.meals),
                 }
 
-    # Get all existing items for the user (any source) so we can apply the
-    # meals_added comparison to extras/regulars too. Without this, an extra
-    # row's checked state could get reset on every refresh.
+    # Only consider source='meal' rows. Extras (manually added by the user)
+    # are user-managed — sync never reads, updates, or deletes them. If a meal
+    # needs an ingredient and the user happens to have an extra row with the
+    # same name, the meal still gets its own meal-source row alongside the
+    # extra (the unique constraint is gone post-Phase A, so they coexist).
     existing = conn.execute(
         text("""SELECT id, name, source, checked, checked_at, have_it, have_it_at,
                        removed, removed_at, for_meals, meal_ids, receipt_status
-                FROM grocery_items WHERE user_id = :user_id"""),
+                FROM grocery_items
+                WHERE user_id = :user_id AND source = 'meal'"""),
         {"user_id": user_id},
     ).fetchall()
-    # Multiple rows may share a name (after Phase A drops the unique constraint);
-    # for refresh purposes we consolidate on the meal-source row when one exists,
-    # otherwise the most recent row.
-    existing_map: dict[str, dict] = {}
-    for r in existing:
-        key = r["name"].lower()
-        prior = existing_map.get(key)
-        if prior is None or (r["source"] == "meal" and prior["source"] != "meal"):
-            existing_map[key] = r
+    existing_map: dict[str, dict] = {r["name"].lower(): r for r in existing}
 
     # Remove meal items no longer needed (preserve items with receipt data only).
-    # Only delete source='meal' items — extras/regulars are user-managed.
     for name_lower, row in existing_map.items():
-        if (row["source"] == "meal"
-                and name_lower not in fresh_meal_items
-                and not row["receipt_status"]):
+        if name_lower not in fresh_meal_items and not row["receipt_status"]:
             conn.execute(
                 text("DELETE FROM grocery_items WHERE id = :id"),
                 {"id": row["id"]},
@@ -901,31 +893,29 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
             new_occurrence = bool(new_meal_ids - old_meal_ids)
 
             # Legacy state: row pre-dates the meal_ids column and is in a
-            # completed state (checked / have-it / removed / receipt).
-            # We can't tell whether this was the same occurrence or an old
-            # one — treat as old so a fresh meal needing this ingredient
-            # re-surfaces it. Fires once per legacy row; subsequent refreshes
-            # have meal_ids populated and this branch no longer applies.
+            # completed state (checked / receipt). Treat as old so a fresh
+            # meal needing this ingredient re-surfaces it on the active list.
+            # Fires once per legacy row; subsequent refreshes have meal_ids
+            # populated and this branch no longer applies.
             legacy_completed = (
                 not old_meal_ids and (
                     row["checked"]
-                    or row["have_it"]
-                    or row["removed"]
                     or (row["receipt_status"] or "") != ""
                 )
             )
 
             if new_occurrence or legacy_completed:
-                # A new meal occurrence is pulling this ingredient in.
-                # Decouple from any prior receipt match AND prior product /
-                # order selection — this is a new need, not the same one
-                # that was previously fulfilled. submitted_at is left alone
-                # so in-flight orders remain visible until reconciled.
+                # A new meal occurrence is pulling this ingredient in. Reset
+                # only the per-occurrence state — what was bought / ordered /
+                # matched against the LAST occurrence of this meal. Leave
+                # have_it and removed alone: those are pantry / preference
+                # claims that aren't invalidated by a new meal occurrence.
+                # The user can un-have-it / un-remove themselves if their
+                # claim has changed.
                 reset_clause = """checked = 0, checked_at = NULL,
-                                  have_it = 0, have_it_at = NULL,
-                                  removed = 0, removed_at = NULL,
                                   receipt_status = '', receipt_item = '',
                                   receipt_upc = '', receipt_price = NULL,
+                                  receipt_acknowledged = 0,
                                   product_upc = '', product_name = '',
                                   product_brand = '', product_size = '',
                                   product_price = NULL, product_image = '',
@@ -954,7 +944,9 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                      "group": info["shopping_group"], "id": row["id"]},
                 )
         else:
-            # Genuinely new item (no row exists with this name)
+            # Genuinely new meal-source item. INSERT unconditionally — the
+            # unique constraint is gone, so this can coexist with an extra
+            # row of the same name.
             conn.execute(
                 text("""INSERT INTO grocery_items
                    (user_id, name, shopping_group, source, for_meals, meal_ids, meal_count)
