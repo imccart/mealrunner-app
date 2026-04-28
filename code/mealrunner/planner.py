@@ -549,7 +549,7 @@ def swap_meal_side(conn: DictConnection, user_id: str, slot_date: str) -> Meal:
 def swap_dates(conn: DictConnection, user_id: str, date_a: str, date_b: str) -> list[Meal]:
     """Swap meals between two dates by moving slot_date, not by swapping
     recipe attributes between two meal rows. Preserving each meal's id keeps
-    trip_items.meal_ids stable across the swap, so _refresh_trip_meal_items
+    grocery_items.meal_ids stable across the swap, so _refresh_trip_meal_items
     doesn't see the swap as a new occurrence and re-surface ingredients the
     user already bought / checked off.
     """

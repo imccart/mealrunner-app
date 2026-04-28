@@ -22,9 +22,8 @@ def detect_skipped_items(conn: DictConnection, user_id: str, min_weeks: int = 3)
     """
     rows = conn.execute(text("""
         SELECT ti.name, ti.for_meals, ti.checked
-        FROM trip_items ti
-        JOIN grocery_trips gt ON gt.id = ti.trip_id
-        WHERE gt.user_id = :user_id
+        FROM grocery_items ti
+        WHERE ti.user_id = :user_id
           AND ti.source = 'meal' AND ti.for_meals != ''
           AND ti.added_at > NOW() - INTERVAL '90 days'
     """), {"user_id": user_id}).fetchall()
@@ -69,9 +68,8 @@ def detect_extra_meal_links(conn: DictConnection, user_id: str, min_occurrences:
         SELECT ti.name, ti.for_meals, ti.source, ti.checked,
                EXTRACT(ISOYEAR FROM ti.added_at::timestamp) AS yr,
                EXTRACT(WEEK FROM ti.added_at::timestamp) AS wk
-        FROM trip_items ti
-        JOIN grocery_trips gt ON gt.id = ti.trip_id
-        WHERE gt.user_id = :user_id
+        FROM grocery_items ti
+        WHERE ti.user_id = :user_id
           AND ti.added_at > NOW() - INTERVAL '140 days'
           AND ti.source IN ('meal', 'extra')
     """), {"user_id": user_id}).fetchall()

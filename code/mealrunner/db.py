@@ -54,7 +54,6 @@ def init_db(conn: DictConnection) -> None:
             ("slots_to_meals", _migrate_slots_to_meals),
             ("shopping_groups", _migrate_shopping_groups),
             ("regulars_default_inactive", _migrate_regulars_default_inactive),
-            ("grocery_to_trips", _migrate_grocery_to_trips),
             ("onboarding_marker", _migrate_onboarding_marker),
             ("create_default_user", _migrate_create_default_user),
             ("create_households", _migrate_create_households),
@@ -78,6 +77,10 @@ def init_db(conn: DictConnection) -> None:
     _migrate_text_to_timestamptz(conn)
     print("[db] Timestamp type migrations done", flush=True)
 
+    print("[db] Running grocery_trips → grocery_state migration...", flush=True)
+    _migrate_grocery_trips_to_state(conn)
+    print("[db] grocery_trips migration done", flush=True)
+
     print("[db] init_db complete", flush=True)
 
 
@@ -87,12 +90,9 @@ _TIMESTAMP_COLUMNS = [
     ("company_violations", "refreshed_at"),
     ("grocery_lists", "created_at"),
     ("grocery_runs", "created_at"),
-    ("grocery_trips", "completed_at"),
-    ("grocery_trips", "created_at"),
-    ("grocery_trips", "pantry_checked_at"),
-    ("grocery_trips", "receipt_parsed_at"),
-    ("grocery_trips", "regulars_added_at"),
-    ("grocery_trips", "stale_checked_at"),
+    ("grocery_state", "pantry_checked_at"),
+    ("grocery_state", "receipt_parsed_at"),
+    ("grocery_state", "regulars_added_at"),
     ("household_invites", "created_at"),
     ("household_members", "joined_at"),
     ("learning_dismissed", "dismissed_at"),
@@ -118,15 +118,15 @@ _TIMESTAMP_COLUMNS = [
     ("sessions", "created_at"),
     ("sessions", "expires_at"),
     ("settings", "updated_at"),
-    ("trip_items", "added_at"),
-    ("trip_items", "buy_elsewhere_at"),
-    ("trip_items", "checked_at"),
-    ("trip_items", "have_it_at"),
-    ("trip_items", "ordered_at"),
-    ("trip_items", "removed_at"),
-    ("trip_items", "selected_at"),
-    ("trip_items", "skipped_at"),
-    ("trip_items", "submitted_at"),
+    ("grocery_items", "added_at"),
+    ("grocery_items", "buy_elsewhere_at"),
+    ("grocery_items", "checked_at"),
+    ("grocery_items", "have_it_at"),
+    ("grocery_items", "ordered_at"),
+    ("grocery_items", "removed_at"),
+    ("grocery_items", "selected_at"),
+    ("grocery_items", "skipped_at"),
+    ("grocery_items", "submitted_at"),
     ("unknown_brands", "first_seen"),
     ("unknown_brands", "last_seen"),
     ("user_feedback", "created_at"),
@@ -175,6 +175,137 @@ def _migrate_text_to_timestamptz(conn: DictConnection) -> None:
                 pass
 
 
+def _migrate_grocery_trips_to_state(conn: DictConnection) -> None:
+    """Collapse grocery_trips into grocery_state and rename trip_items → grocery_items.
+
+    The perpetual-trip model meant every user had exactly one row in grocery_trips,
+    so trip_id was just an indirection layer for user_id. This migration removes
+    the indirection: grocery_state holds the per-household grocery state (one row
+    per owner user_id), and grocery_items keys directly off user_id.
+
+    Idempotent — early-exits if grocery_trips is already gone.
+    """
+    has_trips = conn.execute(
+        text("SELECT to_regclass('public.grocery_trips') AS t")
+    ).fetchone()
+    if not has_trips or not has_trips["t"]:
+        return  # Already migrated or fresh DB
+
+    def _step(label: str, sql: str, params: dict | None = None) -> None:
+        try:
+            conn.execute(text(sql), params or {})
+            conn.commit()
+        except Exception as e:
+            print(f"[db]   {label} skipped: {e}", flush=True)
+            try:
+                conn.raw.rollback()
+            except Exception:
+                pass
+
+    # 1. Create grocery_state (idempotent).
+    _step("create grocery_state", """
+        CREATE TABLE IF NOT EXISTS grocery_state (
+            user_id TEXT PRIMARY KEY REFERENCES users(id),
+            order_source TEXT NOT NULL DEFAULT 'none',
+            regulars_added INTEGER NOT NULL DEFAULT 0,
+            regulars_added_at TIMESTAMPTZ,
+            pantry_checked INTEGER NOT NULL DEFAULT 0,
+            pantry_checked_at TIMESTAMPTZ,
+            receipt_data TEXT,
+            receipt_parsed_at TIMESTAMPTZ
+        )
+    """)
+
+    # 2. Backfill from active grocery_trips rows.
+    _step("backfill grocery_state", """
+        INSERT INTO grocery_state
+            (user_id, order_source, regulars_added, regulars_added_at,
+             pantry_checked, pantry_checked_at, receipt_data, receipt_parsed_at)
+        SELECT user_id, order_source, regulars_added, regulars_added_at,
+               pantry_checked, pantry_checked_at, receipt_data, receipt_parsed_at
+        FROM grocery_trips
+        WHERE active = 1
+        ON CONFLICT (user_id) DO NOTHING
+    """)
+
+    # 3. Add user_id to trip_items, backfill from grocery_trips, set NOT NULL.
+    _step("trip_items.user_id add",
+          "ALTER TABLE trip_items ADD COLUMN IF NOT EXISTS user_id TEXT")
+    _step("trip_items.user_id backfill", """
+        UPDATE trip_items ti
+        SET user_id = gt.user_id
+        FROM grocery_trips gt
+        WHERE ti.trip_id = gt.id AND (ti.user_id IS NULL OR ti.user_id = '')
+    """)
+    _step("trip_items.user_id NOT NULL",
+          "ALTER TABLE trip_items ALTER COLUMN user_id SET NOT NULL")
+
+    # 4. Same for receipt_extra_items.
+    _step("receipt_extra_items.user_id add",
+          "ALTER TABLE receipt_extra_items ADD COLUMN IF NOT EXISTS user_id TEXT")
+    _step("receipt_extra_items.user_id backfill", """
+        UPDATE receipt_extra_items rei
+        SET user_id = gt.user_id
+        FROM grocery_trips gt
+        WHERE rei.trip_id = gt.id AND (rei.user_id IS NULL OR rei.user_id = '')
+    """)
+    _step("receipt_extra_items.user_id NOT NULL",
+          "ALTER TABLE receipt_extra_items ALTER COLUMN user_id SET NOT NULL")
+
+    # 5. Drop UNIQUE(trip_id, name) — partial-unique-on-active will be added later in
+    # Phase C; for now, no constraint on (user_id, name) so rows are id-keyed only.
+    try:
+        row = conn.execute(text("""
+            SELECT conname FROM pg_constraint
+            WHERE conrelid = 'trip_items'::regclass
+              AND contype = 'u'
+              AND pg_get_constraintdef(oid) LIKE '%trip_id%name%'
+        """)).fetchone()
+        if row:
+            _step("drop UNIQUE(trip_id,name)",
+                  f'ALTER TABLE trip_items DROP CONSTRAINT IF EXISTS "{row["conname"]}"')
+    except Exception as e:
+        print(f"[db]   UNIQUE constraint lookup skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+    # 6. Drop FKs that reference grocery_trips before we drop the table.
+    for tbl in ("trip_items", "receipt_extra_items"):
+        try:
+            row = conn.execute(text(f"""
+                SELECT conname FROM pg_constraint
+                WHERE conrelid = '{tbl}'::regclass
+                  AND contype = 'f'
+                  AND pg_get_constraintdef(oid) LIKE '%trip_id%grocery_trips%'
+            """)).fetchone()
+            if row:
+                _step(f"drop {tbl}.trip_id FK",
+                      f'ALTER TABLE {tbl} DROP CONSTRAINT IF EXISTS "{row["conname"]}"')
+        except Exception as e:
+            print(f"[db]   {tbl} FK lookup skipped: {e}", flush=True)
+            try:
+                conn.raw.rollback()
+            except Exception:
+                pass
+
+    # 7. Drop trip_id columns.
+    _step("drop trip_items.trip_id",
+          "ALTER TABLE trip_items DROP COLUMN IF EXISTS trip_id")
+    _step("drop receipt_extra_items.trip_id",
+          "ALTER TABLE receipt_extra_items DROP COLUMN IF EXISTS trip_id")
+
+    # 8. Rename trip_items → grocery_items (last, so prior steps still saw the old name).
+    _step("rename trip_items → grocery_items",
+          "ALTER TABLE trip_items RENAME TO grocery_items")
+
+    # 9. Drop grocery_trips.
+    _step("drop grocery_trips", "DROP TABLE IF EXISTS grocery_trips CASCADE")
+
+    print("[db] grocery_trips → grocery_state migration complete", flush=True)
+
+
 def _run_column_migrations(conn: DictConnection) -> None:
     """Add columns that may be missing on older databases.
 
@@ -186,24 +317,22 @@ def _run_column_migrations(conn: DictConnection) -> None:
     # Old columns (pre-session 20) are already in the DB — no need to re-attempt.
     # When adding columns in the future, add them here and remove them once
     # confirmed deployed (they become part of the schema in database.py).
+    # NOTE: trip_items has been renamed to grocery_items in
+    # _migrate_grocery_trips_to_state. Column adds against trip_items will silently
+    # no-op once the rename runs; this list is preserved for historical idempotency
+    # in case a DB ran an earlier code version. Add new columns against grocery_items.
     migrations = [
         ("trip_items", "skipped", "INTEGER NOT NULL DEFAULT 0"),
         ("trip_items", "skipped_at", "TEXT"),
         ("trip_items", "have_it", "INTEGER NOT NULL DEFAULT 0"),
         ("trip_items", "have_it_at", "TEXT"),
         ("trip_items", "added_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
-        ("grocery_trips", "regulars_added", "INTEGER NOT NULL DEFAULT 0"),
-        ("grocery_trips", "regulars_added_at", "TEXT"),
-        ("grocery_trips", "pantry_checked", "INTEGER NOT NULL DEFAULT 0"),
-        ("grocery_trips", "pantry_checked_at", "TEXT"),
         ("trip_items", "quantity", "INTEGER NOT NULL DEFAULT 1"),
         ("trip_items", "submitted_at", "TEXT"),
         ("product_preferences", "brand", "TEXT NOT NULL DEFAULT ''"),
         ("product_preferences", "product_key", "TEXT NOT NULL DEFAULT ''"),
         ("product_ratings", "brand", "TEXT NOT NULL DEFAULT ''"),
         ("product_ratings", "product_key", "TEXT NOT NULL DEFAULT ''"),
-        ("grocery_trips", "stale_checked", "INTEGER NOT NULL DEFAULT 0"),
-        ("grocery_trips", "stale_checked_at", "TEXT"),
         ("meals", "notes", "TEXT NOT NULL DEFAULT ''"),
         ("trip_items", "notes", "TEXT NOT NULL DEFAULT ''"),
         ("trip_items", "removed", "INTEGER NOT NULL DEFAULT 0"),
@@ -242,9 +371,8 @@ def _run_column_migrations(conn: DictConnection) -> None:
     # Create indexes for common query patterns
     indexes = [
         ("idx_meals_user_date", "meals", "user_id, slot_date"),
-        ("idx_trips_user_active", "grocery_trips", "user_id, active"),
-        ("idx_trip_items_trip_source", "trip_items", "trip_id, source"),
-        ("idx_trip_items_trip_checked", "trip_items", "trip_id, checked, have_it, removed"),
+        ("idx_grocery_items_user_source", "grocery_items", "user_id, source"),
+        ("idx_grocery_items_user_checked", "grocery_items", "user_id, checked, have_it, removed"),
     ]
     for idx_name, table_name, columns in indexes:
         try:
@@ -279,12 +407,12 @@ def _run_column_migrations(conn: DictConnection) -> None:
         except Exception:
             pass
 
-    # Create receipt_extra_items table if missing
+    # Create receipt_extra_items table if missing (post-migration shape).
     try:
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS receipt_extra_items (
                 id SERIAL PRIMARY KEY,
-                trip_id INTEGER NOT NULL REFERENCES grocery_trips(id),
+                user_id TEXT NOT NULL REFERENCES users(id),
                 item_name TEXT NOT NULL,
                 price FLOAT,
                 upc TEXT NOT NULL DEFAULT '',
@@ -692,61 +820,6 @@ def _migrate_regulars_default_inactive(conn: DictConnection) -> None:
         conn.execute(text("UPDATE regulars SET active = 0"))
 
 
-def _migrate_grocery_to_trips(conn: DictConnection) -> None:
-    """One-time: import file-based grocery state into grocery_trips."""
-    row = conn.execute(text(
-        "SELECT COUNT(*) AS n FROM grocery_trips"
-    )).fetchone()
-    if row["n"] > 0:
-        return
-
-    import json
-    config_dir = Path.home() / ".mealrunner"
-    saved_list = config_dir / "current_list.json"
-    reconcile_file = config_dir / "reconcile_result.json"
-
-    if not saved_list.exists():
-        return
-
-    try:
-        with open(saved_list) as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return
-
-    date_key = data.get("date_key", "")
-    start_date = ""
-    end_date = ""
-    if "/" in date_key:
-        parts = date_key.split("/")
-        if len(parts) == 2:
-            start_date, end_date = parts
-
-    checked_names: set[str] = set()
-    if reconcile_file.exists():
-        try:
-            with open(reconcile_file) as f:
-                checked_names = {n.lower() for n in json.load(f).get("matched", [])}
-        except (json.JSONDecodeError, IOError):
-            pass
-
-    result = conn.execute(text(
-        """INSERT INTO grocery_trips (trip_type, start_date, end_date, active)
-           VALUES ('plan', :start, :end, 1)
-           RETURNING id"""
-    ), {"start": start_date, "end": end_date})
-    trip_id = result.fetchone()["id"]
-
-    extras = data.get("extras", [])
-    for name in extras:
-        is_checked = 1 if name.lower() in checked_names else 0
-        conn.execute(text(
-            """INSERT INTO trip_items (trip_id, name, shopping_group, source, checked)
-               VALUES (:trip_id, :name, 'Other', 'extra', :checked)
-               ON CONFLICT DO NOTHING"""
-        ), {"trip_id": trip_id, "name": name, "checked": is_checked})
-
-
 def _migrate_onboarding_marker(conn: DictConnection) -> None:
     """One-time: move filesystem onboarding marker to settings table."""
     row = conn.execute(text(
@@ -847,7 +920,8 @@ def _migrate_default_user_id_rows(conn: DictConnection) -> None:
         return
 
     real_uid = user["id"]
-    for table in ("recipes", "meals", "regulars", "pantry", "grocery_trips",
+    for table in ("recipes", "meals", "regulars", "pantry",
+                  "grocery_state", "grocery_items", "receipt_extra_items",
                   "product_preferences", "learning_dismissed", "meal_item_overrides", "stores"):
         try:
             conn.execute(

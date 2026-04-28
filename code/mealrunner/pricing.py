@@ -55,11 +55,10 @@ def poll_user_prices(conn: DictConnection, user_id: str) -> dict:
 
     # Get unique UPCs from recent orders (last 30 days)
     rows = conn.execute(
-        text("""SELECT DISTINCT product_upc FROM trip_items ti
-           JOIN grocery_trips gt ON gt.id = ti.trip_id
-           WHERE gt.user_id = :uid AND ti.product_upc != ''
-           AND ti.selected_at IS NOT NULL
-           AND ti.selected_at::timestamptz > NOW() - INTERVAL '30 days'"""),
+        text("""SELECT DISTINCT product_upc FROM grocery_items
+           WHERE user_id = :uid AND product_upc != ''
+           AND selected_at IS NOT NULL
+           AND selected_at::timestamptz > NOW() - INTERVAL '30 days'"""),
         {"uid": user_id},
     ).fetchall()
 
@@ -168,9 +167,9 @@ def prewarm_grocery_prices(conn: DictConnection) -> None:
 
     _today = _dt.date.today().isoformat()
 
-    # Get all active trips with their user_ids
+    # Get all users with grocery state (every grocery_state row is "active")
     trips = conn.execute(
-        text("SELECT id, user_id FROM grocery_trips WHERE completed_at IS NULL"),
+        text("SELECT user_id FROM grocery_state"),
     ).fetchall()
 
     for trip in trips:
@@ -181,12 +180,12 @@ def prewarm_grocery_prices(conn: DictConnection) -> None:
 
         # Get pending items (same criteria as order page)
         items = conn.execute(
-            text("""SELECT DISTINCT name FROM trip_items WHERE trip_id = :tid
+            text("""SELECT DISTINCT name FROM grocery_items WHERE user_id = :uid
                AND checked = 0 AND skipped = 0 AND have_it = 0 AND removed = 0
                AND submitted_at IS NULL AND product_upc = ''
                AND buy_elsewhere = 0
                ORDER BY name"""),
-            {"tid": trip["id"]},
+            {"uid": user_id},
         ).fetchall()
 
         if not items:

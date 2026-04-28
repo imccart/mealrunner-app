@@ -272,31 +272,22 @@ community_prices = Table(
     UniqueConstraint("upc", "location_id", "date"),
 )
 
-grocery_trips = Table(
-    "grocery_trips", metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("user_id", Text, nullable=False, server_default=text("'default'")),
-    Column("trip_type", Text, nullable=False, server_default=text("'plan'")),
-    Column("created_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
-    Column("completed_at", TS),
-    Column("start_date", Text),
-    Column("end_date", Text),
-    Column("active", Integer, nullable=False, server_default=text("1")),
+grocery_state = Table(
+    "grocery_state", metadata,
+    Column("user_id", Text, ForeignKey("users.id"), primary_key=True),
+    Column("order_source", Text, nullable=False, server_default=text("'none'")),
     Column("regulars_added", Integer, nullable=False, server_default=text("0")),
     Column("regulars_added_at", TS),
     Column("pantry_checked", Integer, nullable=False, server_default=text("0")),
     Column("pantry_checked_at", TS),
-    Column("order_source", Text, nullable=False, server_default=text("'none'")),
     Column("receipt_data", Text),
     Column("receipt_parsed_at", TS),
-    Column("stale_checked", Integer, nullable=False, server_default=text("0")),
-    Column("stale_checked_at", TS),
 )
 
-trip_items = Table(
-    "trip_items", metadata,
+grocery_items = Table(
+    "grocery_items", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("trip_id", Integer, ForeignKey("grocery_trips.id"), nullable=False),
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
     Column("name", Text, nullable=False),
     Column("shopping_group", Text, nullable=False, server_default=text("'Other'")),
     Column("source", Text, nullable=False, server_default=text("'extra'")),
@@ -331,7 +322,6 @@ trip_items = Table(
     Column("removed_at", TS),
     Column("buy_elsewhere", Integer, nullable=False, server_default=text("0")),
     Column("buy_elsewhere_at", TS),
-    UniqueConstraint("trip_id", "name"),
 )
 
 rate_limits = Table(
@@ -433,7 +423,7 @@ community_data = Table(
 receipt_extra_items = Table(
     "receipt_extra_items", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("trip_id", Integer, ForeignKey("grocery_trips.id"), nullable=False),
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
     Column("item_name", Text, nullable=False),
     Column("price", Float),
     Column("upc", Text, nullable=False, server_default=text("''")),
