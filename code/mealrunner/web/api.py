@@ -2022,7 +2022,7 @@ async def select_product(body: dict, request: Request):
 
     # Check if this item already has a different product selected
     existing = conn.execute(
-        text("""SELECT id, product_upc FROM trip_items
+        text("""SELECT id, name, product_upc FROM trip_items
            WHERE trip_id = :trip_id AND LOWER(name) = :item_name AND product_upc != '' AND product_upc != :upc
            AND ordered = 1 AND submitted_at IS NULL AND removed = 0
            LIMIT 1"""),
@@ -2030,17 +2030,37 @@ async def select_product(body: dict, request: Request):
     ).fetchone()
 
     if existing:
-        # Different product for same item — insert additional row
+        # Different product for same line — insert a sibling line "{base} (N)".
+        # The (trip_id, name) UNIQUE constraint forbids two rows with the same
+        # name, so we suffix to keep them distinct on grocery/order/receipt
+        # views. If the existing row's name already ends in "(N)", strip it
+        # so we don't end up with "Greek Yogurt (2) (2)". Base off the stored
+        # name so casing stays consistent across siblings.
+        import re as _re
+        existing_name = existing["name"].strip()
+        sm = _re.match(r"^(.*?)\s*\((\d+)\)$", existing_name)
+        base = sm.group(1) if sm else existing_name
+        n = 2
+        while True:
+            candidate = f"{base} ({n})"
+            taken = conn.execute(
+                text("SELECT 1 FROM trip_items WHERE trip_id = :tid AND LOWER(name) = :name"),
+                {"tid": trip["id"], "name": candidate.lower()},
+            ).fetchone()
+            if not taken:
+                break
+            n += 1
+        new_name = candidate
         conn.execute(
             text("""INSERT INTO trip_items
                    (trip_id, name, source, shopping_group, for_meals, meal_count,
                     product_upc, product_name, product_brand, product_size, product_price, product_image,
                     quantity, ordered, ordered_at, selected_at)
-               SELECT :trip_id, name, 'extra', shopping_group, for_meals, 0,
+               SELECT :trip_id, :new_name, 'extra', shopping_group, for_meals, 0,
                     :upc, :pname, :brand, :size, :price, :image,
                     :quantity, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                FROM trip_items WHERE id = :existing_id"""),
-            {"trip_id": trip["id"], "existing_id": existing["id"],
+            {"trip_id": trip["id"], "existing_id": existing["id"], "new_name": new_name,
              "upc": product["upc"], "pname": product["name"], "brand": product.get("brand", ""),
              "size": product.get("size", ""), "price": product.get("price"),
              "image": product.get("image", ""),

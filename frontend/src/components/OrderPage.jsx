@@ -296,21 +296,39 @@ export default function OrderPage() {
     } catch { /* silent */ }
   }
 
+  // Nav arrows iterate pending items only. Selected items are revisited
+  // by tapping them in the queue/sidebar, not by stepping past the end of
+  // pending. Past the last pending, → drops into the end-state panel.
   const handlePrev = () => {
     if (!activeItem || !order) return
-    const allNames = [...order.pending.map(p => p.name), ...order.selected.map(s => s.name)]
-    const idx = allNames.indexOf(activeItem)
-    if (idx > 0) setActiveItem(allNames[idx - 1])
-    else if (allNames.length > 0) setActiveItem(allNames[allNames.length - 1])
+    const pendingNames = order.pending.map(p => p.name)
+    if (pendingNames.length === 0) return
+    const idx = pendingNames.indexOf(activeItem)
+    if (idx === -1) {
+      setActiveItem(pendingNames[pendingNames.length - 1])
+      return
+    }
+    if (idx === 0) return
+    setActiveItem(pendingNames[idx - 1])
   }
 
   const handleNext = () => {
     if (!activeItem || !order) return
-    const allNames = [...order.pending.map(p => p.name), ...order.selected.map(s => s.name)]
-    const idx = allNames.indexOf(activeItem)
-    if (idx < allNames.length - 1) setActiveItem(allNames[idx + 1])
-    else if (order.pending.length > 0) setActiveItem(allNames[0]) // wrap to start
-    else setActiveItem(null) // all done
+    const pendingNames = order.pending.map(p => p.name)
+    if (pendingNames.length === 0) {
+      setActiveItem(null)
+      return
+    }
+    const idx = pendingNames.indexOf(activeItem)
+    if (idx === -1) {
+      setActiveItem(pendingNames[0])
+      return
+    }
+    if (idx === pendingNames.length - 1) {
+      setActiveItem(null)
+      return
+    }
+    setActiveItem(pendingNames[idx + 1])
   }
 
   const handleKeepShopping = () => {
@@ -453,10 +471,10 @@ export default function OrderPage() {
       <div className={styles.pickingRowMain} onClick={() => setShowQueue(true)}>
         <span className={styles.pickingRowLabel}>Picking for</span>
         <span className={styles.pickingRowItem}>{activeItem}</span>
-        <span className={styles.pickingRowProgress}>[{[...order.pending.map(p => p.name), ...order.selected.map(s => s.name)].indexOf(activeItem) + 1}/{totalCount}]</span>
         <span className={styles.pickingRowExpand}>{'\u25BE'}</span>
       </div>
       <button className={styles.pickingRowNav} onClick={handleNext} title="Next item">{'\u2192'}</button>
+      <button className={styles.pickingRowDone} onClick={() => setActiveItem(null)} title="Done picking">Done</button>
     </div>
   ) : (
     <div className={`${styles.pickingRow} ${styles.done}`}>

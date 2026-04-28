@@ -1300,10 +1300,28 @@
   line-height: 1;
 }
 .pickingRowNav:first-child { border-right: 1.5px solid var(--tan); }
-.pickingRowNav:last-child { border-left: 1.5px solid var(--tan); }
+.pickingRowMain + .pickingRowNav { border-left: 1.5px solid var(--tan); }
 
 .pickingRowNav:active {
   background: var(--tan);
+}
+
+.pickingRowDone {
+  padding: 10px 12px;
+  background: var(--dark);
+  color: white;
+  border: none;
+  border-left: 1.5px solid var(--tan);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.pickingRowDone:active {
+  opacity: 0.85;
 }
 
 /* Done state */
