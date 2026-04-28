@@ -606,9 +606,10 @@ def set_meal(
         text("SELECT * FROM meals WHERE user_id = :user_id AND slot_date = :slot_date"),
         {"user_id": user_id, "slot_date": slot_date},
     ).fetchone()
-    if existing:
+    if existing and existing["recipe_id"] == recipe.id:
+        # Same recipe — re-save in place. Preserves meal.id so the grocery sync
+        # treats this as the same occurrence (state on shared ingredients sticks).
         meal = _row_to_meal(existing)
-        # Load existing sides
         side_rows = conn.execute(
             text("SELECT * FROM meal_sides WHERE meal_id = :mid ORDER BY position"),
             {"mid": meal.id},
@@ -616,6 +617,17 @@ def set_meal(
         meal.sides = [MealSide(id=sr["id"], side_recipe_id=sr["side_recipe_id"],
                                side_name=sr["side_name"], position=sr["position"]) for sr in side_rows]
     else:
+        # Different recipe (or empty slot) — delete the existing meal and any
+        # sides (CASCADE) and create a fresh one. New meal.id means the grocery
+        # sync sees this as a new meal occurrence and re-derives ingredient
+        # state from scratch (have_it / removed don't carry over from the
+        # prior recipe).
+        if existing:
+            conn.execute(
+                text("DELETE FROM meals WHERE id = :id"),
+                {"id": existing["id"]},
+            )
+            conn.commit()
         meal = Meal(id=None, slot_date=slot_date)
 
     meal.recipe_id = recipe.id
@@ -667,7 +679,14 @@ def set_freeform_meal(conn: DictConnection, user_id: str, slot_date: str, name: 
         text("SELECT * FROM meals WHERE user_id = :user_id AND slot_date = :slot_date"),
         {"user_id": user_id, "slot_date": slot_date},
     ).fetchone()
-    if existing:
+    # Going from a real recipe → freeform is a meal change, so delete + insert
+    # (new meal.id) so grocery sync drops the old recipe's ingredient rows.
+    # Re-saving the same freeform name is a no-op-ish update in place.
+    if existing and existing["recipe_id"] is not None:
+        conn.execute(text("DELETE FROM meals WHERE id = :id"), {"id": existing["id"]})
+        conn.commit()
+        meal = Meal(id=None, slot_date=slot_date)
+    elif existing:
         meal = _row_to_meal(existing)
     else:
         meal = Meal(id=None, slot_date=slot_date)

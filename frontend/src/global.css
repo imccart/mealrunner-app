@@ -821,6 +821,16 @@ main {
   background: #FFF5F0;
 }
 
+.sheet-option-destructive {
+  border-color: rgba(180, 70, 70, 0.25);
+}
+
+.sheet-option-destructive:hover,
+.sheet-option-destructive:active {
+  border-color: rgba(180, 70, 70, 0.5);
+  background: #FFF0F0;
+}
+
 .sheet-opt-icon {
   width: 40px;
   height: 40px;

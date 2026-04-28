@@ -226,6 +226,14 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     } catch { await load() }
   }
 
+  const handleClearDay = async (date) => {
+    try {
+      await api.removeMeal(date)
+      setActionDate(null)
+      await load()
+    } catch { await load() }
+  }
+
   const handleCreateNew = async (date, name) => {
     try {
       const recipe = await api.addRecipe(name)
@@ -465,6 +473,13 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                 <div>
                   <div className="sheet-opt-title">Nothing needed</div>
                   <div className="sheet-opt-desc">Eating out, leftovers, winging it</div>
+                </div>
+              </button>
+              <button className="sheet-option sheet-option-destructive" onClick={() => handleClearDay(actionDate)}>
+                <div className="sheet-opt-icon">{'\u{1F5D1}'}</div>
+                <div>
+                  <div className="sheet-opt-title">Clear this day</div>
+                  <div className="sheet-opt-desc">Empty the slot — meal goes away</div>
                 </div>
               </button>
             </div>
