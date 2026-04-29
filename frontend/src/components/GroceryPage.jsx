@@ -160,10 +160,14 @@ export default function GroceryPage({ sidebar = false }) {
   const haveItSet = new Set((have_it || []).map(n => n.toLowerCase()))
   const removedSet = new Set((removed || []).map(n => n.toLowerCase()))
 
+  // Items "on the list" exclude ordered rows (sent to Kroger, awaiting
+  // reconciliation — they live on the Order page). User can still re-add the
+  // same item as an active sibling row (e.g., picking it up in-store too).
   const onListSet = new Set()
   for (const group of Object.values(items_by_group)) {
     for (const item of group) {
-      onListSet.add(item.name.toLowerCase())
+      const nl = item.name.toLowerCase()
+      if (!orderedSet.has(nl)) onListSet.add(nl)
     }
   }
 
