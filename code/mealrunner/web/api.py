@@ -202,10 +202,12 @@ async def swap_meal_smart(date: str, request: Request, body: dict = None):
             removable = []
             if old_was_on_list and old_meal["recipe_id"]:
                 mw = load_rolling_week(conn, user_id)
-                # Get all ingredients for the OLD meal (including sides)
-                old_ingredients = set()
-                old_recipe_ids = [old_meal["recipe_id"]]
-                # Also gather side recipe IDs
+
+                # Collect every recipe_id we'll need ingredients for: the old
+                # meal + its sides + each other on-list meal + their sides.
+                # Then bulk-fetch in one query (was N+1 — one query per
+                # recipe_id across both loops).
+                old_recipe_ids: list[int] = [old_meal["recipe_id"]]
                 old_meal_row = conn.execute(
                     text("SELECT id FROM meals WHERE slot_date = :date AND user_id = :user_id"),
                     {"date": date, "user_id": user_id},
@@ -217,39 +219,50 @@ async def swap_meal_smart(date: str, request: Request, body: dict = None):
                     ).fetchall()
                     old_recipe_ids.extend(sr["side_recipe_id"] for sr in side_rows)
 
-                for rid in old_recipe_ids:
-                    rows = conn.execute(
-                        text("""SELECT i.name FROM recipe_ingredients ri
-                           JOIN ingredients i ON ri.ingredient_id = i.id
-                           WHERE ri.recipe_id = :recipe_id"""),
-                        {"recipe_id": rid},
-                    ).fetchall()
-                    old_ingredients |= {r["name"].lower() for r in rows}
-
-                # Get ingredients shared by OTHER on-list meals (including their sides)
-                shared = set()
+                shared_recipe_ids: list[int] = []
                 for m in mw.meals:
                     if m.on_grocery and m.slot_date != date:
-                        share_ids = [m.recipe_id] if m.recipe_id else []
-                        share_ids.extend(s.side_recipe_id for s in m.sides if s.side_recipe_id)
-                        for rid in share_ids:
-                            other_rows = conn.execute(
-                                text("""SELECT i.name FROM recipe_ingredients ri
-                                   JOIN ingredients i ON ri.ingredient_id = i.id
-                                   WHERE ri.recipe_id = :recipe_id"""),
-                                {"recipe_id": rid},
-                            ).fetchall()
-                            shared |= {r["name"].lower() for r in other_rows}
+                        if m.recipe_id:
+                            shared_recipe_ids.append(m.recipe_id)
+                        shared_recipe_ids.extend(s.side_recipe_id for s in m.sides if s.side_recipe_id)
 
-                # Removable = old ingredients not shared, not already checked/ordered
+                all_recipe_ids = set(old_recipe_ids) | set(shared_recipe_ids)
+                names_by_recipe: dict[int, set[str]] = {}
+                if all_recipe_ids:
+                    ph = ", ".join(f":r{i}" for i in range(len(all_recipe_ids)))
+                    ps = {f"r{i}": rid for i, rid in enumerate(all_recipe_ids)}
+                    rows = conn.execute(
+                        text(f"""SELECT ri.recipe_id, i.name FROM recipe_ingredients ri
+                              JOIN ingredients i ON ri.ingredient_id = i.id
+                              WHERE ri.recipe_id IN ({ph})"""),
+                        ps,
+                    ).fetchall()
+                    for r in rows:
+                        names_by_recipe.setdefault(r["recipe_id"], set()).add(r["name"].lower())
+
+                old_ingredients: set[str] = set()
+                for rid in old_recipe_ids:
+                    old_ingredients |= names_by_recipe.get(rid, set())
+                shared: set[str] = set()
+                for rid in shared_recipe_ids:
+                    shared |= names_by_recipe.get(rid, set())
+
+                # Removable = old ingredients not shared, not already
+                # checked/ordered. Bulk-fetch in one query keyed on the
+                # candidate names (was a per-name SELECT in a loop).
                 trip = _get_active_trip(conn, user_id)
-                if trip:
-                    for name_lower in old_ingredients - shared:
-                        item = conn.execute(
-                            text("SELECT name, checked, ordered FROM grocery_items WHERE user_id = :user_id AND LOWER(name) = :name"),
-                            {"user_id": user_id, "name": name_lower},
-                        ).fetchone()
-                        if item and not item["checked"] and not item["ordered"]:
+                candidates = old_ingredients - shared
+                if trip and candidates:
+                    nph = ", ".join(f":n{i}" for i in range(len(candidates)))
+                    nps = {f"n{i}": name for i, name in enumerate(candidates)}
+                    nps["uid"] = user_id
+                    items = conn.execute(
+                        text(f"""SELECT name, checked, ordered FROM grocery_items
+                              WHERE user_id = :uid AND LOWER(name) IN ({nph})"""),
+                        nps,
+                    ).fetchall()
+                    for item in items:
+                        if not item["checked"] and not item["ordered"]:
                             removable.append(item["name"])
 
             # Now do the swap (commits internally)
