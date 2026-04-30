@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import Sheet from './Sheet'
 import MealPickerSheet from './MealPickerSheet'
@@ -31,7 +31,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const [pickerMode, setPickerMode] = useState(null) // 'add' or 'replace'
   const [swapPrompt, setSwapPrompt] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [dragFrom, setDragFrom] = useState(null)
   const [pastDays, setPastDays] = useState(null)
   const [showPast, setShowPast] = useState(false)
   const [sidePickerDate, setSidePickerDate] = useState(null)
@@ -40,12 +39,8 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const [noteText, setNoteText] = useState('')
   const [cookingNotes, setCookingNotes] = useState('')
   const [showCookingNotes, setShowCookingNotes] = useState(false)
-
-  // Touch drag refs
-  const touchDragFrom = useRef(null)
-  const didDrag = useRef(false)
-  const rowsRef = useRef(null)
-  const ghostRef = useRef(null)
+  // Action sheet view state: 'main' (top-level), 'change' (submenu), 'move' (day picker)
+  const [actionView, setActionView] = useState('main')
 
   const [loadError, setLoadError] = useState(false)
 
@@ -65,99 +60,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     if (data && onLoad) onLoad(data)
   }, [data, onLoad])
 
-  // Cleanup ghost + drop highlights. Used on end AND cancel so a cancelled
-  // touch (incoming call, system gesture) doesn't leave the cloned row stuck
-  // on top of the page.
-  const cleanupDrag = useCallback(() => {
-    if (rowsRef.current) {
-      rowsRef.current.querySelectorAll('.touch-drop-hover').forEach(
-        n => n.classList.remove('touch-drop-hover')
-      )
-    }
-    if (ghostRef.current) {
-      ghostRef.current.el.remove()
-      ghostRef.current = null
-    }
-    touchDragFrom.current = null
-    setDragFrom(null)
-  }, [])
-
-  // Drag handle touch handlers
-  const handleGripStart = useCallback((e, date) => {
-    e.stopPropagation()
-    // Defensive: clear any orphaned ghost from a prior aborted drag.
-    if (ghostRef.current) {
-      ghostRef.current.el.remove()
-      ghostRef.current = null
-    }
-    touchDragFrom.current = date
-    didDrag.current = true
-    setDragFrom(date)
-    if (navigator.vibrate) navigator.vibrate(50)
-
-    // Create floating ghost of the row
-    const row = e.target.closest('[data-role="meal-row"]')
-    if (row) {
-      const rect = row.getBoundingClientRect()
-      const clone = row.cloneNode(true)
-      clone.className = `${styles.mealRow} ${styles.dragGhost}`
-      clone.style.width = rect.width + 'px'
-      clone.style.left = rect.left + 'px'
-      clone.style.top = rect.top + 'px'
-      document.body.appendChild(clone)
-      ghostRef.current = { el: clone, offsetY: e.touches[0].clientY - rect.top }
-    }
-  }, [])
-
-  const handleGripMove = useCallback((e) => {
-    if (!touchDragFrom.current) return
-    e.preventDefault()
-    const touch = e.touches[0]
-
-    // Move ghost
-    if (ghostRef.current) {
-      ghostRef.current.el.style.top = (touch.clientY - ghostRef.current.offsetY) + 'px'
-    }
-
-    // Highlight drop target (hide ghost briefly so elementFromPoint hits the row behind it)
-    if (ghostRef.current) ghostRef.current.el.style.pointerEvents = 'none'
-    const el = document.elementFromPoint(touch.clientX, touch.clientY)
-    if (ghostRef.current) ghostRef.current.el.style.pointerEvents = ''
-    const row = el?.closest('[data-role="meal-row"], [data-role="add-meal-row"]')
-    if (rowsRef.current) {
-      rowsRef.current.querySelectorAll('.touch-drop-hover').forEach(
-        n => n.classList.remove('touch-drop-hover')
-      )
-    }
-    if (row && row.dataset.date !== touchDragFrom.current) {
-      row.classList.add('touch-drop-hover')
-    }
-  }, [])
-
-  const handleGripEnd = useCallback(async (e) => {
-    if (!touchDragFrom.current) return
-
-    const touch = e.changedTouches[0]
-    const el = document.elementFromPoint(touch.clientX, touch.clientY)
-    const row = el?.closest('[data-role="meal-row"], [data-role="add-meal-row"]')
-    const targetDate = row?.dataset.date
-    const fromDate = touchDragFrom.current
-
-    cleanupDrag()
-
-    if (targetDate && targetDate !== fromDate) {
-      try {
-        const result = await api.swapDays(fromDate, targetDate)
-        setData(result)
-      } catch { /* silent — rows snap back */ }
-    }
-  }, [cleanupDrag])
-
-  const handleGripCancel = useCallback(() => {
-    if (!touchDragFrom.current) return
-    cleanupDrag()
-  }, [cleanupDrag])
-
   if (loading) return <><div className="loading">Setting the table...</div><FeedbackFab page="plan" /></>
   if (loadError) return <><div className="loading">Something went wrong loading meals. Try refreshing.</div><FeedbackFab page="plan" /></>
   if (!data) return null
@@ -169,15 +71,11 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   // ── Tap handlers ──
 
   const handleMealTap = (date) => {
-    // Suppress tap if we just finished a drag
-    if (didDrag.current) {
-      didDrag.current = false
-      return
-    }
     if (actionDate === date) {
       setActionDate(null)
     } else {
       setActionDate(date)
+      setActionView('main')
       const day = data?.days?.find(d => d.date === date)
       setNoteText(day?.meal?.notes || '')
       setShowCookingNotes(false)
@@ -232,6 +130,15 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
       setActionDate(null)
       await load()
     } catch { await load() }
+  }
+
+  const handleMoveTo = async (targetDate) => {
+    if (!actionDate || targetDate === actionDate) return
+    try {
+      const result = await api.swapDays(actionDate, targetDate)
+      setData(result)
+    } catch { await load() }
+    setActionDate(null)
   }
 
   const handleCreateNew = async (date, name) => {
@@ -350,13 +257,12 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
         </div>
       )}
 
-      <div className={`${styles.mealRows}${erasing ? ` ${styles.erasing}` : ''}`} ref={rowsRef}>
+      <div className={`${styles.mealRows}${erasing ? ` ${styles.erasing}` : ''}`}>
         {days.map(({ date, day_short, meal }, idx) => {
           const today = isToday(date)
           const hasMeal = !!meal
           const isFreeform = hasMeal && !meal.recipe_id
           const onList = hasMeal && meal.on_grocery && !isFreeform
-          const isDragging = dragFrom === date
 
           if (!hasMeal) {
             const showHint = !firstEmptyShown
@@ -384,7 +290,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
               data-role="meal-row"
               data-date={date}
               style={{ '--row-index': idx }}
-              className={`${styles.mealRow} ${today ? styles.today : ''} ${onList ? styles.onList : ''} ${isDragging ? styles.dragging : ''}`}
+              className={`${styles.mealRow} ${today ? styles.today : ''} ${onList ? styles.onList : ''}`}
               onClick={() => handleMealTap(date)}
             >
               <div className={styles.mealDay}>{day_short}</div>
@@ -392,21 +298,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                 <div className={`${styles.mealName} ${isFreeform ? styles.freeform : ''}`}>{meal.recipe_name}</div>
                 {meal.sides?.length > 0 && <div className={styles.mealSideText}>{meal.sides.map(s => s.name).join(', ')}</div>}
                 {meal.notes && <div className={styles.mealNote}>{meal.notes}</div>}
-              </div>
-              <div className={styles.mealActions} onClick={(e) => e.stopPropagation()}>
-                <div
-                  className={styles.dragHandle}
-                  onTouchStart={(e) => handleGripStart(e, date)}
-                  onTouchMove={handleGripMove}
-                  onTouchEnd={handleGripEnd}
-                  onTouchCancel={handleGripCancel}
-                >
-                  <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
-                    <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
-                    <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
-                    <circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/>
-                  </svg>
-                </div>
               </div>
             </div>
           )
@@ -416,92 +307,146 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
       {/* Action bottom sheet for tapped meal */}
       {actionDate && actionMeal && (
         <Sheet onClose={() => setActionDate(null)}>
-            <div className="sheet-title">{actionDayName}</div>
-            <div className="sheet-sub">{actionMeal.recipe_name}{actionMeal.sides?.length > 0 ? ` + ${actionMeal.sides.map(s => s.name).join(', ')}` : ''}</div>
-            <div className="sheet-options">
-              <button className="sheet-option" onClick={() => handleReplace(actionDate)}>
-                <div className="sheet-opt-icon">{'\u{1F504}'}</div>
-                <div>
-                  <div className="sheet-opt-title">Different meal</div>
-                  <div className="sheet-opt-desc">Pick something else</div>
+            {actionView === 'main' && (
+              <>
+                <div className="sheet-title">{actionDayName}</div>
+                <div className="sheet-sub">{actionMeal.recipe_name}{actionMeal.sides?.length > 0 ? ` + ${actionMeal.sides.map(s => s.name).join(', ')}` : ''}</div>
+                <div className="sheet-options">
+                  <button className="sheet-option" onClick={() => setActionView('change')}>
+                    <div className="sheet-opt-icon">{'\u{1F504}'}</div>
+                    <div>
+                      <div className="sheet-opt-title">Change meal</div>
+                      <div className="sheet-opt-desc">Replace, swap sides, move to a different day, or clear</div>
+                    </div>
+                  </button>
+                  <button className="sheet-option" onClick={() => { setIngredientsMeal(actionMeal); setActionDate(null) }}>
+                    <div className="sheet-opt-icon">{'\u{1F4CB}'}</div>
+                    <div>
+                      <div className="sheet-opt-title">Ingredients</div>
+                      <div className="sheet-opt-desc">View or edit what goes into this meal</div>
+                    </div>
+                  </button>
+                  {!actionIsFreeform && (
+                    <button className="sheet-option" onClick={() => setShowCookingNotes(!showCookingNotes)}>
+                      <div className="sheet-opt-icon">{'\u{1F4DD}'}</div>
+                      <div>
+                        <div className="sheet-opt-title">Cooking notes</div>
+                        <div className="sheet-opt-desc">{cookingNotes ? 'View or edit cooking tips' : 'Add tips for how to cook this'}</div>
+                      </div>
+                    </button>
+                  )}
+                  {showCookingNotes && (
+                    <div className="sheet-note">
+                      <textarea
+                        className="note-input"
+                        placeholder="e.g., Cook sausage first, then add beans and broth..."
+                        value={cookingNotes}
+                        rows={3}
+                        onChange={(e) => setCookingNotes(e.target.value)}
+                        onBlur={() => {
+                          if (actionMeal.recipe_id) {
+                            api.updateRecipeNotes(actionMeal.recipe_id, cookingNotes).catch(() => {})
+                          }
+                        }}
+                        style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                      />
+                    </div>
+                  )}
                 </div>
-              </button>
-              {!actionIsFreeform && (
-                <button className="sheet-option" onClick={() => handleOpenSidePicker(actionDate)}>
-                  <div className="sheet-opt-icon">{'\u{1F951}'}</div>
-                  <div>
-                    <div className="sheet-opt-title">{actionHasSide ? 'Change sides' : 'Add sides'}</div>
-                    <div className="sheet-opt-desc">{actionHasSide ? 'Keep the meal, change side dishes' : 'Pick side dishes for this meal'}</div>
-                  </div>
-                </button>
-              )}
-              <button className="sheet-option" onClick={() => { setIngredientsMeal(actionMeal); setActionDate(null) }}>
-                <div className="sheet-opt-icon">{'\u{1F4CB}'}</div>
-                <div>
-                  <div className="sheet-opt-title">Ingredients</div>
-                  <div className="sheet-opt-desc">View or edit what goes into this meal</div>
-                </div>
-              </button>
-              {!actionIsFreeform && (
-                <button className="sheet-option" onClick={() => setShowCookingNotes(!showCookingNotes)}>
-                  <div className="sheet-opt-icon">{'\u{1F4DD}'}</div>
-                  <div>
-                    <div className="sheet-opt-title">Cooking notes</div>
-                    <div className="sheet-opt-desc">{cookingNotes ? 'View or edit cooking tips' : 'Add tips for how to cook this'}</div>
-                  </div>
-                </button>
-              )}
-              {showCookingNotes && (
                 <div className="sheet-note">
-                  <textarea
+                  <input
+                    type="text"
                     className="note-input"
-                    placeholder="e.g., Cook sausage first, then add beans and broth..."
-                    value={cookingNotes}
-                    rows={3}
-                    onChange={(e) => setCookingNotes(e.target.value)}
+                    placeholder="Add a note..."
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
                     onBlur={() => {
-                      if (actionMeal.recipe_id) {
-                        api.updateRecipeNotes(actionMeal.recipe_id, cookingNotes).catch(() => {})
+                      if (noteText !== (actionMeal.notes || '')) {
+                        api.updateMealNote(actionDate, noteText).then(result => setData(result)).catch(() => {})
                       }
                     }}
-                    style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.target.blur()
+                      }
+                    }}
                   />
                 </div>
-              )}
-              <button className="sheet-option" onClick={() => handleFreeform(actionDate, 'Nothing Planned')}>
-                <div className="sheet-opt-icon">{'\u{1F44B}'}</div>
-                <div>
-                  <div className="sheet-opt-title">Nothing needed</div>
-                  <div className="sheet-opt-desc">Eating out, leftovers, winging it</div>
+              </>
+            )}
+
+            {actionView === 'change' && (
+              <>
+                <button className="sheet-back" onClick={() => setActionView('main')}>{'‹'} Back</button>
+                <div className="sheet-title">Change {actionDayName}</div>
+                <div className="sheet-sub">{actionMeal.recipe_name}</div>
+                <div className="sheet-options">
+                  <button className="sheet-option" onClick={() => handleReplace(actionDate)}>
+                    <div className="sheet-opt-icon">{'\u{1F37D}'}</div>
+                    <div>
+                      <div className="sheet-opt-title">Different meal</div>
+                      <div className="sheet-opt-desc">Pick something else for this day</div>
+                    </div>
+                  </button>
+                  {!actionIsFreeform && (
+                    <button className="sheet-option" onClick={() => handleOpenSidePicker(actionDate)}>
+                      <div className="sheet-opt-icon">{'\u{1F951}'}</div>
+                      <div>
+                        <div className="sheet-opt-title">{actionHasSide ? 'Different sides' : 'Add sides'}</div>
+                        <div className="sheet-opt-desc">{actionHasSide ? 'Keep the meal, change side dishes' : 'Pick side dishes for this meal'}</div>
+                      </div>
+                    </button>
+                  )}
+                  <button className="sheet-option" onClick={() => setActionView('move')}>
+                    <div className="sheet-opt-icon">{'\u{1F4C5}'}</div>
+                    <div>
+                      <div className="sheet-opt-title">Move to a different day</div>
+                      <div className="sheet-opt-desc">Swap with another day on the plan</div>
+                    </div>
+                  </button>
+                  <div className="sheet-divider" />
+                  <button className="sheet-option" onClick={() => handleFreeform(actionDate, 'Nothing Planned')}>
+                    <div className="sheet-opt-icon">{'\u{1F44B}'}</div>
+                    <div>
+                      <div className="sheet-opt-title">Nothing planned</div>
+                      <div className="sheet-opt-desc">Eating out, leftovers, winging it</div>
+                    </div>
+                  </button>
+                  <button className="sheet-option sheet-option-destructive" onClick={() => handleClearDay(actionDate)}>
+                    <div className="sheet-opt-icon">{'\u{1F5D1}'}</div>
+                    <div>
+                      <div className="sheet-opt-title">Clear this day</div>
+                      <div className="sheet-opt-desc">Empty the slot — meal goes away</div>
+                    </div>
+                  </button>
                 </div>
-              </button>
-              <button className="sheet-option sheet-option-destructive" onClick={() => handleClearDay(actionDate)}>
-                <div className="sheet-opt-icon">{'\u{1F5D1}'}</div>
-                <div>
-                  <div className="sheet-opt-title">Clear this day</div>
-                  <div className="sheet-opt-desc">Empty the slot — meal goes away</div>
+              </>
+            )}
+
+            {actionView === 'move' && (
+              <>
+                <button className="sheet-back" onClick={() => setActionView('change')}>{'‹'} Back</button>
+                <div className="sheet-title">Move {actionMeal.recipe_name}</div>
+                <div className="sheet-sub">From {actionDayName} to...</div>
+                <div className="sheet-options">
+                  {days.filter(d => d.date !== actionDate).map(d => {
+                    const targetDayName = new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })
+                    const targetMealLabel = d.meal
+                      ? d.meal.recipe_name + (d.meal.sides?.length ? ` + ${d.meal.sides.map(s => s.name).join(', ')}` : '')
+                      : 'Empty'
+                    return (
+                      <button key={d.date} className="sheet-option" onClick={() => handleMoveTo(d.date)}>
+                        <div className="sheet-opt-icon">{d.day_short}</div>
+                        <div>
+                          <div className="sheet-opt-title">{targetDayName}</div>
+                          <div className="sheet-opt-desc">{targetMealLabel}</div>
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
-              </button>
-            </div>
-            <div className="sheet-note">
-              <input
-                type="text"
-                className="note-input"
-                placeholder="Add a note..."
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-                onBlur={() => {
-                  if (noteText !== (actionMeal.notes || '')) {
-                    api.updateMealNote(actionDate, noteText).then(result => setData(result)).catch(() => {})
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.target.blur()
-                  }
-                }}
-              />
-            </div>
+              </>
+            )}
         </Sheet>
       )}
 

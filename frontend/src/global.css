@@ -857,6 +857,30 @@ main {
   font-weight: 300;
 }
 
+.sheet-back {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 0;
+  margin-bottom: 4px;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sheet-back:hover,
+.sheet-back:active {
+  color: var(--accent);
+}
+
+.sheet-divider {
+  height: 1px;
+  background: var(--tan);
+  opacity: 0.5;
+  margin: 4px 0;
+}
+
 /* ── Grocery Header (mobile) ─────────── */
 
 .screen-heading {
