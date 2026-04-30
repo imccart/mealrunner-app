@@ -58,7 +58,13 @@ _CORS_ORIGINS = os.environ.get(
 
 
 class ConnectionMiddleware(BaseHTTPMiddleware):
-    """Open a DB connection for each request and close it when done."""
+    """Open a DB connection for each request and close it when done.
+
+    Closes whatever connection is currently in the contextvar (not the
+    original `conn` variable) — endpoints may swap to a fresh connection
+    via release_db_during_io() while waiting on external HTTP, and we
+    want to close that fresh one, not the already-closed original.
+    """
 
     async def dispatch(self, request: Request, call_next):
         conn = get_connection()
@@ -67,10 +73,12 @@ class ConnectionMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             return response
         finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
+            current = get_request_connection()
+            if current is not None:
+                try:
+                    current.close()
+                except Exception:
+                    pass
             reset_request_connection(token)
 
 

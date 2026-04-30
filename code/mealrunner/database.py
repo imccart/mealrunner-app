@@ -6,6 +6,7 @@ via DictConnection/DictResult wrappers.
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import os
 
@@ -595,6 +596,35 @@ def get_request_connection() -> DictConnection | None:
 def reset_request_connection(token: contextvars.Token) -> None:
     """Reset the context var (called by middleware in finally)."""
     _request_conn.reset(token)
+
+
+@contextlib.contextmanager
+def release_db_during_io():
+    """Release the current request DB connection while doing external I/O,
+    reacquire a fresh one when the block exits. Use around long-running
+    external HTTP calls (Kroger API, Open Food Facts, Claude Vision) so the
+    pool slot is freed for other concurrent requests during the wait.
+
+    Pairs with ConnectionMiddleware in app.py, which closes whatever
+    connection is currently in the contextvar at request finally — that's
+    why it's safe to swap a fresh conn in here.
+
+    No-op outside a request context (e.g. background threads).
+    """
+    current = _request_conn.get()
+    if current is None:
+        yield
+        return
+    try:
+        current.close()
+    except Exception:
+        pass
+    _request_conn.set(None)
+    try:
+        yield
+    finally:
+        new_conn = get_connection()
+        _request_conn.set(new_conn)
 
 
 # ── Public API ────────────────────────────────────────────

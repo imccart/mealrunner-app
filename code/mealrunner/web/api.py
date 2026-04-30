@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
-from mealrunner.database import get_request_connection, get_connection
+from mealrunner.database import get_request_connection, get_connection, release_db_during_io
 
 router = APIRouter(prefix="/api")
 
@@ -1723,8 +1723,14 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
         p.nutriscore = nutri or ""
 
     if need_scores:
-        with ThreadPoolExecutor(max_workers=6) as pool:
-            pool.map(_fetch_score, need_scores)
+        # Release the DB connection while we wait on Open Food Facts so
+        # the pool slot is freed for other concurrent requests. Lookup is
+        # parallel (max 6 workers) but each call is 200-1000ms; total
+        # block can run >1s on a cache-cold search.
+        with release_db_during_io():
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                pool.map(_fetch_score, need_scores)
+        conn = _conn()
 
     # --- Save everything to cache ---
     for p in products:
@@ -1801,19 +1807,24 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
                     print(f"[order/search] pref lookup failed for {upc}: {e}")
                 return upc, None
 
-            with _TPE(max_workers=3) as _pool:
-                for _upc, _match in _pool.map(_lookup_upc, unknown_pref_upcs):
-                    if _match is not None:
-                        pref_direct_results[_upc] = _match
+            # Release the DB connection while doing the per-UPC Kroger
+            # lookups + fill_prices — this is a parallel block (max 3
+            # workers) but each call is 300-800ms; total can run >1s.
+            with release_db_during_io():
+                with _TPE(max_workers=3) as _pool:
+                    for _upc, _match in _pool.map(_lookup_upc, unknown_pref_upcs):
+                        if _match is not None:
+                            pref_direct_results[_upc] = _match
 
-            # Kroger's catalog search often omits price; backfill from the
-            # per-product endpoint so product_scores gets real numbers.
-            _direct_matches = list(pref_direct_results.values())
-            if _direct_matches:
-                try:
-                    fill_prices(_direct_matches, location_id=user_location_id)
-                except Exception as e:
-                    print(f"[order/search] fill_prices for pref lookups failed: {e}")
+                # Kroger's catalog search often omits price; backfill from the
+                # per-product endpoint so product_scores gets real numbers.
+                _direct_matches = list(pref_direct_results.values())
+                if _direct_matches:
+                    try:
+                        fill_prices(_direct_matches, location_id=user_location_id)
+                    except Exception as e:
+                        print(f"[order/search] fill_prices for pref lookups failed: {e}")
+            conn = _conn()
 
             # Refresh product_scores for confirmed-available prefs so next time
             # they come back through the normal cache path without a lookup.
