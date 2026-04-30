@@ -319,13 +319,15 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                       <div className="sheet-opt-desc">Replace, swap sides, move to a different day, or clear</div>
                     </div>
                   </button>
-                  <button className="sheet-option" onClick={() => { setIngredientsMeal(actionMeal); setActionDate(null) }}>
-                    <div className="sheet-opt-icon">{'\u{1F4CB}'}</div>
-                    <div>
-                      <div className="sheet-opt-title">Ingredients</div>
-                      <div className="sheet-opt-desc">View or edit what goes into this meal</div>
-                    </div>
-                  </button>
+                  {!actionIsFreeform && (
+                    <button className="sheet-option" onClick={() => { setIngredientsMeal(actionMeal); setActionDate(null) }}>
+                      <div className="sheet-opt-icon">{'\u{1F4CB}'}</div>
+                      <div>
+                        <div className="sheet-opt-title">Ingredients</div>
+                        <div className="sheet-opt-desc">View or edit what goes into this meal</div>
+                      </div>
+                    </button>
+                  )}
                   {!actionIsFreeform && (
                     <button className="sheet-option" onClick={() => setShowCookingNotes(!showCookingNotes)}>
                       <div className="sheet-opt-icon">{'\u{1F4DD}'}</div>
