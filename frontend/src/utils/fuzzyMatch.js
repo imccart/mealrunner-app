@@ -34,16 +34,21 @@ export function fuzzyScore(query, candidate) {
   return 0
 }
 
+import { compareKey } from './compareKey'
+
 /**
  * Filter and rank candidates by match quality against query.
  * Returns top matches above threshold, best first.
+ *
+ * `exclude` is a Set of compareKey values (matches the canonical-name dedup
+ * used elsewhere) — pass `onListSet` directly.
  */
 export function fuzzyFilter(query, candidates, { exclude = new Set(), limit = 8, threshold = 0.3 } = {}) {
   if (!query || query.trim().length < 1) return []
   const q = query.trim()
 
   const scored = candidates
-    .filter(c => !exclude.has(c.toLowerCase()))
+    .filter(c => !exclude.has(compareKey(c)))
     .map(c => ({ name: c, score: fuzzyScore(q, c) }))
     .filter(({ score }) => score >= threshold)
     .sort((a, b) => b.score - a.score)

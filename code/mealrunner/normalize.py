@@ -52,20 +52,31 @@ def _compact(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
-_PLURAL_SUFFIXES = [
-    ("ies", "y"),    # berries → berry
-    ("ves", "f"),    # loaves → loaf
-    ("ses", "s"),    # sauces → sauce (but also passes → pass)
-    ("es", ""),      # tomatoes → tomato
-    ("s", ""),       # beans → bean
-]
+_VES_TO_F = {"loaves": "loaf", "leaves": "leaf", "halves": "half",
+             "calves": "calf", "shelves": "shelf", "thieves": "thief",
+             "knives": "knife", "wives": "wife", "lives": "life"}
 
 
 def _depluralize(word: str) -> str:
-    """Simple English depluralization."""
-    for suffix, replacement in _PLURAL_SUFFIXES:
-        if word.endswith(suffix) and len(word) > len(suffix) + 1:
-            return word[:-len(suffix)] + replacement
+    """Simple English depluralization.
+
+    The "-es" rule must only fire when the singular actually takes "-es"
+    (sibilants and -o words: boxes/watches/tomatoes). For "apples" or
+    "horses", the plural is bare "-s" and stripping "-es" would mangle it.
+    Same trap with "-ves": loaf→loaves needs "ves"→"f", but olive→olives
+    is just "+s". We use a small allowlist for the f-pattern.
+    """
+    if word in _VES_TO_F:
+        return _VES_TO_F[word]
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"      # berries → berry
+    if word.endswith("es") and len(word) > 3:
+        stem = word[:-2]
+        if stem.endswith(("sh", "ch", "x", "z", "ss", "o")):
+            return stem             # boxes → box, tomatoes → tomato
+        return word[:-1]            # apples → apple, horses → horse, olives → olive
+    if word.endswith("s") and len(word) > 2:
+        return word[:-1]            # beans → bean
     return word
 
 
@@ -76,6 +87,26 @@ def _pluralize(word: str) -> str:
     if word.endswith(("s", "sh", "ch", "x", "z", "o")):
         return word + "es"
     return word + "s"
+
+
+def compare_key(name: str) -> str:
+    """Canonical comparison key for dedup across grocery_items.
+
+    Used at every place we ask "is this the same item as that?" — manual-add
+    existence checks, meal-sync existing_map, frontend onListSet membership.
+    Output is NEVER stored; the displayed name on the row stays as typed (or
+    as resolved by normalize_item_name against the canonical seed).
+
+    Lowercases, normalizes whitespace, depluralizes the last word. We only
+    collapse plurals — qualifier-stripping (e.g., "soy milk" → "milk") is
+    intentionally NOT done since those are different products at the store.
+    """
+    n = " ".join((name or "").lower().split())
+    if not n:
+        return n
+    words = n.split()
+    words[-1] = _depluralize(words[-1])
+    return " ".join(words)
 
 
 def normalize_item_name(conn: DictConnection, raw_name: str) -> tuple[str, int | None]:

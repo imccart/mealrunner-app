@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import Sheet from './Sheet'
 import AutocompleteInput from './AutocompleteInput'
+import { compareKey } from '../utils/compareKey'
 import ls from '../shared/lists.module.css'
 import styles from './MealIngredientsSheet.module.css'
 
@@ -46,7 +47,7 @@ function IngredientSection({ title, recipeId, allIngredients }) {
     } catch { /* ignore */ }
   }
 
-  const existingNames = new Set((ingredients || []).map(i => i.name.toLowerCase()))
+  const existingNames = new Set((ingredients || []).map(i => compareKey(i.name)))
 
   return (
     <div className={styles.mealIngSection}>

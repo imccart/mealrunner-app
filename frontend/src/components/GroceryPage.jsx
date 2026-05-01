@@ -4,6 +4,7 @@ import AutocompleteInput from './AutocompleteInput'
 import BentSpoonIcon from './BentSpoonIcon'
 import Sheet from './Sheet'
 import FeedbackFab from './FeedbackFab'
+import { compareKey } from '../utils/compareKey'
 import ls from '../shared/lists.module.css'
 import styles from './GroceryPage.module.css'
 
@@ -163,11 +164,13 @@ export default function GroceryPage({ sidebar = false }) {
   // Items "on the list" exclude ordered rows (sent to Kroger, awaiting
   // reconciliation — they live on the Order page). User can still re-add the
   // same item as an active sibling row (e.g., picking it up in-store too).
+  // Keyed on compareKey so plural/singular variants of the same item resolve
+  // to one entry (matches the backend's INSERT-time dedup).
   const onListSet = new Set()
   for (const group of Object.values(items_by_group)) {
     for (const item of group) {
       const nl = item.name.toLowerCase()
-      if (!orderedSet.has(nl)) onListSet.add(nl)
+      if (!orderedSet.has(nl)) onListSet.add(compareKey(item.name))
     }
   }
 
@@ -403,7 +406,7 @@ export default function GroceryPage({ sidebar = false }) {
       const active = (data.regulars || []).filter(r => r.active)
       setRegularsData(active)
       // Pre-check items NOT already on the list
-      setRegularsChecked(new Set(active.filter(r => !onListSet.has(r.name.toLowerCase())).map(r => r.name)))
+      setRegularsChecked(new Set(active.filter(r => !onListSet.has(compareKey(r.name))).map(r => r.name)))
     } catch {
       setRegularsData([])
     }
@@ -465,7 +468,7 @@ export default function GroceryPage({ sidebar = false }) {
             {data && data.length > 0 ? (
               <div className={styles.groceryPromptChecklist}>
                 {data.map(item => {
-                  const alreadyOnList = onListSet.has(item.name.toLowerCase())
+                  const alreadyOnList = onListSet.has(compareKey(item.name))
                   return (
                     <div
                       key={item.id}
@@ -692,7 +695,7 @@ export default function GroceryPage({ sidebar = false }) {
           value={addText}
           onChange={(val) => {
             setAddText(val)
-            setAddDupe(val.trim() && onListSet.has(val.trim().toLowerCase()))
+            setAddDupe(val.trim() && onListSet.has(compareKey(val)))
           }}
           onSubmit={handleAddSubmit}
           candidates={itemPool}

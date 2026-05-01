@@ -889,7 +889,10 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
         if m.id is not None:
             meal_ids_by_name.setdefault(m.recipe_name, []).append(m.id)
 
-    # Build fresh meal items
+    # Build fresh meal items, keyed on compare_key so plural/singular variants
+    # collapse to one entry (recipe says "apples", existing row says "apple" —
+    # they're the same item).
+    from mealrunner.normalize import compare_key
     fresh_meal_items: dict[str, dict] = {}
     if grocery_meals:
         gl = build_grocery_list(conn, grocery_meals, mw.start_date, mw.end_date, user_id=user_id)
@@ -897,13 +900,14 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
         for items in by_store.values():
             for item in items:
                 name_lower = item.ingredient_name.lower()
+                key = compare_key(name_lower)
                 group = resolve(name_lower)
                 for_meals = ",".join(item.meals) if item.meals else ""
                 mids: set[int] = set()
                 for mn in item.meals:
                     for mid in meal_ids_by_name.get(mn, []):
                         mids.add(mid)
-                fresh_meal_items[name_lower] = {
+                fresh_meal_items[key] = {
                     "name": name_lower,
                     "shopping_group": group,
                     "for_meals": for_meals,
@@ -911,55 +915,88 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                     "meal_count": len(item.meals),
                 }
 
-    # Only consider source='meal' rows. Extras (manually added by the user)
-    # are user-managed — sync never reads, updates, or deletes them. If a meal
-    # needs an ingredient and the user happens to have an extra row with the
-    # same name, the meal still gets its own meal-source row alongside the
-    # extra (the unique constraint is gone post-Phase A, so they coexist).
+    # Existing active rows of any source. A meal pulling an ingredient that's
+    # already on the list as a manual extra / regular / pantry row should
+    # attach to that row instead of inserting a duplicate. The dedup invariant
+    # is "at most one active row per canonical item name" regardless of source.
+    # Completed-state rows (checked / have_it / removed) and ordered/submitted
+    # rows can share names with the active row, so we exclude them here — the
+    # meal's ingredient lands on the active row, and any older completed row
+    # stays around as history.
     existing = conn.execute(
         text("""SELECT id, name, source, checked, checked_at, have_it, have_it_at,
                        removed, removed_at, for_meals, meal_ids, receipt_status
                 FROM grocery_items
-                WHERE user_id = :user_id AND source = 'meal'"""),
+                WHERE user_id = :user_id
+                  AND have_it = 0 AND checked = 0 AND removed = 0
+                  AND ordered = 0 AND submitted_at IS NULL"""),
         {"user_id": user_id},
     ).fetchall()
-    existing_map: dict[str, dict] = {r["name"].lower(): r for r in existing}
+    existing_map: dict[str, dict] = {compare_key(r["name"]): r for r in existing}
 
-    # Remove meal items no longer needed (preserve items with receipt data only).
-    for name_lower, row in existing_map.items():
-        if name_lower not in fresh_meal_items and not row["receipt_status"]:
+    # Drop meal-source rows no longer needed by any current meal. Non-meal
+    # source rows the user added themselves stay regardless — they might still
+    # want the item even if no meal calls for it now. (Their meal-association
+    # fields are cleared further down.) Receipt-tagged rows are preserved
+    # since they hold reconciliation state.
+    for key, row in existing_map.items():
+        if key not in fresh_meal_items and row["source"] == "meal" and not row["receipt_status"]:
             conn.execute(
                 text("DELETE FROM grocery_items WHERE id = :id"),
+                {"id": row["id"]},
+            )
+        elif key not in fresh_meal_items and row["source"] != "meal" and row["meal_ids"]:
+            # Non-meal row that was previously associated with a meal that's
+            # now gone — clear meal fields but keep the row.
+            conn.execute(
+                text("""UPDATE grocery_items SET
+                       for_meals = '', meal_ids = '', meal_count = 0
+                   WHERE id = :id"""),
                 {"id": row["id"]},
             )
 
     # Add or update items needed by meals.
     #
-    # Three branches based on the row's meal_ids history:
+    # Three branches when matching an existing meal-source row, based on
+    # meal_ids history:
     #   1. Legacy migration (old_meal_ids empty): row pre-dates session-54's
     #      meal_ids tracking. Don't touch state — just populate meal_ids so
-    #      future refreshes can compare correctly. Subsequent refreshes fall
-    #      into branch 2 or 3.
+    #      future refreshes can compare correctly.
     #   2. New occurrence (new_meal_ids has an id not in old): a brand-new
-    #      meal instance is pulling this ingredient in. The point of the app
-    #      is to put what each meal needs on the list, so reset all per-buy
-    #      state — checked / have_it / removed / receipt / product. The user
-    #      re-decides whether they have enough on hand for the new meal.
-    #   3. Same occurrences as before: nothing changed in the meal plan, just
-    #      a routine sync triggered by some unrelated action. Preserve all
-    #      state (don't make unrelated grocery actions like /grocery/add
-    #      resurrect items).
-    for name_lower, info in fresh_meal_items.items():
+    #      meal instance is pulling this ingredient in. Reset all per-buy
+    #      state — the user re-decides whether they have enough for the new
+    #      meal.
+    #   3. Same occurrences as before: routine sync. Preserve all state.
+    #
+    # When matching a non-meal source row (extra/regular/pantry), the user
+    # already put this item on the list themselves; just attach the meal
+    # association without disturbing their state. No state reset, no source
+    # change — the row stays whatever they originally added it as.
+    for key, info in fresh_meal_items.items():
         meal_ids_str = ",".join(str(i) for i in sorted(info["meal_ids"]))
-        if name_lower in existing_map:
-            row = existing_map[name_lower]
+        if key in existing_map:
+            row = existing_map[key]
+
+            if row["source"] != "meal":
+                # Attach meal association to a user-added row. Don't touch
+                # name / source / state.
+                conn.execute(
+                    text("""UPDATE grocery_items SET
+                           for_meals = :for_meals, meal_ids = :meal_ids,
+                           meal_count = :meal_count
+                       WHERE id = :id"""),
+                    {"for_meals": info["for_meals"], "meal_ids": meal_ids_str,
+                     "meal_count": info["meal_count"], "id": row["id"]},
+                )
+                continue
+
             old_meal_ids = {
                 int(x) for x in (row["meal_ids"] or "").split(",") if x.strip().isdigit()
             }
             new_meal_ids = info["meal_ids"]
 
             if not old_meal_ids:
-                # Branch 1: legacy migration. Populate meal_ids without disturbing state.
+                # Branch 1: legacy migration.
                 conn.execute(
                     text("""UPDATE grocery_items SET
                            for_meals = :for_meals, meal_ids = :meal_ids,
@@ -970,7 +1007,7 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                      "group": info["shopping_group"], "id": row["id"]},
                 )
             elif new_meal_ids - old_meal_ids:
-                # Branch 2: new occurrence. Reset everything per-buy.
+                # Branch 2: new occurrence. Reset per-buy state.
                 reset_clause = """checked = 0, checked_at = NULL,
                                   have_it = 0, have_it_at = NULL,
                                   removed = 0, removed_at = NULL,
@@ -992,7 +1029,7 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                      "group": info["shopping_group"], "id": row["id"]},
                 )
             else:
-                # Branch 3: same occurrences. Preserve all state.
+                # Branch 3: same occurrences. Preserve state.
                 conn.execute(
                     text("""UPDATE grocery_items SET
                            for_meals = :for_meals, meal_ids = :meal_ids,
@@ -1003,9 +1040,7 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                      "group": info["shopping_group"], "id": row["id"]},
                 )
         else:
-            # Genuinely new meal-source item. INSERT unconditionally — the
-            # unique constraint is gone, so this can coexist with an extra
-            # row of the same name.
+            # No active row for this canonical name — insert a meal-source row.
             conn.execute(
                 text("""INSERT INTO grocery_items
                    (user_id, name, shopping_group, source, for_meals, meal_ids, meal_count)
@@ -1116,11 +1151,10 @@ async def get_grocery(request: Request):
 async def add_grocery_item(body: dict, request: Request):
     """Add a free-form item to the user's grocery list.
 
-    Partial-unique semantics on (user_id, name): if an active row with this
-    name already exists (not have-it'd, checked, or removed), no-op. Otherwise
-    insert a fresh `source='extra'` row alongside any completed-state rows
-    with the same name. This means a have-it'd or already-bought row stays
-    intact and a brand-new active row is added — they coexist as separate ids.
+    Partial-unique semantics on canonical name: if an active row whose
+    compare_key matches already exists (any source — extra/regular/pantry/meal,
+    not ordered/checked/have-it/removed), no-op. Compare via compare_key so
+    "apple" doesn't add a second row when "apples" is already on the list.
     """
     user_id = request.state.user_id
     raw = body.get("name", "").strip()
@@ -1130,16 +1164,19 @@ async def add_grocery_item(body: dict, request: Request):
     conn = _conn()
     name, _ = _normalize_name(conn, raw)
 
-    existing_active = conn.execute(
-        text("""SELECT id FROM grocery_items
-                WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
-                  AND have_it = 0 AND checked = 0 AND removed = 0
-                  AND ordered = 0 AND submitted_at IS NULL
-                LIMIT 1"""),
-        {"user_id": user_id, "name": name},
-    ).fetchone()
+    from mealrunner.normalize import compare_key
+    key = compare_key(name)
 
-    if not existing_active:
+    active_rows = conn.execute(
+        text("""SELECT name FROM grocery_items
+                WHERE user_id = :user_id
+                  AND have_it = 0 AND checked = 0 AND removed = 0
+                  AND ordered = 0 AND submitted_at IS NULL"""),
+        {"user_id": user_id},
+    ).fetchall()
+    on_list = {compare_key(r["name"]) for r in active_rows}
+
+    if key not in on_list:
         group = _infer_item_group(conn, name, user_id)
         conn.execute(
             text("""INSERT INTO grocery_items
@@ -1413,18 +1450,21 @@ async def add_regulars_to_grocery(body: dict, request: Request):
     mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
-    # Add selected regulars. Partial-unique semantics: if there's already an
-    # active row with this name (any source), no-op. Otherwise insert fresh.
+    # Bulk-load the user's active rows once, dedup against them on compare_key
+    # (so "apple" doesn't get added when "apples" is already on the list).
+    from mealrunner.normalize import compare_key
+    active_rows = conn.execute(
+        text("""SELECT name FROM grocery_items
+                WHERE user_id = :user_id
+                  AND have_it = 0 AND checked = 0 AND removed = 0"""),
+        {"user_id": user_id},
+    ).fetchall()
+    on_list = {compare_key(r["name"]) for r in active_rows}
+
     for name in selected:
         name_lower = name.lower()
-        existing_active = conn.execute(
-            text("""SELECT id FROM grocery_items
-                    WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
-                      AND have_it = 0 AND checked = 0 AND removed = 0
-                    LIMIT 1"""),
-            {"user_id": user_id, "name": name_lower},
-        ).fetchone()
-        if existing_active:
+        key = compare_key(name_lower)
+        if key in on_list:
             continue
         group = _infer_item_group(conn, name_lower, user_id)
         conn.execute(
@@ -1433,6 +1473,7 @@ async def add_regulars_to_grocery(body: dict, request: Request):
                  VALUES (:user_id, :name, :group, 'regular', '', 0)"""),
             {"user_id": user_id, "name": name_lower, "group": group},
         )
+        on_list.add(key)
 
     # Mark regulars as handled for this trip
     conn.execute(
@@ -1456,17 +1497,20 @@ async def add_pantry_to_grocery(body: dict, request: Request):
     mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
-    # Add selected pantry items. Same partial-unique semantics as add-regulars.
+    # Same canonical-name dedup as add-regulars.
+    from mealrunner.normalize import compare_key
+    active_rows = conn.execute(
+        text("""SELECT name FROM grocery_items
+                WHERE user_id = :user_id
+                  AND have_it = 0 AND checked = 0 AND removed = 0"""),
+        {"user_id": user_id},
+    ).fetchall()
+    on_list = {compare_key(r["name"]) for r in active_rows}
+
     for name in selected:
         name_lower = name.lower()
-        existing_active = conn.execute(
-            text("""SELECT id FROM grocery_items
-                    WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
-                      AND have_it = 0 AND checked = 0 AND removed = 0
-                    LIMIT 1"""),
-            {"user_id": user_id, "name": name_lower},
-        ).fetchone()
-        if existing_active:
+        key = compare_key(name_lower)
+        if key in on_list:
             continue
         group = _infer_item_group(conn, name_lower, user_id)
         conn.execute(
@@ -1475,6 +1519,7 @@ async def add_pantry_to_grocery(body: dict, request: Request):
                  VALUES (:user_id, :name, :group, 'pantry', '', 0)"""),
             {"user_id": user_id, "name": name_lower, "group": group},
         )
+        on_list.add(key)
 
     # Mark pantry as handled for this trip
     conn.execute(

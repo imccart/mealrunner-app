@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import Sheet from './Sheet'
 import AutocompleteInput from './AutocompleteInput'
+import { compareKey } from '../utils/compareKey'
 import ls from '../shared/lists.module.css'
 import styles from './MyKitchenSheet.module.css'
 
@@ -264,8 +265,8 @@ export default function MyKitchenSheet({ onClose }) {
     stapleGroups[g].push(s)
   }
 
-  const existingDetailNames = new Set((detailIngredients || []).map(i => i.name.toLowerCase()))
-  const existingStapleNames = new Set(staples.map(s => s.name.toLowerCase()))
+  const existingDetailNames = new Set((detailIngredients || []).map(i => compareKey(i.name)))
+  const existingStapleNames = new Set(staples.map(s => compareKey(s.name)))
 
   const meals = recipes ? recipes.filter(r => r.recipe_type !== 'side') : []
   const sides = recipes ? recipes.filter(r => r.recipe_type === 'side') : []
