@@ -915,39 +915,49 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                     "meal_count": len(item.meals),
                 }
 
-    # Existing active rows of any source. A meal pulling an ingredient that's
-    # already on the list as a manual extra / regular / pantry row should
-    # attach to that row instead of inserting a duplicate. The dedup invariant
-    # is "at most one active row per canonical item name" regardless of source.
-    # Completed-state rows (checked / have_it / removed) and ordered/submitted
-    # rows can share names with the active row, so we exclude them here — the
-    # meal's ingredient lands on the active row, and any older completed row
-    # stays around as history.
+    # Existing rows the meal sync is allowed to touch. We include have_it /
+    # checked / removed rows (not just active) so a have-it'd "butter" stops
+    # the meal sync from inserting a fresh active "butter" row every time it
+    # runs — Branch 3 below preserves the user's have-it choice for meals
+    # already on the plan. Receipt-tagged rows and Kroger-order rows are
+    # excluded since they're managed by the receipt / order flows separately.
+    #
+    # ORDER BY (have_it + checked + removed) puts active rows first; combined
+    # with first-wins dict construction, that means when there are multiple
+    # rows for the same canonical name (e.g. an active manual-add plus a
+    # have-it'd meal-source row from a prior occurrence), the meal sync
+    # attaches to the active one and leaves the completed one alone.
     existing = conn.execute(
         text("""SELECT id, name, source, checked, checked_at, have_it, have_it_at,
                        removed, removed_at, for_meals, meal_ids, receipt_status
                 FROM grocery_items
                 WHERE user_id = :user_id
-                  AND have_it = 0 AND checked = 0 AND removed = 0
-                  AND ordered = 0 AND submitted_at IS NULL"""),
+                  AND ordered = 0 AND submitted_at IS NULL
+                  AND COALESCE(receipt_status, '') = ''
+                ORDER BY (have_it + checked + removed) ASC, id DESC"""),
         {"user_id": user_id},
     ).fetchall()
-    existing_map: dict[str, dict] = {compare_key(r["name"]): r for r in existing}
+    existing_map: dict[str, dict] = {}
+    for r in existing:
+        key = compare_key(r["name"])
+        if key not in existing_map:
+            existing_map[key] = r
 
-    # Drop meal-source rows no longer needed by any current meal. Non-meal
-    # source rows the user added themselves stay regardless — they might still
-    # want the item even if no meal calls for it now. (Their meal-association
-    # fields are cleared further down.) Receipt-tagged rows are preserved
-    # since they hold reconciliation state.
+    # Drop meal-source rows no longer needed by any current meal. This
+    # includes have_it / checked / removed meal-source rows whose meal has
+    # since left the plan — the state on those rows was about a meal that
+    # no longer exists, so the row goes too. Receipt_status='' is implied
+    # by the existing_map filter; receipt-tagged rows aren't in this loop.
+    #
+    # Non-meal source rows (the user added them themselves) stay regardless;
+    # we just clear stale meal fields. They keep whatever state the user set.
     for key, row in existing_map.items():
-        if key not in fresh_meal_items and row["source"] == "meal" and not row["receipt_status"]:
+        if key not in fresh_meal_items and row["source"] == "meal":
             conn.execute(
                 text("DELETE FROM grocery_items WHERE id = :id"),
                 {"id": row["id"]},
             )
         elif key not in fresh_meal_items and row["source"] != "meal" and row["meal_ids"]:
-            # Non-meal row that was previously associated with a meal that's
-            # now gone — clear meal fields but keep the row.
             conn.execute(
                 text("""UPDATE grocery_items SET
                        for_meals = '', meal_ids = '', meal_count = 0
