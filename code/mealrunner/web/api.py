@@ -810,16 +810,38 @@ def _ensure_active_trip(conn, mw, user_id: str):
         {"user_id": user_id},
     )
 
-    # Delete "ordered" rows that have sat for 3+ days without a receipt
-    # reconciliation. Kroger pickup/delivery typically clears in 1-2 days;
-    # after 3 days the order is either completed (receipt wasn't uploaded)
-    # or cancelled. Hard-delete so the row doesn't pile up indefinitely AND
-    # doesn't reappear on the active list. User who actually wanted the item
-    # can manually re-add via the grocery input. receipt_status='' filter
-    # protects matched/substituted/not_fulfilled rows from the prune.
+    # After 3 days an ordered+unreconciled row is either fulfilled (user
+    # didn't upload the receipt) or cancelled. Meal rows soft-delete via
+    # checked=1 so refresh's existing_map keeps the row and Branch 3
+    # preserves state — without this, the missing row looks like a fresh
+    # need and gets re-INSERTed on the next load (the "already-bought
+    # meal ingredients reappeared on my list" bug). Old checked_at keeps
+    # it out of the 24hr Recently-checked panel. New meal occurrences
+    # still reset state via Branch 2; late receipts still reconcile
+    # (receipt_status='' is matchable regardless of checked). Non-meal
+    # rows hard-delete — refresh doesn't touch them, so no resurrection
+    # risk. receipt_status='' on both paths protects matched/substituted/
+    # not_fulfilled rows.
+    conn.execute(
+        text("""UPDATE grocery_items SET
+                  checked = 1, checked_at = submitted_at,
+                  ordered = 0, submitted_at = NULL,
+                  selected_at = NULL, ordered_at = NULL,
+                  product_upc = '', product_name = '',
+                  product_brand = '', product_size = '',
+                  product_price = NULL, product_image = ''
+           WHERE user_id = :user_id
+             AND source = 'meal'
+             AND ordered = 1
+             AND submitted_at IS NOT NULL
+             AND submitted_at < NOW() - INTERVAL '3 days'
+             AND COALESCE(receipt_status, '') = ''"""),
+        {"user_id": user_id},
+    )
     conn.execute(
         text("""DELETE FROM grocery_items
            WHERE user_id = :user_id
+             AND source != 'meal'
              AND ordered = 1
              AND submitted_at IS NOT NULL
              AND submitted_at < NOW() - INTERVAL '3 days'
@@ -3027,10 +3049,12 @@ async def resolve_receipt_item(body: dict, request: Request):
     # Any user-driven resolve action acknowledges the item — it leaves the
     # receipt-page queue regardless of which action was taken.
     if status == "recover":
-        # Put item back on the active grocery list (un-order it, clear submitted so it can be re-ordered)
+        # Put item back on the active grocery list (un-order it, clear submitted so it can be re-ordered).
+        # checked is cleared because the stale-order soft-delete may have set it.
         conn.execute(
             text("""UPDATE grocery_items SET ordered = 0, submitted_at = NULL, receipt_status = '',
                    receipt_acknowledged = 1,
+                   checked = 0, checked_at = NULL,
                    product_upc = '', product_name = '', product_brand = '', product_size = '',
                    product_price = NULL, product_image = ''
                WHERE id = :id AND user_id = :user_id"""),
@@ -3053,11 +3077,13 @@ async def resolve_receipt_item(body: dict, request: Request):
             {"id": item_id, "user_id": user_id},
         )
     elif status == "not_fulfilled":
-        # Reset to active so item can be re-ordered
+        # Reset to active so item can be re-ordered.
+        # checked is cleared because the stale-order soft-delete may have set it.
         conn.execute(
             text("""UPDATE grocery_items SET receipt_status = 'not_fulfilled',
                    receipt_acknowledged = 1,
                    ordered = 0, submitted_at = NULL,
+                   checked = 0, checked_at = NULL,
                    product_upc = '', product_name = '', product_brand = '',
                    product_size = '', product_price = NULL, product_image = ''
                WHERE id = :id AND user_id = :user_id"""),
