@@ -920,6 +920,24 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
         if key not in existing_map:
             existing_map[key] = r
 
+    # Canonical names already covered by an in-flight ordered row (Kroger
+    # cart-staged or submitted-but-not-yet-reconciled). The order/receipt
+    # flows manage these separately; the meal sync must NOT insert a fresh
+    # active row for the same canonical name or the user gets a phantom
+    # pending entry alongside their ordered one. Without this, /order/select
+    # creates a phantom on its trailing get_order call: it flips the row to
+    # ordered=1, then the second _ensure_active_trip pass sees the meal need
+    # as unmet and inserts a duplicate. Stale ordered rows are soft/hard
+    # deleted in _ensure_active_trip after 3 days, so they age out naturally.
+    covered_rows = conn.execute(
+        text("""SELECT name FROM grocery_items
+                WHERE user_id = :user_id
+                  AND ordered = 1
+                  AND COALESCE(receipt_status, '') = ''"""),
+        {"user_id": user_id},
+    ).fetchall()
+    covered_keys = {compare_key(r["name"]) for r in covered_rows}
+
     # Drop meal-source rows no longer needed by any current meal. This
     # includes have_it / checked / removed meal-source rows whose meal has
     # since left the plan — the state on those rows was about a meal that
@@ -1027,6 +1045,11 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                      "group": info["shopping_group"], "id": row["id"]},
                 )
         else:
+            if key in covered_keys:
+                # An in-flight ordered row already covers this canonical name.
+                # The order/receipt flow manages it; don't create a phantom
+                # active sibling.
+                continue
             # No active row for this canonical name — insert a meal-source row.
             conn.execute(
                 text("""INSERT INTO grocery_items
