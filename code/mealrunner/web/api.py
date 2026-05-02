@@ -938,6 +938,21 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
     ).fetchall()
     covered_keys = {compare_key(r["name"]) for r in covered_rows}
 
+    # Clean up phantom meal-source rows: any active meal-source entry whose
+    # canonical name is already covered by an in-flight ordered row gets
+    # deleted here. The fix above prevents future phantoms; this loop
+    # back-fills cleanup for ones created before the fix shipped.
+    phantom_keys = [
+        key for key, row in existing_map.items()
+        if row["source"] == "meal" and key in covered_keys
+    ]
+    for key in phantom_keys:
+        conn.execute(
+            text("DELETE FROM grocery_items WHERE id = :id"),
+            {"id": existing_map[key]["id"]},
+        )
+        del existing_map[key]
+
     # Drop meal-source rows no longer needed by any current meal. This
     # includes have_it / checked / removed meal-source rows whose meal has
     # since left the plan — the state on those rows was about a meal that
