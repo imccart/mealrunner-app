@@ -211,6 +211,16 @@ export default function GroceryPage({ sidebar = false }) {
     }
   }
 
+  // On a failed mutation, the in-memory `prev` snapshot may itself be stale —
+  // a previous concurrent optimistic update could have already removed items
+  // from it. Refetch from the server (the source of truth) so we don't restore
+  // a snapshot that's missing rows. Snapshot is the last-resort fallback if
+  // even the refetch fails (e.g. offline).
+  const rollback = async (prev) => {
+    try { setGrocery(await api.getGrocery()) }
+    catch { setGrocery(prev) }
+  }
+
   const handleItemAction = async (item, action) => {
     const prev = grocery
     const nl = item.name.toLowerCase()
@@ -222,7 +232,7 @@ export default function GroceryPage({ sidebar = false }) {
         updated[g] = items.filter(i => i.id !== item.id)
       }
       setGrocery({ ...grocery, items_by_group: updated })
-      try { await api.removeGroceryItem(item.id) } catch { setGrocery(prev) }
+      try { await api.removeGroceryItem(item.id) } catch { rollback(prev) }
       return
     }
 
@@ -246,13 +256,14 @@ export default function GroceryPage({ sidebar = false }) {
       if (result.suggest_staple) {
         setStapleSuggestion(result.suggest_staple)
       }
-    } catch { setGrocery(prev) }
+    } catch { rollback(prev) }
   }
 
   const handleQtyChange = (item, delta) => {
     const current = item.quantity || 1
     const next = Math.max(1, Math.min(99, current + delta))
     if (next === current) return
+    const prev = grocery
     // Optimistic local bump so rapid taps don't all read the stale `current`
     // off the original prop. Server response is discarded — the next /grocery
     // fetch is what ultimately reconciles.
@@ -264,7 +275,7 @@ export default function GroceryPage({ sidebar = false }) {
       }
       return { ...prev, items_by_group: newGroups }
     })
-    api.updateGroceryQuantity(item.id, next).catch(() => { /* will reconcile on next fetch */ })
+    api.updateGroceryQuantity(item.id, next).catch(() => rollback(prev))
   }
 
   const handleShopCheck = async (item) => {
@@ -281,7 +292,7 @@ export default function GroceryPage({ sidebar = false }) {
     try {
       const result = await api.undoGroceryItem(item.id)
       setGrocery(result)
-    } catch { setGrocery(prev) }
+    } catch { rollback(prev) }
   }
 
   // Shopping mode render
@@ -471,7 +482,7 @@ export default function GroceryPage({ sidebar = false }) {
     try {
       const result = await api.undoGroceryItem(id)
       setGrocery(result)
-    } catch { setGrocery(prev) }
+    } catch { rollback(prev) }
   }
 
   const renderActionCard = ({ expanded, label, onExpand, onSubmit, data, checkedSet, setChecked, groupField }) => {
