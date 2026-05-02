@@ -77,8 +77,9 @@ def detect_extra_meal_links(conn: DictConnection, user_id: str, min_occurrences:
     if not rows:
         return []
 
-    # Exclude items already in regulars
-    regular_names = {r.name.lower() for r in list_regulars(conn, user_id, active_only=False)}
+    # Exclude items already in regulars (compare_key so plural variants collapse)
+    from mealrunner.normalize import compare_key
+    regular_keys = {compare_key(r.name) for r in list_regulars(conn, user_id, active_only=False)}
 
     # Group by calendar week
     week_data: dict[tuple, dict] = {}
@@ -95,7 +96,7 @@ def detect_extra_meal_links(conn: DictConnection, user_id: str, min_occurrences:
                 if m:
                     week_data[week_key]["meals"].add(m)
         elif r["source"] == "extra" and r["checked"]:
-            if r["name"] not in regular_names:
+            if compare_key(r["name"]) not in regular_keys:
                 week_data[week_key]["extras"].add(r["name"])
 
     # Count co-occurrences

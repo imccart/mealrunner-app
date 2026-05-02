@@ -4167,14 +4167,17 @@ async def get_learning_suggestions(request: Request):
 
         sorted_weeks = sorted(week_items.keys(), reverse=True)[:5]
         if len(sorted_weeks) >= 4:
+            from mealrunner.normalize import compare_key
             regulars = list_regulars(conn, user_id, active_only=False)
-            regular_names = {r.name.lower() for r in regulars}
+            regular_keys = {compare_key(r.name) for r in regulars}
+            dismissed_keys = {compare_key(n) for n in dismissed}
             item_week_count: dict[str, int] = {}
             for week_key in sorted_weeks:
                 for name in week_items.get(week_key, set()):
                     item_week_count[name] = item_week_count.get(name, 0) + 1
             for name, week_count in item_week_count.items():
-                if week_count >= 4 and name not in regular_names and name not in dismissed:
+                key = compare_key(name)
+                if week_count >= 4 and key not in regular_keys and key not in dismissed_keys:
                     add_suggestions.append({"name": name, "trip_count": week_count, "total_trips": len(sorted_weeks)})
 
     # --- Removal suggestions (regulars not bought in 4+ weeks) ---

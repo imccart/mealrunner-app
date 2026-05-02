@@ -98,7 +98,8 @@ def build_grocery_list(
     # NOT used for filtering — that's a hint for onboarding / "add to pantry?"
     # suggestions, not a silent gate on what reaches the grocery list.
     from mealrunner.regulars import list_regulars
-    regular_names = {r.name.lower() for r in list_regulars(conn, user_id)}
+    from mealrunner.normalize import compare_key
+    regular_keys = {compare_key(r.name) for r in list_regulars(conn, user_id)}
 
     # Bulk-fetch pantry quantities for every aggregated ingredient in one
     # query (was one query per ingredient via get_pantry_quantity).
@@ -117,7 +118,7 @@ def build_grocery_list(
 
     items: list[GroceryListItem] = []
     for iid, info in sorted(agg.items(), key=lambda x: (x[1]["store"], x[1]["aisle"], x[1]["name"])):
-        if info["name"].lower() in regular_names:
+        if compare_key(info["name"]) in regular_keys:
             continue
 
         pantry_qty = pantry_qtys.get(iid, 0.0)
