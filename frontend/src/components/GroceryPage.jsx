@@ -125,6 +125,7 @@ export default function GroceryPage({ sidebar = false }) {
   const [selectedItem, setSelectedItem] = useState(null)
   const [editingNote, setEditingNote] = useState(null)
   const [noteText, setNoteText] = useState('')
+  const [qtyEditing, setQtyEditing] = useState(null)
   const [showRecent, setShowRecent] = useState(false)
   const [stapleSuggestion, setStapleSuggestion] = useState(null)
   const [shoppingMode, setShoppingMode] = useState(false)
@@ -601,6 +602,7 @@ export default function GroceryPage({ sidebar = false }) {
       e.stopPropagation()
       setSelectedItem(isSelected ? null : item.name)
       setEditingNote(null)
+      setQtyEditing(null)
     }
 
     const itemContent = (
@@ -644,15 +646,20 @@ export default function GroceryPage({ sidebar = false }) {
               />
             ) : null}
             <div className={styles.groceryActionBar}>
+              {qtyEditing === item.id ? (
+                <div className={styles.qtyStepper} onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => handleQtyChange(item, -1)} aria-label="Decrease quantity">{'\u2212'}</button>
+                  <span>{item.quantity || 1}</span>
+                  <button onClick={() => handleQtyChange(item, 1)} aria-label="Increase quantity">+</button>
+                  <button className={styles.qtyDone} onClick={() => setQtyEditing(null)} aria-label="Done editing quantity">{'\u2713'}</button>
+                </div>
+              ) : (
+                <button className={styles.qtyPill} onClick={(e) => { e.stopPropagation(); setQtyEditing(item.id) }}>{'\u00D7 '}{item.quantity || 1}</button>
+              )}
               <button className={styles.groceryActionBtnItem} onClick={() => handleItemAction(item, 'bought')}>Bought</button>
               <button className={styles.groceryActionBtnItem} onClick={() => handleItemAction(item, 'have_it')}>Have it</button>
-              <button className={styles.groceryActionBtnItem} onClick={(e) => { e.stopPropagation(); setEditingNote(item.name); setNoteText(item.notes || '') }}>Note</button>
               <button className={styles.groceryActionBtnItem} onClick={(e) => { e.stopPropagation(); setRecatItem(item) }}>Aisle</button>
-              <div className={styles.qtyStepper} onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => handleQtyChange(item, -1)} aria-label="Decrease quantity">{'\u2212'}</button>
-                <span>{item.quantity || 1}</span>
-                <button onClick={() => handleQtyChange(item, 1)} aria-label="Increase quantity">+</button>
-              </div>
+              <button className={styles.groceryActionBtnItem} onClick={(e) => { e.stopPropagation(); setEditingNote(item.name); setNoteText(item.notes || '') }}>Note</button>
               <button className={`${styles.groceryActionBtnItem} ${styles.remove}`} onClick={() => handleItemAction(item, 'remove')}>{'\u00D7'}</button>
             </div>
           </>

@@ -381,6 +381,34 @@
   line-height: 1;
 }
 
+.qtyPill {
+  background: white;
+  border: 1.5px solid var(--tan);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dark);
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  line-height: 1;
+}
+
+.qtyPill:hover { border-color: var(--accent); color: var(--accent); }
+
+.qtyDone {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 10px;
+  font-size: 14px;
+  color: var(--accent);
+  line-height: 1;
+  font-family: 'DM Sans', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .qtyStepper {
   display: inline-flex;
   align-items: center;
