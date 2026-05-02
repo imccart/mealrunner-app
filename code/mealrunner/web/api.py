@@ -253,17 +253,25 @@ async def swap_meal_smart(date: str, request: Request, body: dict = None):
                 trip = _get_active_trip(conn, user_id)
                 candidates = old_ingredients - shared
                 if trip and candidates:
+                    # source='meal' filter: the swap is removing the OLD meal's
+                    # ingredients, so only meal-source rows are candidates. A
+                    # user-added 'tomatoes' (source='extra') belongs to the
+                    # user, not to the swapped-out meal — leaving it alone.
+                    # Same for ordered rows (in-flight Kroger order); no source
+                    # filter would catch those, but the !ordered check below
+                    # already rejects them.
                     nph = ", ".join(f":n{i}" for i in range(len(candidates)))
                     nps = {f"n{i}": name for i, name in enumerate(candidates)}
                     nps["uid"] = user_id
                     items = conn.execute(
-                        text(f"""SELECT name, checked, ordered FROM grocery_items
-                              WHERE user_id = :uid AND LOWER(name) IN ({nph})"""),
+                        text(f"""SELECT id, name, checked, ordered FROM grocery_items
+                              WHERE user_id = :uid AND LOWER(name) IN ({nph})
+                                AND source = 'meal'"""),
                         nps,
                     ).fetchall()
                     for item in items:
                         if not item["checked"] and not item["ordered"]:
-                            removable.append(item["name"])
+                            removable.append({"id": item["id"], "name": item["name"]})
 
             # Now do the swap (commits internally)
             do_swap(conn, user_id, date)
@@ -288,16 +296,25 @@ async def swap_meal_smart(date: str, request: Request, body: dict = None):
         }
 
     elif action == "confirm":
-        # Apply user's choices
+        # Apply user's choices. remove_items is a list of grocery_items.id
+        # values (from the preview pass's removable [{id, name}, ...] list).
+        # ID-scoped DELETE post-Phase A so a manually-added or in-flight
+        # ordered same-name row isn't wiped along with the meal-source row.
+        # source='meal' belt-and-suspenders against a stale id from a
+        # long-open dialog landing on a non-meal row.
         remove_items = body.get("remove_items", [])
 
         trip = _get_active_trip(conn, user_id)
         if trip:
-            # Remove specified items from trip
-            for name in remove_items:
+            for item_id in remove_items:
+                try:
+                    iid = int(item_id)
+                except (TypeError, ValueError):
+                    continue
                 conn.execute(
-                    text("DELETE FROM grocery_items WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)"),
-                    {"user_id": user_id, "name": name},
+                    text("""DELETE FROM grocery_items
+                       WHERE id = :id AND user_id = :user_id AND source = 'meal'"""),
+                    {"id": iid, "user_id": user_id},
                 )
 
         conn.execute(

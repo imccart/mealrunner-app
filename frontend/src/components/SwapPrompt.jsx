@@ -3,14 +3,17 @@ import Sheet from './Sheet'
 
 export default function SwapPrompt({ prompt, onConfirm, onClose }) {
   const { date, old_meal, new_meal, removable, old_was_on_list } = prompt
-  const [removeItems, setRemoveItems] = useState(new Set(removable))
+  // removable is [{id, name}]. Track selection by id so multiple meal-source
+  // rows that happen to share a canonical name (rare post-dedup but possible)
+  // can be toggled independently.
+  const [removeIds, setRemoveIds] = useState(new Set(removable.map(r => r.id)))
   const [step, setStep] = useState(removable.length > 0 ? 'remove' : 'add')
 
-  const toggleRemove = (name) => {
-    const next = new Set(removeItems)
-    if (next.has(name)) next.delete(name)
-    else next.add(name)
-    setRemoveItems(next)
+  const toggleRemove = (id) => {
+    const next = new Set(removeIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setRemoveIds(next)
   }
 
   const handleRemoveDone = () => {
@@ -20,7 +23,7 @@ export default function SwapPrompt({ prompt, onConfirm, onClose }) {
   const handleAddChoice = (addToList) => {
     onConfirm({
       action: 'confirm',
-      remove_items: [...removeItems],
+      remove_items: [...removeIds],
       add_to_list: addToList,
     })
   }
@@ -34,18 +37,18 @@ export default function SwapPrompt({ prompt, onConfirm, onClose }) {
             {old_meal} was replaced. These ingredients aren't needed by other meals:
           </div>
           <div className="carry-items">
-            {removable.map(name => (
-              <div key={name} className="carry-item" onClick={() => toggleRemove(name)}>
-                <div className={`carry-check ${removeItems.has(name) ? 'active' : ''}`}>
-                  {removeItems.has(name) ? '\u2713' : ''}
+            {removable.map(item => (
+              <div key={item.id} className="carry-item" onClick={() => toggleRemove(item.id)}>
+                <div className={`carry-check ${removeIds.has(item.id) ? 'active' : ''}`}>
+                  {removeIds.has(item.id) ? '\u2713' : ''}
                 </div>
-                <span>{name}</span>
+                <span>{item.name}</span>
               </div>
             ))}
           </div>
           <div className="sheet-btn-row">
             <button className="sheet-btn-secondary" onClick={() => {
-              setRemoveItems(new Set())
+              setRemoveIds(new Set())
               handleRemoveDone()
             }}>Keep all</button>
             <button className="sheet-btn-primary" onClick={handleRemoveDone}>
