@@ -1087,13 +1087,22 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
 
 @router.get("/grocery")
 async def get_grocery(request: Request):
-    """Get the grocery list from the active trip."""
+    """Get the grocery list from the active trip.
+
+    Write endpoints that already ran `_ensure_active_trip` themselves can set
+    `request.state._skip_ensure_active = True` before returning via this
+    helper to avoid a second sync pass within the same request. The
+    side-effect cleanups inside `_ensure_active_trip` (stale-order TTL,
+    checked/removed prune) ran on the first pass and are idempotent — no
+    correctness loss from skipping.
+    """
     from mealrunner.planner import load_rolling_week
 
     user_id = request.state.user_id
     conn = _conn()
     mw = load_rolling_week(conn, user_id)
-    trip = _ensure_active_trip(conn, mw, user_id)
+    if not getattr(request.state, "_skip_ensure_active", False):
+        _ensure_active_trip(conn, mw, user_id)
 
     # Read all items from the trip
     rows = conn.execute(
@@ -1553,6 +1562,7 @@ async def add_regulars_to_grocery(body: dict, request: Request):
     )
     conn.commit()
 
+    request.state._skip_ensure_active = True
     return await get_grocery(request)
 
 
@@ -1599,6 +1609,7 @@ async def add_pantry_to_grocery(body: dict, request: Request):
     )
     conn.commit()
 
+    request.state._skip_ensure_active = True
     return await get_grocery(request)
 
 
@@ -1614,6 +1625,7 @@ async def build_my_list(request: Request, body: dict = None):
     _refresh_trip_meal_items(conn, user_id, mw)
     conn.commit()
 
+    request.state._skip_ensure_active = True
     return await get_grocery(request)
 
 
@@ -1622,13 +1634,21 @@ async def build_my_list(request: Request, body: dict = None):
 
 @router.get("/order")
 async def get_order(request: Request):
-    """Get order state: pending items, selected items, and summary."""
+    """Get order state: pending items, selected items, and summary.
+
+    Write endpoints (e.g. /order/select, /order/deselect) that already ran
+    `_ensure_active_trip` themselves can set `request.state._skip_ensure_active
+    = True` before returning via this helper. Avoids the second sync pass
+    that previously caused phantom-row inserts on the trailing call. See
+    `get_grocery` for the same pattern.
+    """
     from mealrunner.planner import load_rolling_week
 
     user_id = request.state.user_id
     conn = _conn()
     mw = load_rolling_week(conn, user_id)
-    trip = _ensure_active_trip(conn, mw, user_id)
+    if not getattr(request.state, "_skip_ensure_active", False):
+        _ensure_active_trip(conn, mw, user_id)
 
     rows = conn.execute(
         text("""SELECT * FROM grocery_items WHERE user_id = :user_id
@@ -2357,6 +2377,7 @@ async def select_product(body: dict, request: Request):
 
         threading.Thread(target=_bg_backfill_prices, args=(user_id, sel_location), daemon=True).start()
 
+    request.state._skip_ensure_active = True
     return await get_order(request)
 
 
@@ -2380,6 +2401,7 @@ async def deselect_product(item_name: str, request: Request):
     )
     conn.commit()
 
+    request.state._skip_ensure_active = True
     return await get_order(request)
 
 
