@@ -920,28 +920,35 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
         if key not in existing_map:
             existing_map[key] = r
 
-    # Canonical names already covered by an in-flight ordered row (Kroger
-    # cart-staged or submitted-but-not-yet-reconciled). The order/receipt
-    # flows manage these separately; the meal sync must NOT insert a fresh
-    # active row for the same canonical name or the user gets a phantom
-    # pending entry alongside their ordered one. Without this, /order/select
-    # creates a phantom on its trailing get_order call: it flips the row to
-    # ordered=1, then the second _ensure_active_trip pass sees the meal need
-    # as unmet and inserts a duplicate. Stale ordered rows are soft/hard
-    # deleted in _ensure_active_trip after 3 days, so they age out naturally.
+    # Canonical names already "covered" by another row that the meal sync
+    # must NOT duplicate via a phantom active insert:
+    #   - ordered = 1 (in-flight Kroger order): order/receipt flow owns it.
+    #   - non-empty receipt_status (matched/substituted/not_fulfilled/
+    #     dismissed): receipt flow owns it.
+    # Without this, /order/select's trailing get_order pass and every
+    # receipt upload were leaving the original row tagged but invisible to
+    # existing_map (which filters receipt_status=''), so meal sync would
+    # INSERT a fresh active sibling for the same canonical name. The user'd
+    # see "salt" or "cauliflower rice" pop back onto the grocery list right
+    # after acknowledging it via the receipt page or have-it toggle, just
+    # because the receipt processor flagged the row matched/not_fulfilled.
+    # Stale ordered rows still soft/hard delete after 3 days in
+    # _ensure_active_trip, so anything truly orphaned ages out.
     covered_rows = conn.execute(
         text("""SELECT name FROM grocery_items
                 WHERE user_id = :user_id
-                  AND ordered = 1
-                  AND COALESCE(receipt_status, '') = ''"""),
+                  AND (
+                    (ordered = 1 AND COALESCE(receipt_status, '') = '')
+                    OR COALESCE(receipt_status, '') != ''
+                  )"""),
         {"user_id": user_id},
     ).fetchall()
     covered_keys = {compare_key(r["name"]) for r in covered_rows}
 
     # Clean up phantom meal-source rows: any active meal-source entry whose
-    # canonical name is already covered by an in-flight ordered row gets
-    # deleted here. The fix above prevents future phantoms; this loop
-    # back-fills cleanup for ones created before the fix shipped.
+    # canonical name is already covered by an in-flight ordered row OR a
+    # receipt-tagged row gets deleted here. The fix above prevents future
+    # phantoms; this loop back-fills cleanup for ones already in the DB.
     phantom_keys = [
         key for key, row in existing_map.items()
         if row["source"] == "meal" and key in covered_keys
@@ -1125,8 +1132,17 @@ async def get_grocery(request: Request):
         # checked / have_it / removed name lists below are kept for any
         # downstream consumers, but items_by_group is the source of truth
         # for what's on the active list.
+        # Receipt-acknowledged statuses (matched/substituted/dismissed) also
+        # don't belong on the active list — those are post-buy or
+        # user-dismissed rows. not_fulfilled DOES stay visible: Kroger
+        # didn't deliver it, the user probably wants to grab it elsewhere.
+        try:
+            rs = r["receipt_status"] or ""
+        except (KeyError, Exception):
+            rs = ""
         is_active = (
             not r["checked"] and not r.get("have_it") and not r.get("removed")
+            and rs not in ("matched", "substituted", "dismissed")
         )
         if is_active:
             items_by_group.setdefault(group, []).append({
@@ -2867,11 +2883,15 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         else:
             new_receipt_items.append(ri)
 
-    # Get trip items that still need matching — anything unchecked on the list
-    # Match against everything not yet reconciled (checked or not — auto-prune handles stale items)
+    # Get trip items the receipt processor is responsible for confirming.
+    # Exclude have_it=1 / removed=1 — those are user-settled state that the
+    # receipt should never touch. checked=1 stays in the pool so a
+    # swipe-bought row can be confirmed by the receipt; the auto-prune still
+    # handles stale ones.
     rows = conn.execute(
         text("""SELECT * FROM grocery_items WHERE user_id = :user_id
            AND receipt_status IN ('', 'not_fulfilled')
+           AND have_it = 0 AND removed = 0
            ORDER BY name"""),
         {"user_id": user_id},
     ).fetchall()
@@ -2969,19 +2989,17 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         matched_grocery_names = {m["grocery_name"].lower() for m in diff2["matched"]}
         receipt_remaining = diff2.get("unmatched", [])
 
-        # Items not matched — reset to active so they can be re-ordered
+        # Reset unmatched UPC items to not_fulfilled — they were actually
+        # sent to Kroger and didn't come back. Plain name_rows (no
+        # product_upc) are NOT touched: the user never ordered them via
+        # Kroger, so "not_fulfilled" doesn't apply. Tagging them was the
+        # source of phantom rows reappearing on the grocery list (the
+        # tagged row becomes invisible to meal sync, and meal sync inserts
+        # a fresh sibling).
         _not_fulfilled_sql = """UPDATE grocery_items SET receipt_status = 'not_fulfilled',
                ordered = 0, submitted_at = NULL,
                product_upc = '', product_name = '', product_brand = '',
                product_size = '', product_price = NULL, product_image = ''"""
-        for r in name_rows:
-            if r["name"].lower() not in matched_grocery_names:
-                conn.execute(
-                    text(_not_fulfilled_sql + " WHERE id = :id"),
-                    {"id": r["id"]},
-                )
-                total_not_fulfilled += 1
-        # UPC items that also failed pass 2
         for uname in upc_unmatched_names:
             if uname.lower() not in matched_grocery_names:
                 conn.execute(
@@ -2990,17 +3008,13 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                 )
                 total_not_fulfilled += 1
     elif all_name_candidates:
-        # No receipt items left — all unmatched items reset to active
+        # No receipt items left — only UPC-ordered items get the
+        # not_fulfilled tag. See comment above for why name_rows are
+        # left alone.
         _not_fulfilled_sql = """UPDATE grocery_items SET receipt_status = 'not_fulfilled',
                ordered = 0, submitted_at = NULL,
                product_upc = '', product_name = '', product_brand = '',
                product_size = '', product_price = NULL, product_image = ''"""
-        for r in name_rows:
-            conn.execute(
-                text(_not_fulfilled_sql + " WHERE id = :id"),
-                {"id": r["id"]},
-            )
-            total_not_fulfilled += 1
         for uname in upc_unmatched_names:
             conn.execute(
                 text(_not_fulfilled_sql + " WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)"),
