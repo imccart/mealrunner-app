@@ -215,15 +215,5 @@ def normalize_item_name(conn: DictConnection, raw_name: str) -> tuple[str, int |
         if best_score >= 0.7 and best_match:
             return best_match
 
-    # 5. Substring containment (bidirectional, like regulars._match_ingredient)
-    #    Only for short names to avoid false positives
-    if len(name) >= 4:
-        for canonical, ing_id in _ingredient_names:
-            if canonical in name or name in canonical:
-                # Require reasonable length ratio to avoid "oil" matching "broil"
-                ratio = min(len(name), len(canonical)) / max(len(name), len(canonical))
-                if ratio >= 0.5:
-                    return (canonical, ing_id)
-
     # No match — fall through gracefully
     return (name, None)

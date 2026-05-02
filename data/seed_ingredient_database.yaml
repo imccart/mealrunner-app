@@ -150,6 +150,10 @@ ingredients:
   - name: cauliflower
     aisle: Produce
     is_pantry_staple: 0
+  - name: cauliflower rice
+    aisle: Produce
+    is_pantry_staple: 0
+    root: cauliflower
   - name: brussels sprouts
     aisle: Produce
     is_pantry_staple: 0
