@@ -249,6 +249,16 @@ export default function GroceryPage({ sidebar = false }) {
     } catch { setGrocery(prev) }
   }
 
+  const handleQtyChange = async (item, delta) => {
+    const current = item.quantity || 1
+    const next = Math.max(1, Math.min(99, current + delta))
+    if (next === current) return
+    try {
+      const result = await api.updateGroceryQuantity(item.id, next)
+      setGrocery(result)
+    } catch { /* ignore — keep prior state */ }
+  }
+
   const handleShopCheck = async (item) => {
     await handleItemAction(item, 'bought')
   }
@@ -307,7 +317,7 @@ export default function GroceryPage({ sidebar = false }) {
                   >
                     <div className={styles.shoppingItemName} onClick={() => handleShopCheckAndScroll(item)}>
                       {item.name}
-                      {item.meal_count > 1 && <span className={styles.shoppingMulti}>x{item.meal_count}</span>}
+                      {item.quantity > 1 && <span className={styles.shoppingMulti}>x {item.quantity}</span>}
                       {item.for_meals && item.for_meals.length > 0 && (
                         <span className={styles.shoppingItemMeals}>{item.for_meals.join(', ')}</span>
                       )}
@@ -559,7 +569,7 @@ export default function GroceryPage({ sidebar = false }) {
         <div className={styles.groceryItemTop}>
           <span className={styles.itemName}>
             {item.name}
-            {item.meal_count > 1 && <span className={styles.multiBadge}>x{item.meal_count}</span>}
+            {item.quantity > 1 && <span className={styles.multiBadge}>x {item.quantity}</span>}
           </span>
           {isOrdered && <span className={styles.orderedBadge}>{'\u2191'} ordered</span>}
           <button className="grocery-expand-btn" onClick={handleToggle} title="Actions">{'\u2630'}</button>
@@ -599,6 +609,11 @@ export default function GroceryPage({ sidebar = false }) {
               <button className={styles.groceryActionBtnItem} onClick={() => handleItemAction(item, 'have_it')}>Have it</button>
               <button className={styles.groceryActionBtnItem} onClick={(e) => { e.stopPropagation(); setEditingNote(item.name); setNoteText(item.notes || '') }}>Note</button>
               <button className={styles.groceryActionBtnItem} onClick={(e) => { e.stopPropagation(); setRecatItem(item) }}>Aisle</button>
+              <div className={styles.qtyStepper} onClick={(e) => e.stopPropagation()}>
+                <button onClick={() => handleQtyChange(item, -1)} aria-label="Decrease quantity">{'\u2212'}</button>
+                <span>{item.quantity || 1}</span>
+                <button onClick={() => handleQtyChange(item, 1)} aria-label="Increase quantity">+</button>
+              </div>
               <button className={`${styles.groceryActionBtnItem} ${styles.remove}`} onClick={() => handleItemAction(item, 'remove')}>{'\u00D7'}</button>
             </div>
           </>

@@ -4,6 +4,14 @@ import Sheet from './Sheet'
 import FeedbackFab from './FeedbackFab'
 import styles from './OrderPage.module.css'
 
+// Render an item's display name with the user's chosen grocery-list quantity
+// appended ("apples x 4"). The Kroger-cart quantity (item.product.quantity) is
+// what actually goes into the order; the grocery quantity is a hint to the
+// user about how many they want total. They might satisfy 4 apples by picking
+// 4 of one product, or 2+2 across SKUs.
+const displayName = (item) =>
+  item && item.quantity > 1 ? `${item.name} x ${item.quantity}` : item?.name || ''
+
 function NovaBadge({ nova }) {
   if (!nova) return null
   const labels = { 1: 'Minimal processing', 2: 'Processed ingredient', 3: 'Processed', 4: 'Ultra-processed' }
@@ -470,7 +478,7 @@ export default function OrderPage() {
       <button className={styles.pickingRowNav} onClick={handlePrev}>{'\u2190'}</button>
       <div className={styles.pickingRowMain} onClick={() => setShowQueue(true)}>
         <span className={styles.pickingRowLabel}>Picking for</span>
-        <span className={styles.pickingRowItem}>{activeItem}</span>
+        <span className={styles.pickingRowItem}>{displayName(activeItemData) || activeItem}</span>
         <span className={styles.pickingRowExpand}>{'\u25BE'}</span>
       </div>
       <button className={styles.pickingRowNav} onClick={handleNext} title="Next item">{'\u2192'}</button>
@@ -512,7 +520,7 @@ export default function OrderPage() {
                   className={`${styles.queueItem}${isActive ? ` ${styles.active}` : ''}`}
                   onClick={() => setActiveItem(item.name)}
                 >
-                  <span className={styles.queueItemName}>{item.name}</span>
+                  <span className={styles.queueItemName}>{displayName(item)}</span>
                   {item.for_meals?.length > 0 && (
                     <span className={styles.queueItemMeals}>{item.for_meals.join(', ')}</span>
                   )}
@@ -530,7 +538,7 @@ export default function OrderPage() {
                 className={`${styles.queueItem} ${styles.selected}`}
                 onClick={() => handleDeselect(item.name)}
               >
-                <span className={styles.queueItemName}>{item.name}</span>
+                <span className={styles.queueItemName}>{displayName(item)}</span>
                 <span className={styles.queueCheck}>{'\u2713'}</span>
               </button>
             ))}
@@ -546,7 +554,7 @@ export default function OrderPage() {
                 onClick={() => handleUndoBuyElsewhere(item)}
                 title="Bring back to ordering"
               >
-                <span className={styles.queueItemName}>{item.name}</span>
+                <span className={styles.queueItemName}>{displayName(item)}</span>
               </button>
             ))}
           </>
@@ -565,7 +573,7 @@ export default function OrderPage() {
           <div className={styles.orderItemTopRow}>
             <div>
               <div className={styles.orderItemLabel}>Picking for</div>
-              <div className={styles.orderItemName}>{activeItem}</div>
+              <div className={styles.orderItemName}>{displayName(activeItemData) || activeItem}</div>
               {activeItemData?.for_meals?.length > 0 && (
                 <div className={styles.orderItemMeals}>{activeItemData.for_meals.join(', ')}</div>
               )}
@@ -949,7 +957,7 @@ export default function OrderPage() {
                     className={`${styles.queueSheetItem}${item.name === activeItem ? ` ${styles.active}` : ''}`}
                     onClick={() => { setActiveItem(item.name); setShowQueue(false); setMobileSection(null) }}
                   >
-                    <span>{item.name}</span>
+                    <span>{displayName(item)}</span>
                   </button>
                 ))}
               </>
@@ -963,7 +971,7 @@ export default function OrderPage() {
                     className={`${styles.queueSheetItem} ${styles.selected}`}
                     onClick={() => { handleDeselect(item.name); setShowQueue(false); setMobileSection(null) }}
                   >
-                    <span>{item.name}</span>
+                    <span>{displayName(item)}</span>
                     <span className={styles.queueCheck}>{'\u2713'}</span>
                   </button>
                 ))}
@@ -978,7 +986,7 @@ export default function OrderPage() {
                     className={`${styles.queueSheetItem} ${styles.elsewhere}`}
                     onClick={() => { handleUndoBuyElsewhere(item); setShowQueue(false) }}
                   >
-                    <span>{item.name}</span>
+                    <span>{displayName(item)}</span>
                     <span className={styles.queueSheetElsewhere}>elsewhere</span>
                   </button>
                 ))}
@@ -1006,7 +1014,7 @@ export default function OrderPage() {
                 className={`${styles.queueSheetItem} ${styles.selected}`}
                 onClick={() => { handleDeselect(item.name); setMobileSection(null) }}
               >
-                <span>{item.name}</span>
+                <span>{displayName(item)}</span>
                 <span className={styles.queueCheck}>{'\u2713'}</span>
               </button>
             ))}
@@ -1023,7 +1031,7 @@ export default function OrderPage() {
                 className={`${styles.queueSheetItem} ${styles.elsewhere}`}
                 onClick={() => handleUndoBuyElsewhere(item)}
               >
-                <span>{item.name}</span>
+                <span>{displayName(item)}</span>
                 <span className={styles.queueSheetElsewhere}>tap to bring back</span>
               </button>
             ))}

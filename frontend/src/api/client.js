@@ -126,6 +126,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ id, notes }),
   }),
+  updateGroceryQuantity: (id, quantity) => request('/grocery/quantity', {
+    method: 'POST',
+    body: JSON.stringify({ id, quantity }),
+  }),
   recategorizeItem: (id, shoppingGroup) => request('/grocery/recategorize', {
     method: 'POST',
     body: JSON.stringify({ id, shopping_group: shoppingGroup }),

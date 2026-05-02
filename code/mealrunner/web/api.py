@@ -1119,6 +1119,7 @@ async def get_grocery(request: Request):
                 "name": r["name"],
                 "for_meals": for_meals,
                 "meal_count": r["meal_count"],
+                "quantity": r["quantity"] if "quantity" in r.keys() else 1,
                 "source": r["source"],
                 "added_at": added_at,
                 "notes": notes or "",
@@ -1219,6 +1220,28 @@ async def update_grocery_note(body: dict, request: Request):
         text("""UPDATE grocery_items SET notes = :notes
            WHERE id = :id AND user_id = :uid"""),
         {"notes": notes, "id": item_id, "uid": user_id},
+    )
+    conn.commit()
+    return await get_grocery(request)
+
+
+@router.post("/grocery/quantity")
+async def update_grocery_quantity(body: dict, request: Request):
+    """Update the quantity on a grocery item. Clamped to [1, 99]."""
+    user_id = request.state.user_id
+    conn = _conn()
+    item_id = body.get("id")
+    qty = body.get("quantity")
+    if not item_id or qty is None:
+        return {"ok": False}
+    try:
+        qty = max(1, min(99, int(qty)))
+    except (TypeError, ValueError):
+        return {"ok": False}
+    conn.execute(
+        text("""UPDATE grocery_items SET quantity = :qty
+           WHERE id = :id AND user_id = :uid"""),
+        {"qty": qty, "id": item_id, "uid": user_id},
     )
     conn.commit()
     return await get_grocery(request)
@@ -1592,6 +1615,10 @@ async def get_order(request: Request):
             notes = r["notes"] or ""
         except (KeyError, Exception):
             notes = ""
+        try:
+            row_qty = r["quantity"]
+        except (KeyError, Exception):
+            row_qty = 1
         item = {
             "id": r["id"],
             "name": r["name"],
@@ -1599,6 +1626,7 @@ async def get_order(request: Request):
             "source": r["source"],
             "for_meals": [m for m in r["for_meals"].split(",") if m] if r["for_meals"] else [],
             "notes": notes,
+            "quantity": row_qty,
         }
         if r["buy_elsewhere"]:
             buy_elsewhere.append(item)
