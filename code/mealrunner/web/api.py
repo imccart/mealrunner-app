@@ -1830,14 +1830,20 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
         cached = {r["upc"]: dict(r) for r in rows}
 
     # --- Prices: use today's cache or fill from Kroger ---
+    # Only price/promo are cached-overwriteable; in_stock/curbside/delivery
+    # come from the live search response (line above) and are mode-correct
+    # for the current request. Reading them from the cache would (a) clobber
+    # the freshest signal we have, and (b) carry the mode from whenever the
+    # cache was last written (curbside-hardcoded prewarm thread, or a prior
+    # search at a different mode). Result was items showing in_stock=true in
+    # delivery mode when only curbside was actually fulfillable, and stale
+    # inventory bleeding across same-day searches.
     need_price = []
     for p in products:
         c = cached.get(p.upc)
         if c and c["price_fetched_at"] and c["price_fetched_at"].date() == _today:
             p.price = c["price"] if c["price"] is not None else p.price
             p.promo_price = c["promo_price"]
-            p.in_stock = bool(c["in_stock"]) if c["in_stock"] is not None else p.in_stock
-            p.curbside = bool(c["curbside"]) if c["curbside"] is not None else p.curbside
         else:
             need_price.append(p)
 
