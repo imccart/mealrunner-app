@@ -543,17 +543,19 @@ async def get_candidates(date: str, request: Request):
 # ── Grocery (trip-based) ──────────────────────────────────
 
 
-def _parse_ts(ts_str):
-    """Parse an ISO timestamp string to a timezone-aware datetime, or None."""
+def _parse_ts(ts):
+    """Coerce a value from a timestamptz column (or legacy string) into a tz-aware datetime."""
     from datetime import datetime, timezone
-    if not ts_str:
+    if not ts:
         return None
+    if isinstance(ts, datetime):
+        return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
     try:
-        t = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        t = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         if t.tzinfo is None:
             t = t.replace(tzinfo=timezone.utc)
         return t
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         return None
 
 
