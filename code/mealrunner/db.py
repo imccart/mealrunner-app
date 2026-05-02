@@ -1244,6 +1244,16 @@ def _seed_recipes(conn: DictConnection, path: Path, user_id: str | None = None) 
     with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
+    # Build a compare_key → id index of the ingredients table so recipe
+    # ingredient lookups are plural-aware. Recipe yamls written before the
+    # seed pluralization may say "potato" while the canonical row is now
+    # "potatoes"; both should resolve to the same id.
+    from mealrunner.normalize import compare_key as _ckey
+    all_ings = conn.execute(
+        text("SELECT id, name FROM ingredients")
+    ).fetchall()
+    ing_index = {_ckey(r["name"]): r["id"] for r in all_ings}
+
     for rec in data.get("recipes", []):
         params = {
             "name": rec["name"],
@@ -1287,10 +1297,8 @@ def _seed_recipes(conn: DictConnection, path: Path, user_id: str | None = None) 
 
         recipe_id = row["id"]
         for item in rec.get("ingredients", []):
-            ing_row = conn.execute(text(
-                "SELECT id FROM ingredients WHERE name = :name"
-            ), {"name": item["name"]}).fetchone()
-            if ing_row is None:
+            ing_id = ing_index.get(_ckey(item["name"]))
+            if ing_id is None:
                 continue
             conn.execute(text(
                 """INSERT INTO recipe_ingredients
@@ -1298,7 +1306,7 @@ def _seed_recipes(conn: DictConnection, path: Path, user_id: str | None = None) 
                    VALUES (:recipe_id, :ing_id, :qty, :unit, :prep, :comp)"""
             ), {
                 "recipe_id": recipe_id,
-                "ing_id": ing_row["id"],
+                "ing_id": ing_id,
                 "qty": item.get("quantity", 1),
                 "unit": item.get("unit", "count"),
                 "prep": item.get("prep_note", ""),

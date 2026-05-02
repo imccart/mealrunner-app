@@ -249,14 +249,22 @@ export default function GroceryPage({ sidebar = false }) {
     } catch { setGrocery(prev) }
   }
 
-  const handleQtyChange = async (item, delta) => {
+  const handleQtyChange = (item, delta) => {
     const current = item.quantity || 1
     const next = Math.max(1, Math.min(99, current + delta))
     if (next === current) return
-    try {
-      const result = await api.updateGroceryQuantity(item.id, next)
-      setGrocery(result)
-    } catch { /* ignore — keep prior state */ }
+    // Optimistic local bump so rapid taps don't all read the stale `current`
+    // off the original prop. Server response is discarded — the next /grocery
+    // fetch is what ultimately reconciles.
+    setGrocery(prev => {
+      if (!prev || !prev.items_by_group) return prev
+      const newGroups = {}
+      for (const [g, gItems] of Object.entries(prev.items_by_group)) {
+        newGroups[g] = gItems.map(i => i.id === item.id ? { ...i, quantity: next } : i)
+      }
+      return { ...prev, items_by_group: newGroups }
+    })
+    api.updateGroceryQuantity(item.id, next).catch(() => { /* will reconcile on next fetch */ })
   }
 
   const handleShopCheck = async (item) => {

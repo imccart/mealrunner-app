@@ -128,7 +128,7 @@ def resolve_user_canonical(conn: DictConnection, user_id: str, raw_name: str) ->
         return name
     key = compare_key(name)
     rows = conn.execute(
-        text("SELECT name FROM grocery_items WHERE user_id = :uid"),
+        text("SELECT name FROM grocery_items WHERE user_id = :uid ORDER BY id DESC"),
         {"uid": user_id},
     ).fetchall()
     for r in rows:

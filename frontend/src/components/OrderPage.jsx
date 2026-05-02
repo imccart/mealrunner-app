@@ -830,7 +830,7 @@ export default function OrderPage() {
             ))})()}
             {activeItem && order.pending.some(p => p.name === activeItem) && (
               <div className={`${styles.orderSummaryRow} ${styles.selecting}`}>
-                <span className={styles.orderSummaryItemName}>{activeItem}</span>
+                <span className={styles.orderSummaryItemName}>{displayName(activeItemData) || activeItem}</span>
                 <span className={styles.orderSummaryItemSelecting}>selecting...</span>
               </div>
             )}
