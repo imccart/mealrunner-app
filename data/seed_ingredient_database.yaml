@@ -11,19 +11,19 @@ ingredients:
   # ============================================================
 
   # -- Fresh Fruits --
-  - name: apple
+  - name: apples
     aisle: Produce
     is_pantry_staple: 0
-  - name: banana
+  - name: bananas
     aisle: Produce
     is_pantry_staple: 0
-  - name: orange
+  - name: oranges
     aisle: Produce
     is_pantry_staple: 0
-  - name: lemon
+  - name: lemons
     aisle: Produce
     is_pantry_staple: 0
-  - name: lime
+  - name: limes
     aisle: Produce
     is_pantry_staple: 0
   - name: grapes
@@ -56,16 +56,16 @@ ingredients:
   - name: mango
     aisle: Produce
     is_pantry_staple: 0
-  - name: peach
+  - name: peaches
     aisle: Produce
     is_pantry_staple: 0
-  - name: pear
+  - name: pears
     aisle: Produce
     is_pantry_staple: 0
-  - name: plum
+  - name: plums
     aisle: Produce
     is_pantry_staple: 0
-  - name: nectarine
+  - name: nectarines
     aisle: Produce
     is_pantry_staple: 0
   - name: cherries
@@ -95,13 +95,13 @@ ingredients:
     root: cranberries
 
   # -- Fresh Vegetables --
-  - name: yellow onion
+  - name: yellow onions
     aisle: Produce
     is_pantry_staple: 0
-  - name: red onion
+  - name: red onions
     aisle: Produce
     is_pantry_staple: 0
-  - name: white onion
+  - name: white onions
     aisle: Produce
     is_pantry_staple: 0
   - name: green onion
@@ -110,37 +110,37 @@ ingredients:
   - name: garlic
     aisle: Produce
     is_pantry_staple: 0
-  - name: potato
+  - name: potatoes
     aisle: Produce
     is_pantry_staple: 0
-  - name: sweet potato
+  - name: sweet potatoes
     aisle: Produce
     is_pantry_staple: 0
-  - name: russet potato
-    aisle: Produce
-    is_pantry_staple: 0
-    root: potato
-  - name: red potato
+  - name: russet potatoes
     aisle: Produce
     is_pantry_staple: 0
     root: potato
-  - name: carrot
+  - name: red potatoes
+    aisle: Produce
+    is_pantry_staple: 0
+    root: potato
+  - name: carrots
     aisle: Produce
     is_pantry_staple: 0
   - name: celery
     aisle: Produce
     is_pantry_staple: 0
-  - name: bell pepper
+  - name: bell peppers
     aisle: Produce
     is_pantry_staple: 0
-  - name: jalapeno
+  - name: jalapenos
     aisle: Produce
     is_pantry_staple: 0
-  - name: serrano pepper
+  - name: serrano peppers
     aisle: Produce
     is_pantry_staple: 0
     root: pepper
-  - name: poblano pepper
+  - name: poblano peppers
     aisle: Produce
     is_pantry_staple: 0
     root: pepper
@@ -179,6 +179,10 @@ ingredients:
   - name: cucumber
     aisle: Produce
     is_pantry_staple: 0
+  - name: mini cucumbers
+    aisle: Produce
+    is_pantry_staple: 0
+    root: cucumbers
   - name: zucchini
     aisle: Produce
     is_pantry_staple: 0
@@ -194,14 +198,14 @@ ingredients:
     aisle: Produce
     is_pantry_staple: 0
     root: squash
-  - name: tomato
+  - name: tomatoes
     aisle: Produce
     is_pantry_staple: 0
   - name: cherry tomatoes
     aisle: Produce
     is_pantry_staple: 0
     root: tomatoes
-  - name: roma tomato
+  - name: roma tomatoes
     aisle: Produce
     is_pantry_staple: 0
     root: tomatoes
@@ -230,7 +234,7 @@ ingredients:
   - name: beets
     aisle: Produce
     is_pantry_staple: 0
-  - name: turnip
+  - name: turnips
     aisle: Produce
     is_pantry_staple: 0
   - name: radish
@@ -312,11 +316,11 @@ ingredients:
   - name: steak
     aisle: Meat
     is_pantry_staple: 0
-  - name: ribeye steak
+  - name: ribeye steaks
     aisle: Meat
     is_pantry_staple: 0
     root: steak
-  - name: sirloin steak
+  - name: sirloin steaks
     aisle: Meat
     is_pantry_staple: 0
     root: steak
@@ -397,7 +401,7 @@ ingredients:
     is_pantry_staple: 0
 
   # -- Seafood --
-  - name: salmon fillet
+  - name: salmon fillets
     aisle: Meat
     is_pantry_staple: 0
     root: salmon
@@ -1936,15 +1940,15 @@ ingredients:
   # ============================================================
   # ADDITIONAL PRODUCE
   # ============================================================
-  - name: green pepper
+  - name: green peppers
     aisle: Produce
     is_pantry_staple: 0
     root: pepper
-  - name: red pepper
+  - name: red peppers
     aisle: Produce
     is_pantry_staple: 0
     root: pepper
-  - name: orange pepper
+  - name: orange peppers
     aisle: Produce
     is_pantry_staple: 0
     root: pepper
@@ -1972,7 +1976,7 @@ ingredients:
   - name: okra
     aisle: Produce
     is_pantry_staple: 0
-  - name: parsnip
+  - name: parsnips
     aisle: Produce
     is_pantry_staple: 0
   - name: rutabaga
@@ -1981,10 +1985,10 @@ ingredients:
   - name: jicama
     aisle: Produce
     is_pantry_staple: 0
-  - name: plantain
+  - name: plantains
     aisle: Produce
     is_pantry_staple: 0
-  - name: habanero pepper
+  - name: habanero peppers
     aisle: Produce
     is_pantry_staple: 0
     root: pepper
@@ -2009,21 +2013,21 @@ ingredients:
     aisle: Produce
     is_pantry_staple: 0
     root: basil
-  - name: green apple
+  - name: green apples
     aisle: Produce
     is_pantry_staple: 0
     root: apple
-  - name: fuji apple
+  - name: fuji apples
     aisle: Produce
     is_pantry_staple: 0
     root: apple
-  - name: tangerine
+  - name: tangerines
     aisle: Produce
     is_pantry_staple: 0
-  - name: apricot
+  - name: apricots
     aisle: Produce
     is_pantry_staple: 0
-  - name: fig
+  - name: figs
     aisle: Produce
     is_pantry_staple: 0
   - name: papaya
@@ -2032,7 +2036,7 @@ ingredients:
   - name: passion fruit
     aisle: Produce
     is_pantry_staple: 0
-  - name: persimmon
+  - name: persimmons
     aisle: Produce
     is_pantry_staple: 0
   - name: dragon fruit
@@ -2069,7 +2073,7 @@ ingredients:
   - name: bison
     aisle: Meat
     is_pantry_staple: 0
-  - name: lobster tail
+  - name: lobster tails
     aisle: Meat
     is_pantry_staple: 0
     root: lobster

@@ -109,6 +109,34 @@ def compare_key(name: str) -> str:
     return " ".join(words)
 
 
+def resolve_user_canonical(conn: DictConnection, user_id: str, raw_name: str) -> str:
+    """For freeform names not in the canonical seed, prefer the form the user
+    has used before. So if "mini cucumbers" exists anywhere in their grocery
+    history (active, have-it'd, checked, removed, ordered, even old), a fresh
+    add of "mini cucumber" canonicalizes to "mini cucumbers".
+
+    Should only be called when normalize_item_name returned no canonical match
+    (i.e. ingredient_id is None). For seed-matched names, the seed form is
+    already the canonical and there's no need to scan history.
+
+    One indexed SELECT keyed on user_id, then Python compare_key over each
+    name. Sub-2ms even for users with thousands of historical rows. Returns
+    raw_name if no historical match.
+    """
+    name = (raw_name or "").strip().lower()
+    if not name:
+        return name
+    key = compare_key(name)
+    rows = conn.execute(
+        text("SELECT name FROM grocery_items WHERE user_id = :uid"),
+        {"uid": user_id},
+    ).fetchall()
+    for r in rows:
+        if compare_key(r["name"]) == key:
+            return r["name"]
+    return name
+
+
 def normalize_item_name(conn: DictConnection, raw_name: str) -> tuple[str, int | None]:
     """Normalize a user-typed item name to a canonical ingredient name.
 

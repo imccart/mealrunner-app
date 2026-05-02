@@ -1172,9 +1172,16 @@ async def add_grocery_item(body: dict, request: Request):
         return {"ok": False}
 
     conn = _conn()
-    name, _ = _normalize_name(conn, raw)
+    name, ingredient_id = _normalize_name(conn, raw)
 
-    from mealrunner.normalize import compare_key
+    # If the seed didn't recognize it, fall back to whatever form the user
+    # has used before for the same canonical name. So "mini cucumber" entered
+    # today resolves to "mini cucumbers" if that's what the user typed last
+    # week — even if the row from last week is checked off or in their
+    # have-it'd history. Stops the row from flipping spelling between adds.
+    from mealrunner.normalize import compare_key, resolve_user_canonical
+    if ingredient_id is None:
+        name = resolve_user_canonical(conn, user_id, name)
     key = compare_key(name)
 
     active_rows = conn.execute(
