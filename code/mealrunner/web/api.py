@@ -1327,12 +1327,12 @@ async def toggle_grocery_item(id: int, request: Request):
         # Track last_bought_at on source table (keyed on name)
         if row["source"] == "regular":
             conn.execute(
-                text("UPDATE regulars SET last_bought_at = CURRENT_TIMESTAMP::text WHERE user_id = :uid AND LOWER(name) = LOWER(:name)"),
+                text("UPDATE regulars SET last_bought_at = CURRENT_TIMESTAMP WHERE user_id = :uid AND LOWER(name) = LOWER(:name)"),
                 {"uid": user_id, "name": item_name},
             )
         elif row["source"] == "pantry":
             conn.execute(
-                text("""UPDATE pantry SET last_bought_at = CURRENT_TIMESTAMP::text
+                text("""UPDATE pantry SET last_bought_at = CURRENT_TIMESTAMP
                     WHERE user_id = :uid AND ingredient_id IN (
                         SELECT id FROM ingredients WHERE LOWER(name) = LOWER(:name)
                     )"""),
