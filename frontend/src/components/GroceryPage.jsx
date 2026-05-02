@@ -15,7 +15,9 @@ const GROUP_ORDER = [
   'Personal Care', 'Household', 'Cleaning', 'Pets', 'Other'
 ]
 
-const SWIPE_THRESHOLD = 50
+const SWIPE_THRESHOLD = 80
+const LOCK_THRESHOLD = 12
+const HORIZONTAL_LOCK_RATIO = 1.8
 
 function SwipeableItem({ children, onSwipeRight, className }) {
   const startX = useRef(null)
@@ -37,8 +39,17 @@ function SwipeableItem({ children, onSwipeRight, className }) {
     const dx = e.touches[0].clientX - startX.current
     const dy = e.touches[0].clientY - startY.current
 
-    if (locked.current === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
-      locked.current = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical'
+    if (locked.current === null) {
+      const adx = Math.abs(dx)
+      const ady = Math.abs(dy)
+      // Only lock once a clear gesture has emerged. Require horizontal motion
+      // to clearly dominate vertical (1.8x) before locking horizontal —
+      // otherwise a scroll with slight diagonal drift gets misread as a swipe.
+      if (adx > LOCK_THRESHOLD && adx > ady * HORIZONTAL_LOCK_RATIO) {
+        locked.current = 'horizontal'
+      } else if (ady > LOCK_THRESHOLD) {
+        locked.current = 'vertical'
+      }
     }
 
     if (locked.current !== 'horizontal') return
@@ -50,6 +61,7 @@ function SwipeableItem({ children, onSwipeRight, className }) {
   const onTouchEnd = useCallback((e) => {
     if (startX.current === null) return
     const dx = e.changedTouches[0].clientX - startX.current
+    const dy = e.changedTouches[0].clientY - startY.current
     startX.current = null
     startY.current = null
 
@@ -58,7 +70,15 @@ function SwipeableItem({ children, onSwipeRight, className }) {
     }
     locked.current = null
 
-    if (dx > SWIPE_THRESHOLD) {
+    // Re-check the FINAL motion vector at touch-end. The lock above commits
+    // early based on the first few samples; if the user started slightly right
+    // then went up/down, the locked state would still trigger the swipe even
+    // though the gesture ended mostly vertical. Require the final dx to clear
+    // the threshold AND clearly dominate dy.
+    const finalIsHorizontalSwipe =
+      dx > SWIPE_THRESHOLD && dx > Math.abs(dy) * HORIZONTAL_LOCK_RATIO
+
+    if (finalIsHorizontalSwipe) {
       setTransitioning(true)
       setOffsetX(300)
       setTimeout(() => {
