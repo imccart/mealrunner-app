@@ -559,31 +559,6 @@ def _parse_ts(ts):
         return None
 
 
-def _prompt_state(trip, flag_col: str, ts_col: str) -> str:
-    """Return 'prompt' (show full card), 'done' (compact), based on flag + age.
-
-    - Not acted on → 'prompt'
-    - Acted on within 3 days → 'done'
-    - Acted on 3+ days ago → 'prompt' (resurface)
-    """
-    from datetime import datetime, timedelta, timezone
-    try:
-        if not trip[flag_col]:
-            return "prompt"
-        ts_str = trip[ts_col] if ts_col in trip.keys() else None
-        if not ts_str:
-            return "done"  # acted on but no timestamp (legacy)
-        acted_at = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-        if acted_at.tzinfo is None:
-            acted_at = acted_at.replace(tzinfo=timezone.utc)
-        age = datetime.now(timezone.utc) - acted_at
-        if age > timedelta(days=3):
-            return "prompt"
-        return "done"
-    except (KeyError, Exception):
-        return "prompt"
-
-
 def _regulars_prompt_state(conn, trip) -> str:
     """Return 'prompt', 'done', or 'hidden' for the regulars prompt.
 
