@@ -1,12 +1,15 @@
 import { useRef } from 'react'
 import tipJarImg from '../assets/tip-jar.png'
 
-// Mason jar tip-jar mark (DALL-E-generated PNG, processed via Pillow:
-// transparent background, tight-cropped, square-padded, ICC stripped).
-// Lives alongside runner-r.png as the project's other DALL-E asset.
+// Mason jar tip-jar mark (DALL-E PNG, processed via Pillow: transparent
+// background, tight-cropped, square-padded, ICC stripped). Painted through
+// a CSS mask so the line color tracks `var(--accent)` exactly like
+// BentSpoonIcon and ApronIcon — without the mask the PNG's hardcoded brown
+// would be a near-but-not-quite match, and a theme/accent change later
+// would leave the tip jar stuck on the old color.
 //
-// Shake animation lives on a wrapping <span>, not the <img>, so the
-// transform-origin pivot is predictable across browsers.
+// Shake animation lives on the outer wrapper span so the transform-origin
+// pivot is predictable across browsers.
 export default function TipJarIcon({ size = 24, active = false, onClick }) {
   const wrapperRef = useRef(null)
 
@@ -33,27 +36,34 @@ export default function TipJarIcon({ size = 24, active = false, onClick }) {
       ref={wrapperRef}
       style={{
         display: 'inline-flex',
-        // Pivot at the bottom of the icon so the wobble looks like the jar
-        // rocking on a countertop, not spinning in place.
         transformOrigin: '50% 100%',
       }}
     >
-      <img
-        src={tipJarImg}
-        width={size}
-        height={size}
-        alt=""
+      <span
         onClick={handleClick}
+        role={onClick ? 'button' : undefined}
+        aria-label="Tip jar"
         style={{
-          cursor: onClick ? 'pointer' : 'default',
+          display: 'inline-block',
+          width: size,
+          height: size,
           flexShrink: 0,
+          backgroundColor: 'var(--accent)',
+          // The mask: PNG alpha drives where the accent color paints.
+          // Both prefixed and unprefixed for Safari + everyone else.
+          WebkitMaskImage: `url(${tipJarImg})`,
+          maskImage: `url(${tipJarImg})`,
+          WebkitMaskRepeat: 'no-repeat',
+          maskRepeat: 'no-repeat',
+          WebkitMaskSize: 'contain',
+          maskSize: 'contain',
+          WebkitMaskPosition: 'center',
+          maskPosition: 'center',
+          cursor: onClick ? 'pointer' : 'default',
           opacity: active ? 1 : 0.75,
           transition: 'opacity 0.2s ease',
-          // Prevent native image-drag on desktop.
           userSelect: 'none',
-          WebkitUserDrag: 'none',
         }}
-        draggable={false}
       />
     </span>
   )
