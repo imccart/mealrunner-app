@@ -81,6 +81,10 @@ def init_db(conn: DictConnection) -> None:
     _migrate_grocery_trips_to_state(conn)
     print("[db] grocery_trips migration done", flush=True)
 
+    print("[db] Running drop-legacy-single-user-uniques migration...", flush=True)
+    _migrate_drop_legacy_single_user_uniques(conn)
+    print("[db] legacy uniques migration done", flush=True)
+
     print("[db] init_db complete", flush=True)
 
 
@@ -304,6 +308,106 @@ def _migrate_grocery_trips_to_state(conn: DictConnection) -> None:
     _step("drop grocery_trips", "DROP TABLE IF EXISTS grocery_trips CASCADE")
 
     print("[db] grocery_trips → grocery_state migration complete", flush=True)
+
+
+def _migrate_drop_legacy_single_user_uniques(conn: DictConnection) -> None:
+    """Drop UNIQUE-on-name leftovers from the single-user era of the schema.
+
+    Symptom we hit on 2026-05-03: an e2e test for the regulars+meal overlap
+    case 500'd because `regulars.name` had a global UNIQUE constraint
+    (`regulars_name_key`). Once any user added a regular for "chicken thighs",
+    no other user could — INSERT failed with a unique violation. Same shape
+    for `learning_dismissed`: PRIMARY KEY on `name` alone, so cross-user
+    dismissals collided.
+
+    These constraints predate the move to multi-user / household-shared data.
+    Application-level dedup at `regulars.add_regular` is keyed on
+    `(user_id, name)`, so dropping the global unique is safe — the app
+    already protects against per-user duplicates.
+
+    For `learning_dismissed`: the `INSERT ... ON CONFLICT DO NOTHING` in
+    `/regulars` POST relies on a constraint to suppress dupes. With the PK
+    on `name` removed there's no constraint to potentially conflict; the
+    ON CONFLICT clause becomes a no-op (which is the intended semantics —
+    duplicate dismissals are harmless). A proper composite uniqueness
+    over `(user_id, name, kind)` could be added later if dedup is wanted,
+    but it's not required for correctness.
+
+    Idempotent: each statement is wrapped in try/except so a missing
+    constraint or a previously-applied migration is a no-op.
+    """
+    # Short lock timeout so ALTER TABLE doesn't block deploys.
+    try:
+        conn.execute(text("SET LOCAL lock_timeout = '3s'"))
+    except Exception:
+        pass
+
+    # 1. regulars.name global unique → drop. App-level dedup is per-user.
+    try:
+        rows = conn.execute(text("""
+            SELECT con.conname
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            JOIN pg_attribute att ON att.attrelid = con.conrelid
+            JOIN unnest(con.conkey) AS cols(colnum) ON att.attnum = cols.colnum
+            WHERE rel.relname = 'regulars'
+              AND con.contype = 'u'
+              AND att.attname = 'name'
+            GROUP BY con.conname
+            HAVING COUNT(*) = 1
+        """)).fetchall()
+        for row in rows:
+            try:
+                conn.execute(text(f'ALTER TABLE regulars DROP CONSTRAINT IF EXISTS "{row[0]}"'))
+                print(f"[db] dropped legacy regulars.name unique: {row[0]}", flush=True)
+            except Exception as e:
+                print(f"[db] skip drop {row[0]}: {e}", flush=True)
+    except Exception as e:
+        print(f"[db] regulars unique probe skipped: {e}", flush=True)
+    # Also drop a bare unique INDEX on regulars.name (covers the case where
+    # the index isn't backed by a constraint).
+    try:
+        rows = conn.execute(text("""
+            SELECT indexname FROM pg_indexes
+            WHERE tablename = 'regulars'
+              AND indexdef LIKE '%UNIQUE%'
+              AND indexdef LIKE '%(name)%'
+              AND indexdef NOT LIKE '%user_id%'
+        """)).fetchall()
+        for row in rows:
+            try:
+                conn.execute(text(f'DROP INDEX IF EXISTS "{row[0]}"'))
+                print(f"[db] dropped legacy regulars.name unique index: {row[0]}", flush=True)
+            except Exception as e:
+                print(f"[db] skip drop index {row[0]}: {e}", flush=True)
+    except Exception as e:
+        print(f"[db] regulars index probe skipped: {e}", flush=True)
+
+    # 2. learning_dismissed: PK on `name` alone is the same single-user
+    # leftover. Drop the PK; the table doesn't need a primary key for the
+    # current use (INSERT ... ON CONFLICT DO NOTHING degrades to plain
+    # INSERT, which is fine).
+    try:
+        rows = conn.execute(text("""
+            SELECT con.conname
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            JOIN pg_attribute att ON att.attrelid = con.conrelid
+            JOIN unnest(con.conkey) AS cols(colnum) ON att.attnum = cols.colnum
+            WHERE rel.relname = 'learning_dismissed'
+              AND con.contype = 'p'
+              AND att.attname = 'name'
+            GROUP BY con.conname
+            HAVING COUNT(*) = 1
+        """)).fetchall()
+        for row in rows:
+            try:
+                conn.execute(text(f'ALTER TABLE learning_dismissed DROP CONSTRAINT IF EXISTS "{row[0]}"'))
+                print(f"[db] dropped legacy learning_dismissed PK on name: {row[0]}", flush=True)
+            except Exception as e:
+                print(f"[db] skip drop {row[0]}: {e}", flush=True)
+    except Exception as e:
+        print(f"[db] learning_dismissed PK probe skipped: {e}", flush=True)
 
 
 def _run_column_migrations(conn: DictConnection) -> None:
