@@ -50,22 +50,24 @@ export default function TipJarIcon({ size = 24, active = false, onClick }) {
       }}
     >
       {/* Lid disc */}
-      <path d="M9 3.5 L15 3.5" />
-      <path d="M9 3.5 L9 5.5" />
-      <path d="M15 3.5 L15 5.5" />
-      {/* Screw band — slightly wider than the lid */}
-      <path d="M7.5 5.5 L16.5 5.5" />
-      <path d="M7.5 5.5 L7.5 7.5" />
-      <path d="M16.5 5.5 L16.5 7.5" />
-      <path d="M7.5 7.5 L16.5 7.5" />
-      {/* Jar body — rounded bottom corners */}
-      <path d="M6.5 7.5 L6.5 19 a2 2 0 0 0 2 2 L15.5 21 a2 2 0 0 0 2 -2 L17.5 7.5" />
-      {/* $ glyph filled, no stroke. system-ui keeps the shape consistent across platforms. */}
+      <path d="M8 3 L16 3" />
+      <path d="M8 3 L8 5" />
+      <path d="M16 3 L16 5" />
+      {/* Screw band — slightly wider than the lid, narrower than the body */}
+      <path d="M6 5 L18 5" />
+      <path d="M6 5 L6 7.5" />
+      <path d="M18 5 L18 7.5" />
+      <path d="M6 7.5 L18 7.5" />
+      {/* Jar body — squatter (wider than it is tall) so it reads as mason jar
+          rather than tall vase, with a rounded bottom that suggests glass curve. */}
+      <path d="M4 7.5 L4 18 a2.5 2.5 0 0 0 2.5 2.5 L17.5 20.5 a2.5 2.5 0 0 0 2.5 -2.5 L20 7.5" />
+      {/* $ glyph in upper jar — small enough to leave room for coins below.
+          Filled, no stroke. system-ui keeps the shape consistent across platforms. */}
       <text
         x="12"
-        y="17"
+        y="13.5"
         textAnchor="middle"
-        fontSize="8"
+        fontSize="7"
         fontFamily="system-ui, -apple-system, sans-serif"
         fontWeight="700"
         fill="var(--accent)"
@@ -73,6 +75,10 @@ export default function TipJarIcon({ size = 24, active = false, onClick }) {
       >
         $
       </text>
+      {/* Coin layer at the bottom of the jar — two thin ellipses suggest a
+          stack of coins resting in the bottom, viewed from the side. */}
+      <ellipse cx="12" cy="17" rx="5" ry="0.6" />
+      <ellipse cx="12" cy="18.5" rx="4.5" ry="0.6" />
     </svg>
   )
 }
