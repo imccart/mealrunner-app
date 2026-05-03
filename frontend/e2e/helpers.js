@@ -77,4 +77,48 @@ export async function stageGroceryRow(page, { id, receipt_status = "", meal_ids 
   }
 }
 
+export async function createGroceryRow(page, fields) {
+  const secret = process.env.PLAYWRIGHT_TEST_SECRET || "";
+  const resp = await page.request.post("/api/admin/e2e-create-grocery-row", {
+    data: { secret, ...fields },
+  });
+  if (!resp.ok()) {
+    throw new Error(
+      `POST /api/admin/e2e-create-grocery-row ${resp.status()}: ${await resp.text()}`,
+    );
+  }
+  return await resp.json();
+}
+
+export async function addRegular(page, name, shopping_group = "") {
+  const resp = await page.request.post("/api/regulars", {
+    data: { name, shopping_group, store_pref: "either" },
+  });
+  if (!resp.ok()) {
+    throw new Error(`POST /api/regulars ${resp.status()}: ${await resp.text()}`);
+  }
+  return await resp.json();
+}
+
+export async function addRegularsToGrocery(page, names) {
+  const resp = await page.request.post("/api/grocery/add-regulars", {
+    data: { selected: names },
+  });
+  if (!resp.ok()) {
+    throw new Error(
+      `POST /api/grocery/add-regulars ${resp.status()}: ${await resp.text()}`,
+    );
+  }
+  return await resp.json();
+}
+
+export function dateOffset(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export { expect };

@@ -5243,6 +5243,55 @@ async def e2e_stage_grocery_row(body: dict):
     return {"ok": True}
 
 
+@router.post("/admin/e2e-create-grocery-row")
+async def e2e_create_grocery_row(body: dict, request: Request):
+    """Playwright test scaffold: INSERT a fully-formed grocery_items row for
+    the authenticated test user. Lets longitudinal tests stage what looks
+    like accumulated history (e.g. dozens of stale receipt-matched rows
+    from prior cycles) without driving them through the real flows. Only
+    active when PLAYWRIGHT_TEST_SECRET is set.
+    """
+    from mealrunner.web.auth import e2e_enabled, verify_e2e_secret
+
+    if not e2e_enabled():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    if not verify_e2e_secret(body.get("secret", "")):
+        return JSONResponse({"error": "Invalid secret"}, status_code=401)
+
+    user_id = request.state.user_id
+    if not body.get("name"):
+        return JSONResponse({"error": "name required"}, status_code=400)
+
+    conn = _conn()
+    row = conn.execute(
+        text("""INSERT INTO grocery_items
+                (user_id, name, shopping_group, source, for_meals, meal_ids,
+                 meal_count, checked, have_it, removed, ordered, receipt_status,
+                 receipt_acknowledged)
+                VALUES (:user_id, :name, :shopping_group, :source, :for_meals,
+                        :meal_ids, :meal_count, :checked, :have_it, :removed,
+                        :ordered, :receipt_status, :receipt_acknowledged)
+                RETURNING id"""),
+        {
+            "user_id": user_id,
+            "name": body["name"],
+            "shopping_group": body.get("shopping_group", "other"),
+            "source": body.get("source", "extra"),
+            "for_meals": body.get("for_meals", ""),
+            "meal_ids": body.get("meal_ids", ""),
+            "meal_count": int(body.get("meal_count", 0)),
+            "checked": int(bool(body.get("checked", False))),
+            "have_it": int(bool(body.get("have_it", False))),
+            "removed": int(bool(body.get("removed", False))),
+            "ordered": int(bool(body.get("ordered", False))),
+            "receipt_status": body.get("receipt_status", ""),
+            "receipt_acknowledged": int(bool(body.get("receipt_acknowledged", False))),
+        },
+    ).fetchone()
+    conn.commit()
+    return {"ok": True, "id": row["id"]}
+
+
 @router.post("/feedback/{feedback_id}/respond")
 async def respond_to_feedback(feedback_id: int, body: dict, request: Request):
     """Admin: respond to a feedback item."""
