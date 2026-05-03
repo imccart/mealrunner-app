@@ -221,13 +221,15 @@ test.describe("Grocery flows", () => {
 
     // Look up meal_id A for the seeded date so we can keep it in meal_ids
     // (this row is "still attached to a meal currently on the plan").
+    // /api/meals shape: days[].meal.id (NOT days[].id).
     const mealsBeforeBuy = await (
       await authedPage.request.get("/api/meals")
     ).json();
     const dayA = (mealsBeforeBuy.days || []).find((d) => d.date === date1);
     expect(dayA).toBeDefined();
-    expect(dayA.id).toBeTruthy();
-    const mealIdA = String(dayA.id);
+    expect(dayA.meal).toBeDefined();
+    expect(dayA.meal.id).toBeTruthy();
+    const mealIdA = String(dayA.meal.id);
 
     // Simulate buying the ingredient for meal A: row stays bound to A but
     // exits existing_map via receipt_status='matched'.

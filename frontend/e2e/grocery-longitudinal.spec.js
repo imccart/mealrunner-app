@@ -30,10 +30,12 @@ function activeNamesLower(groc) {
 async function fetchMealId(page, dateIso) {
   const meals = await (await page.request.get("/api/meals")).json();
   const day = (meals.days || []).find((d) => d.date === dateIso);
-  if (!day || !day.id) {
+  // /api/meals shape: days[].meal.id (the day struct has date/day_short/meal,
+  // and the meal struct has id/recipe_id/recipe_name/...).
+  if (!day || !day.meal || !day.meal.id) {
     throw new Error(`No meal found on ${dateIso}`);
   }
-  return String(day.id);
+  return String(day.meal.id);
 }
 
 test.describe("Grocery longitudinal", () => {
