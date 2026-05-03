@@ -57,25 +57,27 @@ export default function TipJarIcon({ size = 24, active = false, onClick }) {
           transition: 'opacity 0.2s ease',
         }}
       >
-        {/* Lid disc */}
-        <path d="M8 3 L16 3" />
-        <path d="M8 3 L8 5" />
-        <path d="M16 3 L16 5" />
-        {/* Coin slot — a thicker stroke in the center of the lid is the
+        {/* Lid disc — spans y=2.5..4.5 so total icon height matches the
+            spoon and apron in the same nav row. */}
+        <path d="M8 2.5 L16 2.5" />
+        <path d="M8 2.5 L8 4.5" />
+        <path d="M16 2.5 L16 4.5" />
+        {/* Coin slot — a thicker stroke at the center of the lid is the
             piggy-bank cue people read instantly as "deposit here". */}
-        <path d="M10.5 4 L13.5 4" strokeWidth="1.8" />
+        <path d="M10.5 3.5 L13.5 3.5" strokeWidth="1.8" />
         {/* Screw band */}
-        <path d="M6 5 L18 5" />
-        <path d="M6 5 L6 7.5" />
-        <path d="M18 5 L18 7.5" />
-        <path d="M6 7.5 L18 7.5" />
-        {/* Jar body — wider than tall so it reads as a squat mason jar. */}
-        <path d="M4 7.5 L4 18 a2.5 2.5 0 0 0 2.5 2.5 L17.5 20.5 a2.5 2.5 0 0 0 2.5 -2.5 L20 7.5" />
-        {/* $ glyph dominates the body interior. system-ui keeps the shape
-            consistent across platforms; bolder weight reads better at 22px. */}
+        <path d="M6 4.5 L18 4.5" />
+        <path d="M6 4.5 L6 7" />
+        <path d="M18 4.5 L18 7" />
+        <path d="M6 7 L18 7" />
+        {/* Jar body — wide squat mason jar, taller than before so the
+            overall icon height is comparable to the spoon. */}
+        <path d="M4 7 L4 19 a2.5 2.5 0 0 0 2.5 2.5 L17.5 21.5 a2.5 2.5 0 0 0 2.5 -2.5 L20 7" />
+        {/* $ glyph low in the body so it sits in the bottom half — matches
+            how a real tip jar looks with a couple bills sloshed in the bottom. */}
         <text
           x="12"
-          y="16.5"
+          y="18.5"
           textAnchor="middle"
           fontSize="10"
           fontFamily="system-ui, -apple-system, sans-serif"
