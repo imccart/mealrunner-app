@@ -1,8 +1,9 @@
 import BentSpoonIcon from './BentSpoonIcon'
 import ApronIcon from './ApronIcon'
+import TipJarIcon from './TipJarIcon'
 import runnerRImg from '../assets/runner-r.png'
 
-export default function Nav({ page, setPage, kitchenOpen, onToggleKitchen, prefsOpen, onTogglePrefs, isWide }) {
+export default function Nav({ page, setPage, kitchenOpen, onToggleKitchen, tipJarOpen, onToggleTipJar, prefsOpen, onTogglePrefs, isWide }) {
   const link = (name, label) => (
     <a
       href="#"
@@ -32,6 +33,13 @@ export default function Nav({ page, setPage, kitchenOpen, onToggleKitchen, prefs
               size={22}
               active={kitchenOpen}
               onClick={onToggleKitchen}
+            />
+          </span>
+          <span data-tour="tipjar" aria-label="Tip jar" title="Tip jar">
+            <TipJarIcon
+              size={22}
+              active={tipJarOpen}
+              onClick={onToggleTipJar}
             />
           </span>
           <span data-tour="account">

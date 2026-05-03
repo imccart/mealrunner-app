@@ -1,0 +1,278 @@
+.tipSheet {
+  padding: 8px 4px 24px;
+}
+
+.tipHeader {
+  margin-bottom: 18px;
+}
+
+.tipTitle {
+  font-family: 'Playfair Display', serif;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 6px 0;
+}
+
+.tipSubtitle {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.tipModeToggle {
+  display: flex;
+  gap: 0;
+  background: var(--surface-soft, #f4ede4);
+  border-radius: 999px;
+  padding: 4px;
+  margin: 0 0 18px 0;
+}
+
+.tipModeBtn {
+  flex: 1;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tipModeBtn.active {
+  background: var(--accent);
+  color: var(--surface, #fff);
+}
+
+.tipPresets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.tipPresets.twoCol {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.tipPresetBtn {
+  padding: 16px 8px;
+  border: 1.5px solid var(--border, #e0d8ce);
+  background: var(--surface, #fff);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.tipPresetBtn:hover {
+  border-color: var(--accent);
+}
+
+.tipPresetBtn.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--surface, #fff);
+}
+
+.tipCustomLabel {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.tipCustomInput {
+  width: 100%;
+  padding: 14px 14px 14px 36px;
+  border: 1.5px solid var(--border, #e0d8ce);
+  background: var(--surface, #fff);
+  font-family: inherit;
+  font-size: 18px;
+  color: var(--ink);
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
+.tipCustomInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tipCustomWrap {
+  position: relative;
+  margin-bottom: 18px;
+}
+
+.tipCustomDollar {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.tipSubmit {
+  width: 100%;
+  padding: 16px;
+  border: none;
+  background: var(--accent);
+  color: var(--surface, #fff);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.tipSubmit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tipError {
+  color: var(--danger, #c0392b);
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
+.tipFakeBox {
+  background: var(--surface-soft, #f4ede4);
+  border: 1px dashed var(--border, #e0d8ce);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.tipFakeBoxTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 4px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tipFakeBoxBody {
+  font-size: 14px;
+  color: var(--ink);
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+}
+
+.tipFakeCompleteBtn {
+  width: 100%;
+  padding: 12px;
+  background: var(--ink);
+  color: var(--surface, #fff);
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.tipFakeCompleteBtn:disabled {
+  opacity: 0.5;
+}
+
+.tipThanks {
+  text-align: center;
+  padding: 24px 16px;
+}
+
+.tipThanksTitle {
+  font-family: 'Playfair Display', serif;
+  font-size: 22px;
+  color: var(--ink);
+  margin: 0 0 8px 0;
+}
+
+.tipThanksBody {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 18px 0;
+  line-height: 1.4;
+}
+
+.tipActiveBox {
+  background: var(--surface-soft, #f4ede4);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tipActiveLabel {
+  font-size: 14px;
+  color: var(--ink);
+  flex: 1;
+}
+
+.tipActiveLabel strong {
+  font-weight: 600;
+}
+
+.tipManageBtn {
+  padding: 8px 14px;
+  background: var(--surface, #fff);
+  border: 1.5px solid var(--border, #e0d8ce);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.tipHistory {
+  margin-top: 24px;
+}
+
+.tipHistoryTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 10px 0;
+}
+
+.tipHistoryItem {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border, #e0d8ce);
+  font-size: 14px;
+}
+
+.tipHistoryItem:last-child {
+  border-bottom: none;
+}
+
+.tipHistoryItemDate {
+  color: var(--muted);
+}
+
+.tipUnavailable {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}

@@ -8,6 +8,7 @@ import OrderPage from './components/OrderPage'
 import ReceiptPage from './components/ReceiptPage'
 import PreferencesSheet from './components/PreferencesSheet'
 import MyKitchenSheet from './components/MyKitchenSheet'
+import TipJarSheet from './components/TipJarSheet'
 import OnboardingFlow, { WelcomeScreen } from './components/OnboardingFlow'
 import LoginPage from './components/LoginPage'
 import HouseholdInvitePrompt from './components/HouseholdInvitePrompt'
@@ -41,6 +42,7 @@ function App() {
   const [page, setPage] = useState('plan')
   const [showPrefs, setShowPrefs] = useState(false)
   const [showKitchen, setShowKitchen] = useState(false)
+  const [showTipJar, setShowTipJar] = useState(false)
   const [authed, setAuthed] = useState(null)
   const [onboardingDone, setOnboardingDone] = useState(null)
   const [welcomed, setWelcomed] = useState(() => localStorage.getItem('mealrunner_welcomed') === 'true')
@@ -137,7 +139,7 @@ function App() {
 
   return (
     <div className="app">
-      <Nav page={page} setPage={setPage} kitchenOpen={showKitchen} onToggleKitchen={() => setShowKitchen(k => !k)} prefsOpen={showPrefs} onTogglePrefs={() => setShowPrefs(p => !p)} isWide={isWide} />
+      <Nav page={page} setPage={setPage} kitchenOpen={showKitchen} onToggleKitchen={() => setShowKitchen(k => !k)} tipJarOpen={showTipJar} onToggleTipJar={() => setShowTipJar(t => !t)} prefsOpen={showPrefs} onTogglePrefs={() => setShowPrefs(p => !p)} isWide={isWide} />
       <main {...(!isWide ? { onTouchStart: swipeHandlers.onTouchStart, onTouchMove: swipeHandlers.onTouchMove, onTouchEnd: swipeHandlers.onTouchEnd } : {})} style={!isWide ? swipeHandlers.style : undefined}>
         {feedbackResponses.map(fr => (
           <div key={fr.id} className="feedback-response-banner">
@@ -196,6 +198,7 @@ function App() {
       </nav>
 
       {showKitchen && <MyKitchenSheet onClose={() => setShowKitchen(false)} />}
+      {showTipJar && <TipJarSheet onClose={() => setShowTipJar(false)} />}
       {showPrefs && <PreferencesSheet onClose={() => setShowPrefs(false)} onStartTour={() => { setShowPrefs(false); setTourActive(true) }} />}
       {tourActive && <TourOverlay onComplete={() => setTourActive(false)} />}
     </div>

@@ -52,6 +52,9 @@ PUBLIC_PATHS = {
     "/api/auth/e2e-login",
     "/api/admin/e2e-cleanup",
     "/api/kroger/callback",
+    # Stripe sends webhooks server-to-server with no session cookie. Auth
+    # is handled by the Stripe-Signature HMAC verified inside the handler.
+    "/api/stripe/webhook",
 }
 
 PUBLIC_PREFIXES = (

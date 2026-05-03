@@ -5314,6 +5314,450 @@ async def respond_to_feedback(feedback_id: int, body: dict, request: Request):
     return {"ok": True}
 
 
+# ── Tip jar ──────────────────────────────────────────────
+
+
+# Stripe Price floor is $0.50; we use $1 because below that fees ($0.30 + 2.9%)
+# eat most of the tip. $1000 cap is sanity, not policy.
+_TIP_MIN_CENTS = 100
+_TIP_MAX_CENTS = 100000
+
+
+def _monthly_price_id(amount_cents: int) -> str | None:
+    """Map a monthly preset amount to its Stripe Price id from env vars.
+    Pre-launch (no Stripe account yet), falls through to a deterministic fake
+    Price id when stripe_client is in fake mode so the e2e flow keeps working.
+    """
+    import os as _os
+    mapping = {
+        500: _os.environ.get("STRIPE_PRICE_TIP_MONTHLY_5", ""),
+        1000: _os.environ.get("STRIPE_PRICE_TIP_MONTHLY_10", ""),
+    }
+    pid = mapping.get(amount_cents, "")
+    if pid:
+        return pid
+    from mealrunner.stripe_client import _is_fake_mode
+    if _is_fake_mode():
+        return f"price_test_monthly_{amount_cents}"
+    return None
+
+
+def _tip_return_url(request: Request) -> str:
+    """Where Embedded Checkout sends the user after completion. The
+    {CHECKOUT_SESSION_ID} placeholder is filled in by Stripe so the success
+    page can fetch the session and confirm the result."""
+    import os as _os
+    base = _os.environ.get("APP_BASE_URL", "")
+    if base:
+        return f"{base}/app/tip-thanks?session_id={{CHECKOUT_SESSION_ID}}"
+    return f"{request.url.scheme}://{request.url.netloc}/app/tip-thanks?session_id={{CHECKOUT_SESSION_ID}}"
+
+
+@router.post("/tip/checkout-session")
+async def create_tip_checkout_session(body: dict, request: Request):
+    """Create an Embedded Checkout Session for a tip. Records a pending row
+    in `tips` keyed on the Stripe session id; the webhook flips status to
+    succeeded/failed. Returns the Embedded Checkout client_secret.
+    """
+    from mealrunner.stripe_client import (
+        is_configured,
+        create_one_time_checkout_session,
+        create_monthly_checkout_session,
+    )
+
+    if not is_configured():
+        return JSONResponse(
+            {"ok": False, "error": "Tipping isn't set up yet"}, status_code=503
+        )
+
+    real_user_id = getattr(request.state, "real_user_id", request.state.user_id)
+    mode = body.get("mode")
+    if mode not in ("one_time", "monthly"):
+        return JSONResponse(
+            {"ok": False, "error": "mode must be 'one_time' or 'monthly'"}, status_code=400
+        )
+    try:
+        amount_cents = int(body.get("amount_cents", 0))
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "amount_cents must be int"}, status_code=400)
+    if amount_cents < _TIP_MIN_CENTS or amount_cents > _TIP_MAX_CENTS:
+        return JSONResponse(
+            {"ok": False, "error": f"amount_cents must be between {_TIP_MIN_CENTS} and {_TIP_MAX_CENTS}"},
+            status_code=400,
+        )
+
+    conn = _conn()
+    user_row = conn.execute(
+        text("SELECT email FROM users WHERE id = :uid"), {"uid": real_user_id}
+    ).fetchone()
+    customer_email = user_row["email"] if user_row else None
+
+    return_url = _tip_return_url(request)
+
+    try:
+        if mode == "one_time":
+            session = create_one_time_checkout_session(
+                user_id=real_user_id,
+                amount_cents=amount_cents,
+                return_url=return_url,
+                customer_email=customer_email,
+            )
+        else:
+            price_id = _monthly_price_id(amount_cents)
+            if not price_id:
+                return JSONResponse(
+                    {"ok": False, "error": "Monthly amount not configured"},
+                    status_code=400,
+                )
+            session = create_monthly_checkout_session(
+                user_id=real_user_id,
+                price_id=price_id,
+                return_url=return_url,
+                customer_email=customer_email,
+            )
+    except Exception:
+        logger.exception("Stripe checkout session creation failed")
+        return JSONResponse({"ok": False, "error": "Stripe error"}, status_code=502)
+
+    conn.execute(
+        text("""INSERT INTO tips
+                  (user_id, stripe_session_id, mode, amount_cents, currency, status)
+                  VALUES (:uid, :sid, :mode, :amt, 'usd', 'pending')
+                  ON CONFLICT (stripe_session_id) DO NOTHING"""),
+        {"uid": real_user_id, "sid": session["id"], "mode": mode, "amt": amount_cents},
+    )
+    conn.commit()
+    from mealrunner.stripe_client import _is_fake_mode
+    return {
+        "ok": True,
+        "client_secret": session["client_secret"],
+        "session_id": session["id"],
+        "fake": _is_fake_mode(),
+    }
+
+
+@router.get("/tip/history")
+async def tip_history(request: Request):
+    """Return the user's succeeded tips, most recent first, plus the active
+    subscription id (NULL = no active monthly tip).
+    """
+    user_id = getattr(request.state, "real_user_id", request.state.user_id)
+    conn = _conn()
+    rows = conn.execute(
+        text("""SELECT id, mode, amount_cents, currency, status,
+                       stripe_subscription_id, created_at
+                  FROM tips
+                  WHERE user_id = :uid AND status = 'succeeded'
+                  ORDER BY created_at DESC
+                  LIMIT 50"""),
+        {"uid": user_id},
+    ).fetchall()
+    items = [{
+        "id": r["id"],
+        "mode": r["mode"],
+        "amount_cents": r["amount_cents"],
+        "currency": r["currency"],
+        "is_recurring": bool(r["stripe_subscription_id"]),
+        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+    } for r in rows]
+    user_row = conn.execute(
+        text("SELECT active_tip_subscription_id FROM users WHERE id = :uid"),
+        {"uid": user_id},
+    ).fetchone()
+    return {
+        "ok": True,
+        "tips": items,
+        "active_subscription_id": user_row["active_tip_subscription_id"] if user_row else None,
+    }
+
+
+@router.post("/tip/portal")
+async def tip_customer_portal(request: Request):
+    """Create a Stripe Customer Portal session for managing the user's monthly
+    subscription. Frontend redirects the user to the returned URL.
+    """
+    from mealrunner.stripe_client import is_configured, retrieve_session, customer_portal_url
+
+    if not is_configured():
+        return JSONResponse({"ok": False, "error": "Tipping isn't set up yet"}, status_code=503)
+
+    user_id = getattr(request.state, "real_user_id", request.state.user_id)
+    conn = _conn()
+    sub_row = conn.execute(
+        text("""SELECT stripe_session_id FROM tips
+                  WHERE user_id = :uid
+                    AND stripe_subscription_id IS NOT NULL
+                    AND status = 'succeeded'
+                  ORDER BY created_at DESC LIMIT 1"""),
+        {"uid": user_id},
+    ).fetchone()
+    if not sub_row:
+        return JSONResponse({"ok": False, "error": "No subscription found"}, status_code=404)
+
+    try:
+        session = retrieve_session(sub_row["stripe_session_id"])
+        customer_id = session.get("customer")
+        if not customer_id:
+            return JSONResponse({"ok": False, "error": "Customer not found"}, status_code=500)
+        import os as _os
+        base = _os.environ.get("APP_BASE_URL", "")
+        return_url = f"{base}/app" if base else f"{request.url.scheme}://{request.url.netloc}/app"
+        portal_url = customer_portal_url(customer_id, return_url)
+    except Exception:
+        logger.exception("Stripe customer portal failed")
+        return JSONResponse({"ok": False, "error": "Stripe error"}, status_code=502)
+
+    return {"ok": True, "url": portal_url}
+
+
+@router.post("/tip/dev-complete-session")
+async def tip_dev_complete_session(body: dict, request: Request):
+    """Fake-mode-only: let the logged-in user simulate a successful Stripe
+    completion for one of their pending tip sessions. Lets us click through
+    the tip flow on staging before a real Stripe account is configured;
+    returns 404 outside fake mode. Defense in depth: only the user who
+    created the session can complete it.
+    """
+    from mealrunner.stripe_client import _is_fake_mode
+    if not _is_fake_mode():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    real_user_id = getattr(request.state, "real_user_id", request.state.user_id)
+    sid = body.get("session_id", "")
+    if not sid:
+        return JSONResponse({"ok": False, "error": "session_id required"}, status_code=400)
+    conn = _conn()
+    row = conn.execute(
+        text("SELECT user_id, mode FROM tips WHERE stripe_session_id = :sid"),
+        {"sid": sid},
+    ).fetchone()
+    if not row or row["user_id"] != real_user_id:
+        return JSONResponse({"ok": False, "error": "session not found"}, status_code=404)
+    subscription_id = body.get("subscription_id")
+    if row["mode"] == "monthly" and not subscription_id:
+        import secrets as _secrets
+        subscription_id = f"sub_test_{_secrets.token_hex(6)}"
+    fake_event = {
+        "type": "checkout.session.completed",
+        "data": {"object": {"id": sid, "subscription": subscription_id}},
+    }
+    return _handle_stripe_event(fake_event)
+
+
+@router.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    """Receive verified Stripe events. Public endpoint (auth bypassed in
+    auth.py PUBLIC_PATHS) — auth is the Stripe-Signature HMAC, not a session.
+    """
+    from mealrunner.stripe_client import construct_webhook_event
+
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+    try:
+        event = construct_webhook_event(payload, sig_header)
+    except Exception as e:
+        logger.warning("Stripe webhook signature failure: %s", e)
+        return JSONResponse({"ok": False}, status_code=400)
+    return _handle_stripe_event(event)
+
+
+def _handle_stripe_event(event: dict) -> dict:
+    """Dispatch a Stripe event (verified webhook OR e2e-simulated) to its
+    DB-side handler. Idempotent — every INSERT uses an ON CONFLICT clause
+    keyed on the Stripe id, so retries don't duplicate rows.
+    """
+    etype = event.get("type", "")
+    obj = event.get("data", {}).get("object", {})
+    conn = _conn()
+
+    if etype == "checkout.session.completed":
+        sid = obj.get("id", "")
+        subscription_id = obj.get("subscription") or None
+        conn.execute(
+            text("""UPDATE tips
+                      SET status = 'succeeded', stripe_subscription_id = :sub
+                      WHERE stripe_session_id = :sid"""),
+            {"sid": sid, "sub": subscription_id},
+        )
+        if subscription_id:
+            user_row = conn.execute(
+                text("SELECT user_id FROM tips WHERE stripe_session_id = :sid"),
+                {"sid": sid},
+            ).fetchone()
+            if user_row:
+                conn.execute(
+                    text("UPDATE users SET active_tip_subscription_id = :sub WHERE id = :uid"),
+                    {"sub": subscription_id, "uid": user_row["user_id"]},
+                )
+        conn.commit()
+
+    elif etype == "invoice.paid":
+        # The first invoice for a new subscription has billing_reason
+        # 'subscription_create'. We already recorded that row via
+        # checkout.session.completed; skip to avoid duplicate.
+        billing_reason = obj.get("billing_reason", "")
+        if billing_reason == "subscription_create":
+            return {"ok": True, "ignored": "initial invoice covered by checkout.session.completed"}
+        sub_id = obj.get("subscription") or ""
+        invoice_id = obj.get("id", "")
+        amount_paid = int(obj.get("amount_paid") or 0)
+        currency = obj.get("currency", "usd")
+        user_row = conn.execute(
+            text("""SELECT user_id FROM tips
+                      WHERE stripe_subscription_id = :sub
+                      ORDER BY created_at DESC LIMIT 1"""),
+            {"sub": sub_id},
+        ).fetchone()
+        if not user_row:
+            return {"ok": True, "ignored": "subscription not found in tips"}
+        conn.execute(
+            text("""INSERT INTO tips
+                      (user_id, stripe_session_id, stripe_subscription_id, stripe_invoice_id,
+                       mode, amount_cents, currency, status)
+                      VALUES (:uid, :sid, :sub, :inv, 'monthly', :amt, :cur, 'succeeded')
+                      ON CONFLICT (stripe_invoice_id) DO NOTHING"""),
+            {
+                "uid": user_row["user_id"],
+                "sid": f"renewal_{invoice_id}",
+                "sub": sub_id,
+                "inv": invoice_id,
+                "amt": amount_paid,
+                "cur": currency,
+            },
+        )
+        conn.commit()
+
+    elif etype == "invoice.payment_failed":
+        sub_id = obj.get("subscription") or ""
+        invoice_id = obj.get("id", "")
+        amount_due = int(obj.get("amount_due") or 0)
+        currency = obj.get("currency", "usd")
+        user_row = conn.execute(
+            text("""SELECT user_id FROM tips
+                      WHERE stripe_subscription_id = :sub
+                      ORDER BY created_at DESC LIMIT 1"""),
+            {"sub": sub_id},
+        ).fetchone()
+        if user_row:
+            conn.execute(
+                text("""INSERT INTO tips
+                          (user_id, stripe_session_id, stripe_subscription_id, stripe_invoice_id,
+                           mode, amount_cents, currency, status)
+                          VALUES (:uid, :sid, :sub, :inv, 'monthly', :amt, :cur, 'failed')
+                          ON CONFLICT (stripe_invoice_id) DO NOTHING"""),
+                {
+                    "uid": user_row["user_id"],
+                    "sid": f"failed_{invoice_id}",
+                    "sub": sub_id,
+                    "inv": invoice_id,
+                    "amt": amount_due,
+                    "cur": currency,
+                },
+            )
+            conn.commit()
+        # We do NOT clear active_tip_subscription_id here. Stripe handles
+        # retries via Smart Retries; the subscription is only really gone
+        # on customer.subscription.deleted.
+
+    elif etype == "customer.subscription.deleted":
+        sub_id = obj.get("id", "")
+        conn.execute(
+            text("""UPDATE users SET active_tip_subscription_id = NULL
+                      WHERE active_tip_subscription_id = :sub"""),
+            {"sub": sub_id},
+        )
+        conn.commit()
+
+    return {"ok": True, "type": etype}
+
+
+# ── Tip jar e2e simulators ───────────────────────────────
+
+
+@router.post("/admin/e2e-stripe-tip-completed")
+async def e2e_stripe_tip_completed(body: dict):
+    """Simulate Stripe's checkout.session.completed event for a session id.
+    Body: {secret, session_id, subscription_id?}. subscription_id is set for
+    the monthly happy-path test, NULL for one-time.
+    """
+    from mealrunner.web.auth import e2e_enabled, verify_e2e_secret
+    if not e2e_enabled():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    if not verify_e2e_secret(body.get("secret", "")):
+        return JSONResponse({"error": "Invalid secret"}, status_code=401)
+    fake_event = {
+        "type": "checkout.session.completed",
+        "data": {"object": {
+            "id": body.get("session_id", ""),
+            "subscription": body.get("subscription_id"),
+        }},
+    }
+    return _handle_stripe_event(fake_event)
+
+
+@router.post("/admin/e2e-stripe-subscription-renewal")
+async def e2e_stripe_subscription_renewal(body: dict):
+    """Simulate Stripe's invoice.paid for a subscription renewal (NOT the
+    initial invoice — that's covered by checkout.session.completed).
+    Body: {secret, subscription_id, amount_cents, invoice_id?, seq?}.
+    """
+    from mealrunner.web.auth import e2e_enabled, verify_e2e_secret
+    if not e2e_enabled():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    if not verify_e2e_secret(body.get("secret", "")):
+        return JSONResponse({"error": "Invalid secret"}, status_code=401)
+    sub_id = body.get("subscription_id", "")
+    seq = body.get("seq", 1)
+    invoice_id = body.get("invoice_id") or f"in_test_{sub_id}_{seq}"
+    fake_event = {
+        "type": "invoice.paid",
+        "data": {"object": {
+            "id": invoice_id,
+            "subscription": sub_id,
+            "amount_paid": int(body.get("amount_cents", 500)),
+            "currency": body.get("currency", "usd"),
+            "billing_reason": "subscription_cycle",
+        }},
+    }
+    return _handle_stripe_event(fake_event)
+
+
+@router.post("/admin/e2e-stripe-subscription-cancel")
+async def e2e_stripe_subscription_cancel(body: dict):
+    """Simulate customer.subscription.deleted — subscription cancelled."""
+    from mealrunner.web.auth import e2e_enabled, verify_e2e_secret
+    if not e2e_enabled():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    if not verify_e2e_secret(body.get("secret", "")):
+        return JSONResponse({"error": "Invalid secret"}, status_code=401)
+    fake_event = {
+        "type": "customer.subscription.deleted",
+        "data": {"object": {"id": body.get("subscription_id", "")}},
+    }
+    return _handle_stripe_event(fake_event)
+
+
+@router.post("/admin/e2e-stripe-payment-failed")
+async def e2e_stripe_payment_failed(body: dict):
+    """Simulate invoice.payment_failed — Stripe couldn't charge the card."""
+    from mealrunner.web.auth import e2e_enabled, verify_e2e_secret
+    if not e2e_enabled():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    if not verify_e2e_secret(body.get("secret", "")):
+        return JSONResponse({"error": "Invalid secret"}, status_code=401)
+    sub_id = body.get("subscription_id", "")
+    invoice_id = body.get("invoice_id") or f"in_test_failed_{sub_id}"
+    fake_event = {
+        "type": "invoice.payment_failed",
+        "data": {"object": {
+            "id": invoice_id,
+            "subscription": sub_id,
+            "amount_due": int(body.get("amount_cents", 500)),
+            "currency": body.get("currency", "usd"),
+        }},
+    }
+    return _handle_stripe_event(fake_event)
+
+
 # ── Helpers ──────────────────────────────────────────────
 
 

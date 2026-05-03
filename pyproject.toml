@@ -29,6 +29,7 @@ web = [
     "python-multipart>=0.0.9",
     "cryptography>=42.0",
     "google-auth>=2.29",
+    "stripe>=11.0",
 ]
 postgres = [
     "psycopg2-binary>=2.9",

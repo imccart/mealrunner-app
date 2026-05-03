@@ -457,6 +457,7 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("product_scores", "delivery", "INTEGER"),
         ("trip_items", "meal_ids", "TEXT NOT NULL DEFAULT ''"),
         ("trip_items", "receipt_acknowledged", "INTEGER NOT NULL DEFAULT 0"),
+        ("users", "active_tip_subscription_id", "TEXT"),
     ]
 
     for table_name, col_name, col_def in migrations:
@@ -651,6 +652,33 @@ def _run_column_migrations(conn: DictConnection) -> None:
         conn.commit()
     except Exception as e:
         print(f"[db]   nearby_stores table skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+    # Create tips table if missing — one row per Stripe charge.
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS tips (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id),
+                stripe_session_id TEXT UNIQUE NOT NULL,
+                stripe_subscription_id TEXT,
+                stripe_invoice_id TEXT UNIQUE,
+                mode TEXT NOT NULL,
+                amount_cents INTEGER NOT NULL,
+                currency TEXT NOT NULL DEFAULT 'usd',
+                status TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_tips_user_created ON tips (user_id, created_at DESC)"
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   tips table skipped: {e}", flush=True)
         try:
             conn.raw.rollback()
         except Exception:

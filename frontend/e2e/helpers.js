@@ -121,4 +121,58 @@ export function dateOffset(days) {
   return `${y}-${m}-${day}`;
 }
 
+// ── Tip jar helpers ─────────────────────────────────────
+
+export async function simulateTipCompleted(page, { sessionId, subscriptionId = null }) {
+  const secret = process.env.PLAYWRIGHT_TEST_SECRET || "";
+  const resp = await page.request.post("/api/admin/e2e-stripe-tip-completed", {
+    data: { secret, session_id: sessionId, subscription_id: subscriptionId },
+  });
+  if (!resp.ok()) {
+    throw new Error(
+      `POST /api/admin/e2e-stripe-tip-completed ${resp.status()}: ${await resp.text()}`,
+    );
+  }
+  return await resp.json();
+}
+
+export async function simulateSubscriptionRenewal(page, { subscriptionId, amountCents, seq = 1 }) {
+  const secret = process.env.PLAYWRIGHT_TEST_SECRET || "";
+  const resp = await page.request.post(
+    "/api/admin/e2e-stripe-subscription-renewal",
+    { data: { secret, subscription_id: subscriptionId, amount_cents: amountCents, seq } },
+  );
+  if (!resp.ok()) {
+    throw new Error(
+      `POST /api/admin/e2e-stripe-subscription-renewal ${resp.status()}: ${await resp.text()}`,
+    );
+  }
+}
+
+export async function simulateSubscriptionCancel(page, { subscriptionId }) {
+  const secret = process.env.PLAYWRIGHT_TEST_SECRET || "";
+  const resp = await page.request.post(
+    "/api/admin/e2e-stripe-subscription-cancel",
+    { data: { secret, subscription_id: subscriptionId } },
+  );
+  if (!resp.ok()) {
+    throw new Error(
+      `POST /api/admin/e2e-stripe-subscription-cancel ${resp.status()}: ${await resp.text()}`,
+    );
+  }
+}
+
+export async function simulatePaymentFailed(page, { subscriptionId, amountCents }) {
+  const secret = process.env.PLAYWRIGHT_TEST_SECRET || "";
+  const resp = await page.request.post(
+    "/api/admin/e2e-stripe-payment-failed",
+    { data: { secret, subscription_id: subscriptionId, amount_cents: amountCents } },
+  );
+  if (!resp.ok()) {
+    throw new Error(
+      `POST /api/admin/e2e-stripe-payment-failed ${resp.status()}: ${await resp.text()}`,
+    );
+  }
+}
+
 export { expect };

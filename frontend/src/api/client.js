@@ -344,4 +344,18 @@ export const api = {
     method: 'DELETE',
     body: JSON.stringify({ item, meal }),
   }),
+
+  // Tip jar
+  createTipCheckoutSession: (mode, amountCents) => request('/tip/checkout-session', {
+    method: 'POST',
+    body: JSON.stringify({ mode, amount_cents: amountCents }),
+  }),
+  getTipHistory: () => request('/tip/history'),
+  getTipPortalUrl: () => request('/tip/portal', { method: 'POST' }),
+  // Fake-mode only — lets us click through on staging before Stripe is wired.
+  // Returns 404 in production / when STRIPE_SECRET_KEY is configured.
+  devCompleteTipSession: (sessionId) => request('/tip/dev-complete-session', {
+    method: 'POST',
+    body: JSON.stringify({ session_id: sessionId }),
+  }),
 }

@@ -60,6 +60,9 @@ users = Table(
     Column("tos_version", Text, nullable=False, server_default=text("''")),
     Column("created_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
     Column("last_login", TS),
+    # Stripe subscription id when the user has an active monthly tip; NULL otherwise.
+    # Cleared by the customer.subscription.deleted webhook.
+    Column("active_tip_subscription_id", Text),
 )
 
 magic_links = Table(
@@ -496,6 +499,26 @@ settings = Table(
     Column("value", Text, nullable=False, server_default=text("''")),
     Column("updated_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
     UniqueConstraint("user_id", "key"),
+)
+
+# One row per Stripe charge. A monthly subscription that's run for 4 months
+# produces 4 rows: same stripe_subscription_id, distinct stripe_invoice_id.
+# Total raised = SUM(amount_cents) WHERE status='succeeded'.
+tips = Table(
+    "tips", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
+    # Initial Checkout Session id. UNIQUE so the webhook can dedup retried events.
+    Column("stripe_session_id", Text, unique=True, nullable=False),
+    # NULL for one-time, set for monthly initial + every renewal.
+    Column("stripe_subscription_id", Text),
+    # NULL for one-time and monthly initial; set per renewal. UNIQUE to dedup invoice.paid retries.
+    Column("stripe_invoice_id", Text, unique=True),
+    Column("mode", Text, nullable=False),  # 'one_time' | 'monthly'
+    Column("amount_cents", Integer, nullable=False),
+    Column("currency", Text, nullable=False, server_default=text("'usd'")),
+    Column("status", Text, nullable=False),  # 'pending' | 'succeeded' | 'failed'
+    Column("created_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
 )
 
 
