@@ -346,6 +346,7 @@ export const api = {
   }),
 
   // Tip jar
+  getStripeConfig: () => request('/tip/stripe-config'),
   createTipCheckoutSession: (mode, amountCents) => request('/tip/checkout-session', {
     method: 'POST',
     body: JSON.stringify({ mode, amount_cents: amountCents }),

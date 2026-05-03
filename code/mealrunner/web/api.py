@@ -5510,6 +5510,24 @@ async def tip_customer_portal(request: Request):
     return {"ok": True, "url": portal_url}
 
 
+@router.get("/tip/stripe-config")
+async def tip_stripe_config(request: Request):
+    """Return the Stripe publishable key so the frontend can boot the
+    Embedded Checkout iframe. Returns 503 when Stripe isn't configured —
+    frontend treats that as the cue to show the fake-mode UI instead.
+    """
+    import os as _os
+    from mealrunner.stripe_client import _is_fake_mode
+
+    pk = _os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+    if not pk:
+        return JSONResponse(
+            {"ok": False, "error": "Stripe publishable key not configured", "fake": _is_fake_mode()},
+            status_code=503,
+        )
+    return {"ok": True, "publishable_key": pk, "fake": False}
+
+
 @router.post("/tip/dev-complete-session")
 async def tip_dev_complete_session(body: dict, request: Request):
     """Fake-mode-only: let the logged-in user simulate a successful Stripe

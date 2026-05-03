@@ -188,6 +188,14 @@
   opacity: 0.5;
 }
 
+.tipCheckout {
+  /* Stripe Embedded Checkout iframe needs a sized container. The iframe is
+     responsive but won't render below a min-height; Stripe docs recommend
+     480px. */
+  min-height: 500px;
+  margin: 4px 0 0;
+}
+
 .tipThanks {
   text-align: center;
   padding: 24px 16px;

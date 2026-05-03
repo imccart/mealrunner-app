@@ -1,7 +1,23 @@
 import { useState, useEffect, useCallback } from 'react'
+import { loadStripe } from '@stripe/stripe-js'
+import { EmbeddedCheckoutProvider, EmbeddedCheckout } from '@stripe/react-stripe-js'
 import Sheet from './Sheet'
 import { api } from '../api/client'
 import styles from './TipJarSheet.module.css'
+
+// Memoize the Stripe promise across sheet open/close so we don't re-fetch
+// the config and re-init Stripe.js on every interaction. Module-level cache
+// is the pattern Stripe documents for React apps.
+let _stripePromise = null
+async function getStripePromise() {
+  if (_stripePromise) return _stripePromise
+  const config = await api.getStripeConfig()
+  if (!config?.publishable_key) {
+    throw new Error('Stripe publishable key missing')
+  }
+  _stripePromise = loadStripe(config.publishable_key)
+  return _stripePromise
+}
 
 const ONE_TIME_PRESETS = [500, 1000]   // $5, $10 (custom adds a third option)
 const MONTHLY_PRESETS = [500, 1000]    // $5, $10 only — Stripe needs Price objects
@@ -38,6 +54,12 @@ export default function TipJarSheet({ onClose }) {
   const [unavailable, setUnavailable] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
 
+  // Stripe.js promise — lazy-loaded only when a real (non-fake) checkout
+  // session is created. Avoids the ~200KB stripe-js download for users who
+  // open the sheet but don't proceed.
+  const [stripePromise, setStripePromise] = useState(null)
+  const [stripeLoadError, setStripeLoadError] = useState(false)
+
   const refreshHistory = useCallback(() => {
     setHistoryLoading(true)
     api.getTipHistory()
@@ -59,6 +81,16 @@ export default function TipJarSheet({ onClose }) {
     refreshHistory()
   }, [refreshHistory])
 
+  // When a real (non-fake) session is created, kick off Stripe.js load.
+  // Done lazily so the bundle only downloads when the user actually proceeds.
+  useEffect(() => {
+    if (pendingSession && !pendingSession.fake && !stripePromise) {
+      getStripePromise()
+        .then(setStripePromise)
+        .catch(() => setStripeLoadError(true))
+    }
+  }, [pendingSession, stripePromise])
+
   // When the user switches tabs, default to $5 and clear custom input.
   // Custom is only valid on one-time.
   function setModeReset(nextMode) {
@@ -79,6 +111,15 @@ export default function TipJarSheet({ onClose }) {
 
   const amountCents = resolveAmountCents()
   const submittable = amountCents != null && amountCents >= 100 && amountCents <= 100000
+
+  // Stripe iframe fires this when the payment flow completes. The webhook
+  // is the source of truth for DB state; this handler just drives the UI
+  // transition. Declared after `amountCents` so the deps array is in scope.
+  const handleEmbeddedComplete = useCallback(() => {
+    setThanksAmount(amountCents)
+    setPendingSession(null)
+    refreshHistory()
+  }, [amountCents, refreshHistory])
 
   async function handleSubmit() {
     if (!submittable) {
@@ -200,13 +241,27 @@ export default function TipJarSheet({ onClose }) {
                 {submitting ? 'Working...' : `Simulate $${(amountCents / 100).toFixed(2)} ${mode === 'monthly' ? '/mo' : 'tip'}`}
               </button>
             </div>
-          ) : (
+          ) : stripeLoadError ? (
             <div className={styles.tipFakeBox}>
               <p className={styles.tipFakeBoxBody}>
-                {/* TODO: when STRIPE_SECRET_KEY is configured, mount Stripe's
-                    <EmbeddedCheckout> here using pendingSession.client_secret. */}
-                Stripe Embedded Checkout would render here.
+                Couldn't load the payment form. Try again in a moment.
               </p>
+            </div>
+          ) : !stripePromise ? (
+            <div className={styles.tipFakeBox}>
+              <p className={styles.tipFakeBoxBody}>Loading payment form...</p>
+            </div>
+          ) : (
+            <div className={styles.tipCheckout} data-testid="tip-embedded-checkout">
+              <EmbeddedCheckoutProvider
+                stripe={stripePromise}
+                options={{
+                  clientSecret: pendingSession.client_secret,
+                  onComplete: handleEmbeddedComplete,
+                }}
+              >
+                <EmbeddedCheckout />
+              </EmbeddedCheckoutProvider>
             </div>
           )}
           {error && <p className={styles.tipError}>{error}</p>}
