@@ -1,18 +1,16 @@
 import { useRef } from 'react'
+import tipJarImg from '../assets/tip-jar.png'
 
-// Mason jar with a coin slot in the lid + a prominent $ in the body —
-// the lid slot is the single most recognizable "you put money in here" cue;
-// pairs with the wide squat jar shape to read as a tip jar at small sizes.
+// Mason jar tip-jar mark (DALL-E-generated PNG, processed via Pillow:
+// transparent background, tight-cropped, square-padded, ICC stripped).
+// Lives alongside runner-r.png as the project's other DALL-E asset.
 //
-// Shake on click is wrapped on a <span> rather than the <svg> because
-// CSS `transform-origin` on SVG root elements is finicky across browsers;
-// HTML elements behave consistently.
+// Shake animation lives on a wrapping <span>, not the <img>, so the
+// transform-origin pivot is predictable across browsers.
 export default function TipJarIcon({ size = 24, active = false, onClick }) {
   const wrapperRef = useRef(null)
 
   function handleClick(e) {
-    // Coin-rattle wobble — wide swings so the motion is perceptible even
-    // as the bottom-sheet animates in over the top of the icon.
     if (wrapperRef.current && typeof wrapperRef.current.animate === 'function') {
       wrapperRef.current.animate(
         [
@@ -35,59 +33,28 @@ export default function TipJarIcon({ size = 24, active = false, onClick }) {
       ref={wrapperRef}
       style={{
         display: 'inline-flex',
-        // Pivot from just below the jar base so the wobble looks like the
-        // jar swaying on a countertop, not spinning in place.
-        transformOrigin: '50% 95%',
+        // Pivot at the bottom of the icon so the wobble looks like the jar
+        // rocking on a countertop, not spinning in place.
+        transformOrigin: '50% 100%',
       }}
     >
-      <svg
+      <img
+        src={tipJarImg}
         width={size}
         height={size}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="var(--accent)"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        alt=""
         onClick={handleClick}
         style={{
           cursor: onClick ? 'pointer' : 'default',
           flexShrink: 0,
-          opacity: active ? 1 : 0.7,
+          opacity: active ? 1 : 0.75,
           transition: 'opacity 0.2s ease',
+          // Prevent native image-drag on desktop.
+          userSelect: 'none',
+          WebkitUserDrag: 'none',
         }}
-      >
-        {/* Lid disc — spans y=2.5..4.5 so total icon height matches the
-            spoon and apron in the same nav row. */}
-        <path d="M8 2.5 L16 2.5" />
-        <path d="M8 2.5 L8 4.5" />
-        <path d="M16 2.5 L16 4.5" />
-        {/* Coin slot — a thicker stroke at the center of the lid is the
-            piggy-bank cue people read instantly as "deposit here". */}
-        <path d="M10.5 3.5 L13.5 3.5" strokeWidth="1.8" />
-        {/* Screw band */}
-        <path d="M6 4.5 L18 4.5" />
-        <path d="M6 4.5 L6 7" />
-        <path d="M18 4.5 L18 7" />
-        <path d="M6 7 L18 7" />
-        {/* Jar body — wide squat mason jar, taller than before so the
-            overall icon height is comparable to the spoon. */}
-        <path d="M4 7 L4 19 a2.5 2.5 0 0 0 2.5 2.5 L17.5 21.5 a2.5 2.5 0 0 0 2.5 -2.5 L20 7" />
-        {/* $ glyph low in the body so it sits in the bottom half — matches
-            how a real tip jar looks with a couple bills sloshed in the bottom. */}
-        <text
-          x="12"
-          y="18.5"
-          textAnchor="middle"
-          fontSize="10"
-          fontFamily="system-ui, -apple-system, sans-serif"
-          fontWeight="700"
-          fill="var(--accent)"
-          stroke="none"
-        >
-          $
-        </text>
-      </svg>
+        draggable={false}
+      />
     </span>
   )
 }
