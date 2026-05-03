@@ -224,7 +224,7 @@ export default function TipJarSheet({ onClose }) {
         <div className={styles.tipHeader}>
           <h2 className={styles.tipTitle}>Tip jar</h2>
           <p className={styles.tipSubtitle}>
-            If MealRunner has earned its keep, throw something in. Optional, always.
+            Be sure to tip your app maker.
           </p>
         </div>
 
