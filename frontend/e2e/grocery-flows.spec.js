@@ -196,4 +196,61 @@ test.describe("Grocery flows", () => {
     const matches = activeNamesLower(after).filter((n) => n === targetLower);
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
+
+  test("buy ingredient for meal A, add meal B that needs same ingredient — fresh row appears for B", async ({
+    authedPage,
+  }) => {
+    // The whole point of meal_ids was to distinguish meal occurrences. If
+    // user buys X for meal A (row → receipt='matched', meal_ids='A'), then
+    // adds meal B that also wants X, the user expects X to appear on the
+    // grocery list FOR B. Per-name covered_keys collapsed both meals into
+    // a single boolean and blocked the insert. Per-meal-id covered tracking
+    // computes uncovered = fresh_need - covered, inserts only if non-empty,
+    // and uses uncovered for the new row's meal_ids/for_meals.
+    const libMeal = await pickLibraryMealWithIngredients(authedPage);
+    await seedLibraryMeal(authedPage, libMeal);
+
+    // Date1: meal A. First sync seeds meal-source rows.
+    const date1 = todayIso();
+    await setMealOnDate(authedPage, date1, libMeal.name);
+    const before = await fetchGrocery(authedPage);
+    const beforeItems = flattenActive(before);
+    expect(beforeItems.length).toBeGreaterThan(0);
+    const target = beforeItems[0];
+    const targetLower = target.name.toLowerCase();
+
+    // Look up meal_id A for the seeded date so we can keep it in meal_ids
+    // (this row is "still attached to a meal currently on the plan").
+    const mealsBeforeBuy = await (
+      await authedPage.request.get("/api/meals")
+    ).json();
+    const dayA = (mealsBeforeBuy.days || []).find((d) => d.date === date1);
+    expect(dayA).toBeDefined();
+    expect(dayA.id).toBeTruthy();
+    const mealIdA = String(dayA.id);
+
+    // Simulate buying the ingredient for meal A: row stays bound to A but
+    // exits existing_map via receipt_status='matched'.
+    await stageGroceryRow(authedPage, {
+      id: target.id,
+      receipt_status: "matched",
+      meal_ids: mealIdA,
+    });
+
+    // Now add meal B (same recipe, different date — gets a new meal_id).
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const date2 = `${tomorrow.getFullYear()}-${String(
+      tomorrow.getMonth() + 1,
+    ).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+    await setMealOnDate(authedPage, date2, libMeal.name);
+
+    // Next /api/grocery call: meal-sync sees fresh_need={A, B}, covered={A}
+    // (row1's meal_ids intersect active plan), uncovered={B}. Should insert
+    // a fresh meal-source row for B. Without per-meal-id tracking, the old
+    // covered_keys would say "X is already covered" and skip the insert.
+    const after = await fetchGrocery(authedPage);
+    const matches = activeNamesLower(after).filter((n) => n === targetLower);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
+  });
 });

@@ -966,6 +966,25 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
     for ids in meal_ids_by_name.values():
         all_active_meal_ids.update(ids)
 
+    # meal_id → recipe_name reverse map for filtering for_meals when a row
+    # serves only an uncovered subset of the meals that need this ingredient.
+    meal_id_to_name: dict[int, str] = {}
+    for name, ids in meal_ids_by_name.items():
+        for mid in ids:
+            meal_id_to_name[mid] = name
+
+    # Track WHICH meal_ids are covered, per canonical name. Earlier the
+    # logic collapsed everything to a per-name boolean ("is this name
+    # covered?"); that lost the per-meal_id resolution that the meal_ids
+    # column was added for in session 54. Concrete bug class:
+    #   - User buys frozen pizza for "Pizza Night A" (row → receipt='matched',
+    #     meal_ids='A').
+    #   - User adds "Pizza Night B" later (also wants frozen pizza).
+    #   - Old per-name logic: name was "covered" → no fresh row for B.
+    #   - Per-meal-id logic: B is uncovered → insert fresh row for B only.
+    # Stale legacy rows (pre-Phase-B, meal_ids='') have empty intersection
+    # with active plan and contribute no coverage at all — see the
+    # 2026-05-03 "Frozen Pizza Night" feedback id=108 fix.
     covered_rows = conn.execute(
         text("""SELECT name, meal_ids FROM grocery_items
                 WHERE user_id = :user_id
@@ -975,22 +994,48 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                   )"""),
         {"user_id": user_id},
     ).fetchall()
-    covered_keys: set[str] = set()
+    covered_meal_ids_by_key: dict[str, set[int]] = {}
     for r in covered_rows:
         row_meal_ids = {
             int(x) for x in (r["meal_ids"] or "").split(",") if x.strip().isdigit()
         }
-        if row_meal_ids & all_active_meal_ids:
-            covered_keys.add(compare_key(r["name"]))
+        relevant = row_meal_ids & all_active_meal_ids
+        if relevant:
+            key = compare_key(r["name"])
+            covered_meal_ids_by_key.setdefault(key, set()).update(relevant)
 
-    # Clean up phantom meal-source rows: any active meal-source entry whose
-    # canonical name is already covered by an in-flight ordered row OR a
-    # receipt-tagged row gets deleted here. The fix above prevents future
-    # phantoms; this loop back-fills cleanup for ones already in the DB.
-    phantom_keys = [
-        key for key, row in existing_map.items()
-        if row["source"] == "meal" and key in covered_keys
-    ]
+    def _effective_for(key: str) -> tuple[set[int], str, str, int]:
+        """Return (uncovered_ids, for_meals_str, meal_ids_str, count) for a
+        key that exists in fresh_meal_items. The "effective" need is the
+        subset of fresh_need not already served by covered rows."""
+        info = fresh_meal_items[key]
+        eff_ids = info["meal_ids"] - covered_meal_ids_by_key.get(key, set())
+        eff_names = sorted({
+            meal_id_to_name[mid] for mid in eff_ids if mid in meal_id_to_name
+        })
+        return (
+            eff_ids,
+            ",".join(eff_names),
+            ",".join(str(i) for i in sorted(eff_ids)),
+            len(eff_names),
+        )
+
+    # Clean up phantom meal-source rows: an active meal-source row whose
+    # fresh_need is FULLY covered by external ordered/receipt rows has
+    # nothing left to serve. Drop it. (Pre-refinement this fired any time
+    # the canonical name appeared in covered_rows, which deleted active
+    # rows that were still needed for an uncovered sibling meal — bug class
+    # called out in the user's "buy then re-add a meal that wants the same
+    # ingredient" scenario.)
+    phantom_keys: list[str] = []
+    for key, row in existing_map.items():
+        if row["source"] != "meal":
+            continue
+        if key not in fresh_meal_items:
+            continue
+        eff_ids, _, _, _ = _effective_for(key)
+        if not eff_ids:
+            phantom_keys.append(key)
     for key in phantom_keys:
         conn.execute(
             text("DELETE FROM grocery_items WHERE id = :id"),
@@ -1038,19 +1083,23 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
     # association without disturbing their state. No state reset, no source
     # change — the row stays whatever they originally added it as.
     for key, info in fresh_meal_items.items():
-        meal_ids_str = ",".join(str(i) for i in sorted(info["meal_ids"]))
+        eff_ids, eff_for_meals, eff_meal_ids_str, eff_count = _effective_for(key)
+        full_meal_ids_str = ",".join(str(i) for i in sorted(info["meal_ids"]))
         if key in existing_map:
             row = existing_map[key]
 
             if row["source"] != "meal":
                 # Attach meal association to a user-added row. Don't touch
-                # name / source / state.
+                # name / source / state. Use full fresh_need attribution
+                # here — the user added this row themselves and we don't
+                # want to silently strip meal context when something else
+                # happens to cover one of the meals.
                 conn.execute(
                     text("""UPDATE grocery_items SET
                            for_meals = :for_meals, meal_ids = :meal_ids,
                            meal_count = :meal_count
                        WHERE id = :id"""),
-                    {"for_meals": info["for_meals"], "meal_ids": meal_ids_str,
+                    {"for_meals": info["for_meals"], "meal_ids": full_meal_ids_str,
                      "meal_count": info["meal_count"], "id": row["id"]},
                 )
                 continue
@@ -1058,21 +1107,25 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
             old_meal_ids = {
                 int(x) for x in (row["meal_ids"] or "").split(",") if x.strip().isdigit()
             }
-            new_meal_ids = info["meal_ids"]
 
             if not old_meal_ids:
-                # Branch 1: legacy migration.
+                # Branch 1: legacy migration. Don't reset state.
                 conn.execute(
                     text("""UPDATE grocery_items SET
                            for_meals = :for_meals, meal_ids = :meal_ids,
                            meal_count = :meal_count, shopping_group = :group
                        WHERE id = :id"""),
-                    {"for_meals": info["for_meals"], "meal_ids": meal_ids_str,
-                     "meal_count": info["meal_count"],
+                    {"for_meals": eff_for_meals, "meal_ids": eff_meal_ids_str,
+                     "meal_count": eff_count,
                      "group": info["shopping_group"], "id": row["id"]},
                 )
-            elif new_meal_ids - old_meal_ids:
-                # Branch 2: new occurrence. Reset per-buy state.
+            elif eff_ids - old_meal_ids:
+                # Branch 2: new uncovered occurrence. Reset per-buy state.
+                # Branch detection uses effective (uncovered) meal_ids, not
+                # full fresh_need — otherwise newly-inserted rows would be
+                # immediately reset on the next sync because the row was
+                # inserted with only the uncovered subset and full fresh_need
+                # always contains the covered ids too.
                 reset_clause = """checked = 0, checked_at = NULL,
                                   have_it = 0, have_it_at = NULL,
                                   removed = 0, removed_at = NULL,
@@ -1089,35 +1142,38 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                            for_meals = :for_meals, meal_ids = :meal_ids,
                            meal_count = :meal_count, shopping_group = :group
                        WHERE id = :id"""),
-                    {"for_meals": info["for_meals"], "meal_ids": meal_ids_str,
-                     "meal_count": info["meal_count"],
+                    {"for_meals": eff_for_meals, "meal_ids": eff_meal_ids_str,
+                     "meal_count": eff_count,
                      "group": info["shopping_group"], "id": row["id"]},
                 )
             else:
-                # Branch 3: same occurrences. Preserve state.
+                # Branch 3: same uncovered occurrences. Preserve state.
                 conn.execute(
                     text("""UPDATE grocery_items SET
                            for_meals = :for_meals, meal_ids = :meal_ids,
                            meal_count = :meal_count, shopping_group = :group
                        WHERE id = :id"""),
-                    {"for_meals": info["for_meals"], "meal_ids": meal_ids_str,
-                     "meal_count": info["meal_count"],
+                    {"for_meals": eff_for_meals, "meal_ids": eff_meal_ids_str,
+                     "meal_count": eff_count,
                      "group": info["shopping_group"], "id": row["id"]},
                 )
         else:
-            if key in covered_keys:
-                # An in-flight ordered row already covers this canonical name.
-                # The order/receipt flow manages it; don't create a phantom
-                # active sibling.
+            if not eff_ids:
+                # Every meal that needs this ingredient is already served
+                # by an in-flight ordered row or a receipt-tagged row.
+                # Don't create a phantom active sibling.
                 continue
-            # No active row for this canonical name — insert a meal-source row.
+            # At least one meal_id is uncovered — insert a meal-source row
+            # for THAT subset. for_meals / meal_ids only list the uncovered
+            # meals so the row's attribution honestly reflects what it
+            # serves; the covered meals are served by their own rows.
             conn.execute(
                 text("""INSERT INTO grocery_items
                    (user_id, name, shopping_group, source, for_meals, meal_ids, meal_count)
                    VALUES (:user_id, :name, :group, 'meal', :for_meals, :meal_ids, :meal_count)"""),
                 {"user_id": user_id, "name": info["name"], "group": info["shopping_group"],
-                 "for_meals": info["for_meals"], "meal_ids": meal_ids_str,
-                 "meal_count": info["meal_count"]},
+                 "for_meals": eff_for_meals, "meal_ids": eff_meal_ids_str,
+                 "meal_count": eff_count},
             )
 
     conn.commit()
