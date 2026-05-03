@@ -65,4 +65,16 @@ export function todayIso() {
   return `${y}-${m}-${day}`;
 }
 
+export async function stageGroceryRow(page, { id, receipt_status = "", meal_ids = "" }) {
+  const secret = process.env.PLAYWRIGHT_TEST_SECRET || "";
+  const resp = await page.request.post("/api/admin/e2e-stage-grocery-row", {
+    data: { secret, id, receipt_status, meal_ids },
+  });
+  if (!resp.ok()) {
+    throw new Error(
+      `POST /api/admin/e2e-stage-grocery-row ${resp.status()}: ${await resp.text()}`,
+    );
+  }
+}
+
 export { expect };

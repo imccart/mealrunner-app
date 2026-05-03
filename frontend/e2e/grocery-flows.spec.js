@@ -3,6 +3,7 @@ import {
   pickLibraryMealWithIngredients,
   seedLibraryMeal,
   setMealOnDate,
+  stageGroceryRow,
   todayIso,
 } from "./helpers.js";
 
@@ -152,5 +153,47 @@ test.describe("Grocery flows", () => {
     // Next /api/grocery call should drop the orphaned meal-source row.
     const afterDel = await fetchGrocery(authedPage);
     expect(activeNamesLower(afterDel)).not.toContain(canonicalName);
+  });
+
+  test("stale receipt-tagged row from prior occurrence does not block fresh meal-sync insert", async ({
+    authedPage,
+  }) => {
+    // Regression: pre-Phase-B legacy rows (or any receipt-tagged row whose
+    // meal_ids no longer intersect the active plan) used to block meal-sync
+    // from inserting a fresh meal-source sibling for the same canonical name.
+    // Symptom from prod feedback id=108 (2026-05-03): user added "Frozen
+    // Pizza Night" today; the March-29 receipt-matched rows for "frozen
+    // pizza" and "edamame" sat with meal_ids='' AND were silently in
+    // covered_keys (which only checked receipt_status != ''), so the new
+    // meal's ingredients never populated to the grocery list. Fix: covered
+    // _keys requires the covering row's meal_ids to intersect the active
+    // plan's meal_ids.
+    const libMeal = await pickLibraryMealWithIngredients(authedPage);
+    await seedLibraryMeal(authedPage, libMeal);
+    await setMealOnDate(authedPage, todayIso(), libMeal.name);
+
+    // First sync: meal-source rows get inserted normally.
+    const before = await fetchGrocery(authedPage);
+    const beforeItems = flattenActive(before);
+    expect(beforeItems.length).toBeGreaterThan(0);
+    const target = beforeItems[0];
+    const targetLower = target.name.toLowerCase();
+
+    // Stage the row to look like a stale legacy artifact: receipt-matched
+    // (so it's excluded from existing_map) AND meal_ids='' (so under the
+    // fixed logic, the row's meal_ids don't intersect the active plan's
+    // meal_ids and the canonical name is NOT covered).
+    await stageGroceryRow(authedPage, {
+      id: target.id,
+      receipt_status: "matched",
+      meal_ids: "",
+    });
+
+    // Next /api/grocery call: meal-sync should insert a fresh meal-source
+    // row for this canonical name. Without the fix the active list comes
+    // back empty for this name (covered_keys blocks the insert).
+    const after = await fetchGrocery(authedPage);
+    const matches = activeNamesLower(after).filter((n) => n === targetLower);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -951,8 +951,23 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
     # because the receipt processor flagged the row matched/not_fulfilled.
     # Stale ordered rows still soft/hard delete after 3 days in
     # _ensure_active_trip, so anything truly orphaned ages out.
+    #
+    # Critical invariant: a row only "covers" the canonical name when it's
+    # bound to a meal currently on the plan (its meal_ids intersect the
+    # active plan ids). Receipt-tagged rows from PRIOR meal occurrences
+    # (or pre-Phase-B legacy rows with meal_ids='') used to silently block
+    # the same meal name from re-populating its ingredients when the meal
+    # was re-added to the plan later — e.g. "Frozen Pizza Night" added a
+    # month ago, ingredients receipt-matched, then re-added today: meal
+    # sync saw the names as "covered" and inserted nothing. The active-
+    # plan-intersect check filters those out so a fresh occurrence gets
+    # fresh rows.
+    all_active_meal_ids: set[int] = set()
+    for ids in meal_ids_by_name.values():
+        all_active_meal_ids.update(ids)
+
     covered_rows = conn.execute(
-        text("""SELECT name FROM grocery_items
+        text("""SELECT name, meal_ids FROM grocery_items
                 WHERE user_id = :user_id
                   AND (
                     (ordered = 1 AND COALESCE(receipt_status, '') = '')
@@ -960,7 +975,13 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                   )"""),
         {"user_id": user_id},
     ).fetchall()
-    covered_keys = {compare_key(r["name"]) for r in covered_rows}
+    covered_keys: set[str] = set()
+    for r in covered_rows:
+        row_meal_ids = {
+            int(x) for x in (r["meal_ids"] or "").split(",") if x.strip().isdigit()
+        }
+        if row_meal_ids & all_active_meal_ids:
+            covered_keys.add(compare_key(r["name"]))
 
     # Clean up phantom meal-source rows: any active meal-source entry whose
     # canonical name is already covered by an in-flight ordered row OR a
@@ -5129,6 +5150,41 @@ async def e2e_cleanup(body: dict):
         "remaining": remaining,
         "errors": errors,
     }
+
+
+@router.post("/admin/e2e-stage-grocery-row")
+async def e2e_stage_grocery_row(body: dict):
+    """Playwright test scaffold: directly set receipt_status / meal_ids on a
+    grocery_items row so tests can simulate states that are otherwise hard to
+    reach via the UI flow (e.g. a stale receipt-matched row from a prior meal
+    occurrence). Only active when PLAYWRIGHT_TEST_SECRET is set.
+    """
+    from mealrunner.web.auth import e2e_enabled, verify_e2e_secret
+
+    if not e2e_enabled():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    if not verify_e2e_secret(body.get("secret", "")):
+        return JSONResponse({"error": "Invalid secret"}, status_code=401)
+
+    try:
+        row_id = int(body["id"])
+    except (KeyError, TypeError, ValueError):
+        return JSONResponse({"error": "id required (int)"}, status_code=400)
+
+    conn = _conn()
+    conn.execute(
+        text("""UPDATE grocery_items SET
+                  receipt_status = :receipt_status,
+                  meal_ids = :meal_ids
+                WHERE id = :id"""),
+        {
+            "id": row_id,
+            "receipt_status": body.get("receipt_status", ""),
+            "meal_ids": body.get("meal_ids", ""),
+        },
+    )
+    conn.commit()
+    return {"ok": True}
 
 
 @router.post("/feedback/{feedback_id}/respond")
