@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import NamedTuple
 
 from fastapi import APIRouter, Request, UploadFile, File
 from fastapi.responses import JSONResponse
@@ -860,68 +861,80 @@ def _ensure_active_trip(conn, mw, user_id: str):
     return trip
 
 
-def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
-    """Re-derive meal-sourced items while preserving extras and checked state.
+class _EffectiveNeed(NamedTuple):
+    """The subset of a fresh meal-need not already served by an external row
+    (in-flight Kroger order, receipt-tagged row bound to an active meal).
+    Per-meal-id resolution: 'frozen pizza' for meal A may be covered while
+    meal B's frozen pizza is still uncovered."""
+    meal_ids: set[int]
+    for_meals: str
+    meal_ids_str: str
+    count: int
 
-    Occurrence tracking via meal_ids: a grocery_items row records which meal_ids
-    currently contribute it. A new meal_id appearing in the fresh set means
-    a new occurrence pulled this ingredient in — reset the bought/matched
-    state so the ingredient re-surfaces on the active list. Comparing names
-    alone would treat "Hot Dogs on 4/10" and "Hot Dogs on 4/26" as the same
-    need; meal_ids distinguish them.
+
+def _parse_meal_ids_csv(s: str | None) -> set[int]:
+    return {int(x) for x in (s or "").split(",") if x.strip().isdigit()}
+
+
+def _build_fresh_meal_items(
+    conn, user_id: str, mw, resolve
+) -> tuple[dict[str, dict], dict[int, str]]:
+    """Compute the desired meal-source state from the active plan.
+
+    Keyed on compare_key so plural/singular variants collapse — recipe says
+    "apples", existing row says "apple", they're the same item. Sides in
+    build_grocery_list are labeled by their parent meal's name, so the
+    parent's id is what ends up tracked against side ingredients.
+
+    Returns (fresh_by_key, meal_id_to_name).
     """
     from mealrunner.grocery import build_grocery_list, split_by_store
+    from mealrunner.normalize import compare_key
 
     grocery_meals = [m for m in mw.meals if m.on_grocery]
-    resolve = _build_group_resolver(conn, user_id)
 
-    # recipe_name → [meal_id, ...] for all meals currently on the plan.
-    # Sides in build_grocery_list are labeled by their parent meal's name,
-    # so the parent's id is what ends up tracked against side ingredients.
     meal_ids_by_name: dict[str, list[int]] = {}
     for m in grocery_meals:
         if m.id is not None:
             meal_ids_by_name.setdefault(m.recipe_name, []).append(m.id)
 
-    # Build fresh meal items, keyed on compare_key so plural/singular variants
-    # collapse to one entry (recipe says "apples", existing row says "apple" —
-    # they're the same item).
-    from mealrunner.normalize import compare_key
-    fresh_meal_items: dict[str, dict] = {}
+    fresh: dict[str, dict] = {}
     if grocery_meals:
         gl = build_grocery_list(conn, grocery_meals, mw.start_date, mw.end_date, user_id=user_id)
-        by_store = split_by_store(gl)
-        for items in by_store.values():
+        for items in split_by_store(gl).values():
             for item in items:
                 name_lower = item.ingredient_name.lower()
-                key = compare_key(name_lower)
-                group = resolve(name_lower)
-                for_meals = ",".join(item.meals) if item.meals else ""
                 mids: set[int] = set()
                 for mn in item.meals:
                     for mid in meal_ids_by_name.get(mn, []):
                         mids.add(mid)
-                fresh_meal_items[key] = {
+                fresh[compare_key(name_lower)] = {
                     "name": name_lower,
-                    "shopping_group": group,
-                    "for_meals": for_meals,
+                    "shopping_group": resolve(name_lower),
+                    "for_meals": ",".join(item.meals) if item.meals else "",
                     "meal_ids": mids,
                     "meal_count": len(item.meals),
                 }
 
-    # Existing rows the meal sync is allowed to touch. We include have_it /
-    # checked / removed rows (not just active) so a have-it'd "butter" stops
-    # the meal sync from inserting a fresh active "butter" row every time it
-    # runs — Branch 3 below preserves the user's have-it choice for meals
-    # already on the plan. Receipt-tagged rows and Kroger-order rows are
-    # excluded since they're managed by the receipt / order flows separately.
-    #
-    # ORDER BY (have_it + checked + removed) puts active rows first; combined
-    # with first-wins dict construction, that means when there are multiple
-    # rows for the same canonical name (e.g. an active manual-add plus a
-    # have-it'd meal-source row from a prior occurrence), the meal sync
-    # attaches to the active one and leaves the completed one alone.
-    existing = conn.execute(
+    meal_id_to_name: dict[int, str] = {
+        mid: name for name, ids in meal_ids_by_name.items() for mid in ids
+    }
+    return fresh, meal_id_to_name
+
+
+def _load_meal_sync_existing(conn, user_id: str) -> dict[str, dict]:
+    """Existing rows the meal sync is allowed to mutate.
+
+    Includes have_it/checked/removed rows so a have-it'd "butter" stops the
+    sync from inserting a fresh active "butter" every refresh — Branch 3
+    in apply preserves the user's choice for meals already on the plan.
+    Excludes ordered + receipt-tagged rows; those are owned by the order
+    and receipt flows. ORDER BY (have_it + checked + removed) ASC means
+    active rows win the per-key first-write when multiple rows share a
+    canonical name.
+    """
+    from mealrunner.normalize import compare_key
+    rows = conn.execute(
         text("""SELECT id, name, source, checked, checked_at, have_it, have_it_at,
                        removed, removed_at, for_meals, meal_ids, receipt_status
                 FROM grocery_items
@@ -931,61 +944,29 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                 ORDER BY (have_it + checked + removed) ASC, id DESC"""),
         {"user_id": user_id},
     ).fetchall()
-    existing_map: dict[str, dict] = {}
-    for r in existing:
+    out: dict[str, dict] = {}
+    for r in rows:
         key = compare_key(r["name"])
-        if key not in existing_map:
-            existing_map[key] = r
+        if key not in out:
+            out[key] = r
+    return out
 
-    # Canonical names already "covered" by another row that the meal sync
-    # must NOT duplicate via a phantom active insert:
-    #   - ordered = 1 (in-flight Kroger order): order/receipt flow owns it.
-    #   - non-empty receipt_status (matched/substituted/not_fulfilled/
-    #     dismissed): receipt flow owns it.
-    # Without this, /order/select's trailing get_order pass and every
-    # receipt upload were leaving the original row tagged but invisible to
-    # existing_map (which filters receipt_status=''), so meal sync would
-    # INSERT a fresh active sibling for the same canonical name. The user'd
-    # see "salt" or "cauliflower rice" pop back onto the grocery list right
-    # after acknowledging it via the receipt page or have-it toggle, just
-    # because the receipt processor flagged the row matched/not_fulfilled.
-    # Stale ordered rows still soft/hard delete after 3 days in
-    # _ensure_active_trip, so anything truly orphaned ages out.
-    #
-    # Critical invariant: a row only "covers" the canonical name when it's
-    # bound to a meal currently on the plan (its meal_ids intersect the
-    # active plan ids). Receipt-tagged rows from PRIOR meal occurrences
-    # (or pre-Phase-B legacy rows with meal_ids='') used to silently block
-    # the same meal name from re-populating its ingredients when the meal
-    # was re-added to the plan later — e.g. "Frozen Pizza Night" added a
-    # month ago, ingredients receipt-matched, then re-added today: meal
-    # sync saw the names as "covered" and inserted nothing. The active-
-    # plan-intersect check filters those out so a fresh occurrence gets
-    # fresh rows.
-    all_active_meal_ids: set[int] = set()
-    for ids in meal_ids_by_name.values():
-        all_active_meal_ids.update(ids)
 
-    # meal_id → recipe_name reverse map for filtering for_meals when a row
-    # serves only an uncovered subset of the meals that need this ingredient.
-    meal_id_to_name: dict[int, str] = {}
-    for name, ids in meal_ids_by_name.items():
-        for mid in ids:
-            meal_id_to_name[mid] = name
+def _load_covered_meal_ids(
+    conn, user_id: str, all_active_meal_ids: set[int]
+) -> dict[str, set[int]]:
+    """Per canonical key, the meal_ids already served by an in-flight order
+    or a receipt-tagged row. Per-meal-id (not per-name): "frozen pizza"
+    bought for meal A still leaves meal B uncovered.
 
-    # Track WHICH meal_ids are covered, per canonical name. Earlier the
-    # logic collapsed everything to a per-name boolean ("is this name
-    # covered?"); that lost the per-meal_id resolution that the meal_ids
-    # column was added for in session 54. Concrete bug class:
-    #   - User buys frozen pizza for "Pizza Night A" (row → receipt='matched',
-    #     meal_ids='A').
-    #   - User adds "Pizza Night B" later (also wants frozen pizza).
-    #   - Old per-name logic: name was "covered" → no fresh row for B.
-    #   - Per-meal-id logic: B is uncovered → insert fresh row for B only.
-    # Stale legacy rows (pre-Phase-B, meal_ids='') have empty intersection
-    # with active plan and contribute no coverage at all — see the
-    # 2026-05-03 "Frozen Pizza Night" feedback id=108 fix.
-    covered_rows = conn.execute(
+    Active-plan intersect filter is critical — receipt-tagged rows from
+    PRIOR meal occurrences (or pre-Phase-B legacy rows with meal_ids='')
+    used to silently block a re-added meal name from populating its
+    ingredients (feedback id=108, 2026-05-03). They contribute no coverage
+    here.
+    """
+    from mealrunner.normalize import compare_key
+    rows = conn.execute(
         text("""SELECT name, meal_ids FROM grocery_items
                 WHERE user_id = :user_id
                   AND (
@@ -994,70 +975,81 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                   )"""),
         {"user_id": user_id},
     ).fetchall()
-    covered_meal_ids_by_key: dict[str, set[int]] = {}
-    for r in covered_rows:
-        row_meal_ids = {
-            int(x) for x in (r["meal_ids"] or "").split(",") if x.strip().isdigit()
-        }
-        relevant = row_meal_ids & all_active_meal_ids
+    covered: dict[str, set[int]] = {}
+    for r in rows:
+        relevant = _parse_meal_ids_csv(r["meal_ids"]) & all_active_meal_ids
         if relevant:
-            key = compare_key(r["name"])
-            covered_meal_ids_by_key.setdefault(key, set()).update(relevant)
+            covered.setdefault(compare_key(r["name"]), set()).update(relevant)
+    return covered
 
-    def _effective_for(key: str) -> tuple[set[int], str, str, int]:
-        """Return (uncovered_ids, for_meals_str, meal_ids_str, count) for a
-        key that exists in fresh_meal_items. The "effective" need is the
-        subset of fresh_need not already served by covered rows."""
-        info = fresh_meal_items[key]
-        eff_ids = info["meal_ids"] - covered_meal_ids_by_key.get(key, set())
-        eff_names = sorted({
-            meal_id_to_name[mid] for mid in eff_ids if mid in meal_id_to_name
-        })
-        return (
-            eff_ids,
-            ",".join(eff_names),
-            ",".join(str(i) for i in sorted(eff_ids)),
-            len(eff_names),
-        )
 
-    # Clean up phantom meal-source rows: an active meal-source row whose
-    # fresh_need is FULLY covered by external ordered/receipt rows has
-    # nothing left to serve. Drop it. (Pre-refinement this fired any time
-    # the canonical name appeared in covered_rows, which deleted active
-    # rows that were still needed for an uncovered sibling meal — bug class
-    # called out in the user's "buy then re-add a meal that wants the same
-    # ingredient" scenario.)
-    phantom_keys: list[str] = []
+def _effective_need_for(
+    info: dict, covered_for_key: set[int], meal_id_to_name: dict[int, str]
+) -> _EffectiveNeed:
+    eff_ids = info["meal_ids"] - covered_for_key
+    eff_names = sorted({
+        meal_id_to_name[mid] for mid in eff_ids if mid in meal_id_to_name
+    })
+    return _EffectiveNeed(
+        meal_ids=eff_ids,
+        for_meals=",".join(eff_names),
+        meal_ids_str=",".join(str(i) for i in sorted(eff_ids)),
+        count=len(eff_names),
+    )
+
+
+def _delete_phantom_meal_rows(
+    conn,
+    existing_map: dict[str, dict],
+    fresh_meal_items: dict[str, dict],
+    covered_meal_ids_by_key: dict[str, set[int]],
+    meal_id_to_name: dict[int, str],
+) -> None:
+    """Drop active meal-source rows whose fresh_need is FULLY covered by
+    external rows — nothing left to serve. Mutates existing_map.
+
+    Tightened (vs. earlier "any covering row deletes the active row"): the
+    coarser check would delete a row still needed by an uncovered sibling
+    meal — the "buy then re-add a meal that wants the same ingredient"
+    bug class.
+    """
+    drop: list[str] = []
     for key, row in existing_map.items():
-        if row["source"] != "meal":
+        if row["source"] != "meal" or key not in fresh_meal_items:
             continue
-        if key not in fresh_meal_items:
-            continue
-        eff_ids, _, _, _ = _effective_for(key)
-        if not eff_ids:
-            phantom_keys.append(key)
-    for key in phantom_keys:
+        eff = _effective_need_for(
+            fresh_meal_items[key],
+            covered_meal_ids_by_key.get(key, set()),
+            meal_id_to_name,
+        )
+        if not eff.meal_ids:
+            drop.append(key)
+    for key in drop:
         conn.execute(
             text("DELETE FROM grocery_items WHERE id = :id"),
             {"id": existing_map[key]["id"]},
         )
         del existing_map[key]
 
-    # Drop meal-source rows no longer needed by any current meal. This
-    # includes have_it / checked / removed meal-source rows whose meal has
-    # since left the plan — the state on those rows was about a meal that
-    # no longer exists, so the row goes too. Receipt_status='' is implied
-    # by the existing_map filter; receipt-tagged rows aren't in this loop.
-    #
-    # Non-meal source rows (the user added them themselves) stay regardless;
-    # we just clear stale meal fields. They keep whatever state the user set.
+
+def _drop_orphaned_meal_rows(
+    conn, existing_map: dict[str, dict], fresh_meal_items: dict[str, dict]
+) -> None:
+    """Rows whose canonical name no longer appears in any fresh_need:
+       - source='meal': delete (their meal has left the plan, including
+         have_it/checked/removed rows whose state was about a gone meal).
+       - source!='meal' with stale meal_ids: clear the meal fields, leave
+         the row otherwise alone — the user added it themselves.
+    """
     for key, row in existing_map.items():
-        if key not in fresh_meal_items and row["source"] == "meal":
+        if key in fresh_meal_items:
+            continue
+        if row["source"] == "meal":
             conn.execute(
                 text("DELETE FROM grocery_items WHERE id = :id"),
                 {"id": row["id"]},
             )
-        elif key not in fresh_meal_items and row["source"] != "meal" and row["meal_ids"]:
+        elif row["meal_ids"]:
             conn.execute(
                 text("""UPDATE grocery_items SET
                        for_meals = '', meal_ids = '', meal_count = 0
@@ -1065,117 +1057,127 @@ def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
                 {"id": row["id"]},
             )
 
-    # Add or update items needed by meals.
-    #
-    # Three branches when matching an existing meal-source row, based on
-    # meal_ids history:
-    #   1. Legacy migration (old_meal_ids empty): row pre-dates session-54's
-    #      meal_ids tracking. Don't touch state — just populate meal_ids so
-    #      future refreshes can compare correctly.
-    #   2. New occurrence (new_meal_ids has an id not in old): a brand-new
-    #      meal instance is pulling this ingredient in. Reset all per-buy
-    #      state — the user re-decides whether they have enough for the new
-    #      meal.
-    #   3. Same occurrences as before: routine sync. Preserve all state.
-    #
-    # When matching a non-meal source row (extra/regular/pantry), the user
-    # already put this item on the list themselves; just attach the meal
-    # association without disturbing their state. No state reset, no source
-    # change — the row stays whatever they originally added it as.
+
+def _apply_meal_sync(
+    conn,
+    user_id: str,
+    fresh_meal_items: dict[str, dict],
+    existing_map: dict[str, dict],
+    covered_meal_ids_by_key: dict[str, set[int]],
+    meal_id_to_name: dict[int, str],
+) -> None:
+    """For each fresh_need, resolve against existing_map.
+
+    Three branches when matching an existing meal-source row, by meal_ids
+    history:
+      1. Legacy (old empty): row pre-dates session-54 meal_ids tracking.
+         Populate meal_ids; don't touch state.
+      2. New occurrence (eff has an id not in old): a fresh meal instance
+         is pulling this in. Reset per-buy state. Detection uses EFFECTIVE
+         (uncovered) ids, not full fresh_need — otherwise newly-inserted
+         rows would be immediately reset on the next sync because they
+         were inserted with only the uncovered subset.
+      3. Same occurrences as before: routine sync, preserve state.
+
+    Non-meal source rows get meal context attached without state changes
+    (use full fresh_need — the user added them and we don't want covered
+    meals to silently drop from attribution). No-existing-row needs an
+    INSERT, skipped when every meal_id is already covered.
+    """
     for key, info in fresh_meal_items.items():
-        eff_ids, eff_for_meals, eff_meal_ids_str, eff_count = _effective_for(key)
-        full_meal_ids_str = ",".join(str(i) for i in sorted(info["meal_ids"]))
-        if key in existing_map:
-            row = existing_map[key]
+        eff = _effective_need_for(
+            info, covered_meal_ids_by_key.get(key, set()), meal_id_to_name
+        )
+        row = existing_map.get(key)
 
-            if row["source"] != "meal":
-                # Attach meal association to a user-added row. Don't touch
-                # name / source / state. Use full fresh_need attribution
-                # here — the user added this row themselves and we don't
-                # want to silently strip meal context when something else
-                # happens to cover one of the meals.
-                conn.execute(
-                    text("""UPDATE grocery_items SET
-                           for_meals = :for_meals, meal_ids = :meal_ids,
-                           meal_count = :meal_count
-                       WHERE id = :id"""),
-                    {"for_meals": info["for_meals"], "meal_ids": full_meal_ids_str,
-                     "meal_count": info["meal_count"], "id": row["id"]},
-                )
+        if row is None:
+            if not eff.meal_ids:
                 continue
-
-            old_meal_ids = {
-                int(x) for x in (row["meal_ids"] or "").split(",") if x.strip().isdigit()
-            }
-
-            if not old_meal_ids:
-                # Branch 1: legacy migration. Don't reset state.
-                conn.execute(
-                    text("""UPDATE grocery_items SET
-                           for_meals = :for_meals, meal_ids = :meal_ids,
-                           meal_count = :meal_count, shopping_group = :group
-                       WHERE id = :id"""),
-                    {"for_meals": eff_for_meals, "meal_ids": eff_meal_ids_str,
-                     "meal_count": eff_count,
-                     "group": info["shopping_group"], "id": row["id"]},
-                )
-            elif eff_ids - old_meal_ids:
-                # Branch 2: new uncovered occurrence. Reset per-buy state.
-                # Branch detection uses effective (uncovered) meal_ids, not
-                # full fresh_need — otherwise newly-inserted rows would be
-                # immediately reset on the next sync because the row was
-                # inserted with only the uncovered subset and full fresh_need
-                # always contains the covered ids too.
-                reset_clause = """checked = 0, checked_at = NULL,
-                                  have_it = 0, have_it_at = NULL,
-                                  removed = 0, removed_at = NULL,
-                                  receipt_status = '', receipt_item = '',
-                                  receipt_upc = '', receipt_price = NULL,
-                                  receipt_acknowledged = 0,
-                                  product_upc = '', product_name = '',
-                                  product_brand = '', product_size = '',
-                                  product_price = NULL, product_image = '',
-                                  selected_at = NULL, ordered_at = NULL,"""
-                conn.execute(
-                    text(f"""UPDATE grocery_items SET
-                           {reset_clause}
-                           for_meals = :for_meals, meal_ids = :meal_ids,
-                           meal_count = :meal_count, shopping_group = :group
-                       WHERE id = :id"""),
-                    {"for_meals": eff_for_meals, "meal_ids": eff_meal_ids_str,
-                     "meal_count": eff_count,
-                     "group": info["shopping_group"], "id": row["id"]},
-                )
-            else:
-                # Branch 3: same uncovered occurrences. Preserve state.
-                conn.execute(
-                    text("""UPDATE grocery_items SET
-                           for_meals = :for_meals, meal_ids = :meal_ids,
-                           meal_count = :meal_count, shopping_group = :group
-                       WHERE id = :id"""),
-                    {"for_meals": eff_for_meals, "meal_ids": eff_meal_ids_str,
-                     "meal_count": eff_count,
-                     "group": info["shopping_group"], "id": row["id"]},
-                )
-        else:
-            if not eff_ids:
-                # Every meal that needs this ingredient is already served
-                # by an in-flight ordered row or a receipt-tagged row.
-                # Don't create a phantom active sibling.
-                continue
-            # At least one meal_id is uncovered — insert a meal-source row
-            # for THAT subset. for_meals / meal_ids only list the uncovered
-            # meals so the row's attribution honestly reflects what it
-            # serves; the covered meals are served by their own rows.
             conn.execute(
                 text("""INSERT INTO grocery_items
                    (user_id, name, shopping_group, source, for_meals, meal_ids, meal_count)
                    VALUES (:user_id, :name, :group, 'meal', :for_meals, :meal_ids, :meal_count)"""),
                 {"user_id": user_id, "name": info["name"], "group": info["shopping_group"],
-                 "for_meals": eff_for_meals, "meal_ids": eff_meal_ids_str,
-                 "meal_count": eff_count},
+                 "for_meals": eff.for_meals, "meal_ids": eff.meal_ids_str,
+                 "meal_count": eff.count},
             )
+            continue
 
+        if row["source"] != "meal":
+            full_meal_ids_str = ",".join(str(i) for i in sorted(info["meal_ids"]))
+            conn.execute(
+                text("""UPDATE grocery_items SET
+                       for_meals = :for_meals, meal_ids = :meal_ids,
+                       meal_count = :meal_count
+                   WHERE id = :id"""),
+                {"for_meals": info["for_meals"], "meal_ids": full_meal_ids_str,
+                 "meal_count": info["meal_count"], "id": row["id"]},
+            )
+            continue
+
+        old_meal_ids = _parse_meal_ids_csv(row["meal_ids"])
+        # Branch 2 (new uncovered occurrence) resets per-buy state. Branches
+        # 1 (legacy: old empty) and 3 (same: eff ⊆ old) skip the reset.
+        reset_sql = ""
+        if old_meal_ids and eff.meal_ids - old_meal_ids:
+            reset_sql = """checked = 0, checked_at = NULL,
+                           have_it = 0, have_it_at = NULL,
+                           removed = 0, removed_at = NULL,
+                           receipt_status = '', receipt_item = '',
+                           receipt_upc = '', receipt_price = NULL,
+                           receipt_acknowledged = 0,
+                           product_upc = '', product_name = '',
+                           product_brand = '', product_size = '',
+                           product_price = NULL, product_image = '',
+                           selected_at = NULL, ordered_at = NULL,"""
+        conn.execute(
+            text(f"""UPDATE grocery_items SET
+                   {reset_sql}
+                   for_meals = :for_meals, meal_ids = :meal_ids,
+                   meal_count = :meal_count, shopping_group = :group
+               WHERE id = :id"""),
+            {"for_meals": eff.for_meals, "meal_ids": eff.meal_ids_str,
+             "meal_count": eff.count, "group": info["shopping_group"], "id": row["id"]},
+        )
+
+
+def _refresh_trip_meal_items(conn, user_id: str, mw) -> None:
+    """Re-derive meal-sourced grocery items while preserving extras and
+    user-set state.
+
+    Pipeline:
+      1. Build the desired meal-source state from the current plan.
+      2. Load existing rows the sync is allowed to mutate.
+      3. Compute which (canonical_name, meal_id) pairs are already covered
+         by an in-flight Kroger order or a receipt-tagged row bound to a
+         meal still on the plan.
+      4. Drop phantom meal-source rows whose effective need is fully covered.
+      5. Drop or de-attribute rows whose meal has left the plan.
+      6. INSERT/UPDATE per fresh_need against existing_map.
+
+    Occurrence tracking via meal_ids: a fresh meal_id appearing for a
+    canonical name means a brand-new meal occurrence — Branch 2 in step 6
+    resets per-buy state. "Hot Dogs on 4/10" and "Hot Dogs on 4/26" share
+    a name but get different meal_ids.
+    """
+    resolve = _build_group_resolver(conn, user_id)
+    fresh_meal_items, meal_id_to_name = _build_fresh_meal_items(
+        conn, user_id, mw, resolve
+    )
+    existing_map = _load_meal_sync_existing(conn, user_id)
+    all_active_meal_ids = set(meal_id_to_name.keys())
+    covered_meal_ids_by_key = _load_covered_meal_ids(
+        conn, user_id, all_active_meal_ids
+    )
+    _delete_phantom_meal_rows(
+        conn, existing_map, fresh_meal_items,
+        covered_meal_ids_by_key, meal_id_to_name,
+    )
+    _drop_orphaned_meal_rows(conn, existing_map, fresh_meal_items)
+    _apply_meal_sync(
+        conn, user_id, fresh_meal_items, existing_map,
+        covered_meal_ids_by_key, meal_id_to_name,
+    )
     conn.commit()
 
 
