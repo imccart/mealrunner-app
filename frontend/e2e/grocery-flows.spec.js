@@ -51,9 +51,14 @@ test.describe("Grocery flows", () => {
 
     // /api/grocery runs _ensure_active_trip again — this is the exact path
     // that used to phantom-insert a sibling row for the just-ordered name.
+    // The phantom would manifest as TWO rows with this name in items_by_group:
+    // the original (now flagged ordered) and a fresh active sibling. The
+    // frontend filters ordered rows from rendering, but both rows still come
+    // back from the API. So assert exactly one row with this name exists.
     const after = await fetchGrocery(authedPage);
     const targetLower = target.name.toLowerCase();
-    expect(activeNamesLower(after)).not.toContain(targetLower);
+    const matches = activeNamesLower(after).filter((n) => n === targetLower);
+    expect(matches).toHaveLength(1);
     expect(after.ordered).toContain(targetLower);
 
     // Reload UI — desktop sidebar should not show this name in active list.
