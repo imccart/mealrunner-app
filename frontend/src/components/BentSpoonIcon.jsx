@@ -6,7 +6,7 @@ export default function BentSpoonIcon({ size = 24, active = false, onClick }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="var(--accent)"
-      strokeWidth="1.0"
+      strokeWidth="0.85"
       strokeLinecap="round"
       strokeLinejoin="round"
       onClick={onClick}
