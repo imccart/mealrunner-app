@@ -478,9 +478,9 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("idx_meals_user_date", "meals", "user_id, slot_date"),
         ("idx_grocery_items_user_source", "grocery_items", "user_id, source"),
         ("idx_grocery_items_user_checked", "grocery_items", "user_id, checked, have_it, removed"),
-        # recipe_ingredients(recipe_id) is hit by build_grocery_list and
-        # swap_meal_smart's bulk WHERE recipe_id IN (...) queries; FK alone
-        # doesn't get an auto-index on the source side.
+        # recipe_ingredients(recipe_id) is hit by build_grocery_list's bulk
+        # WHERE recipe_id IN (...) queries; FK alone doesn't get an
+        # auto-index on the source side.
         ("idx_recipe_ingredients_recipe", "recipe_ingredients", "recipe_id"),
         # pantry lookup is keyed by (user_id, ingredient_id) on every
         # grocery list build.

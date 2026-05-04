@@ -57,10 +57,6 @@ export const api = {
   getMeals: () => request('/meals'),
   getPastMeals: () => request('/meals/past'),
   swapMeal: (date) => request(`/meals/${date}/swap`, { method: 'POST' }),
-  swapMealSmart: (date, body = {}) => request(`/meals/${date}/swap-smart`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  }),
   getSides: (date) => request(`/meals/${date}/sides`),
   setSide: (date, sides) => request(`/meals/${date}/set-side`, {
     method: 'POST',

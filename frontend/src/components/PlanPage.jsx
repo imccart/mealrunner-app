@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { api } from '../api/client'
 import Sheet from './Sheet'
 import MealPickerSheet from './MealPickerSheet'
-import SwapPrompt from './SwapPrompt'
 import SidePickerSheet from './SidePickerSheet'
 import MealIngredientsSheet from './MealIngredientsSheet'
 import FeedbackFab from './FeedbackFab'
@@ -29,7 +28,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const [actionDate, setActionDate] = useState(null) // date for action bottom sheet
   const [pickerDate, setPickerDate] = useState(null) // date for meal picker
   const [pickerMode, setPickerMode] = useState(null) // 'add' or 'replace'
-  const [swapPrompt, setSwapPrompt] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pastDays, setPastDays] = useState(null)
   const [showPast, setShowPast] = useState(false)
@@ -170,14 +168,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     } catch { await load() }
   }
 
-
-  const handleSwapConfirm = async (choices) => {
-    try {
-      const result = await api.swapMealSmart(swapPrompt.date, choices)
-      setData(result)
-      setSwapPrompt(null)
-    } catch { await load() }
-  }
 
   const handleStartNewPlan = async () => {
     if (!window.confirm('This clears all your meals and your grocery list. Are you sure?')) return
@@ -491,15 +481,6 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
         <MealIngredientsSheet
           meal={ingredientsMeal}
           onClose={() => setIngredientsMeal(null)}
-        />
-      )}
-
-      {/* Swap prompt */}
-      {swapPrompt && (
-        <SwapPrompt
-          prompt={swapPrompt}
-          onConfirm={handleSwapConfirm}
-          onClose={() => setSwapPrompt(null)}
         />
       )}
     </>

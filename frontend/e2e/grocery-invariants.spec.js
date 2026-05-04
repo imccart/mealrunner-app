@@ -98,13 +98,17 @@ test.describe("Grocery invariants", () => {
     expect(matches).toHaveLength(1);
   });
 
-  test("buy-elsewhere round-trip: row enters the buy_elsewhere set on /api/order; undo restores it to pending", async ({
+  test("buy-elsewhere round-trip: row enters the buy_elsewhere set on /api/order; toggling it off restores it to pending", async ({
     authedPage,
   }) => {
     // Buy-elsewhere is order-page state, not grocery-page state. The row
     // stays on the grocery list (visible) but exits the ordering flow into
-    // a separate "Buying elsewhere" sidebar section. Round-trip via the
-    // unified /grocery/undo endpoint, which clears all flag columns at once.
+    // a separate "Buying elsewhere" sidebar section. The endpoint is a
+    // toggle: a second POST to /grocery/buy-elsewhere/{id} clears the flag
+    // (same shape the frontend's handleUndoBuyElsewhere uses). The unified
+    // /grocery/undo endpoint does NOT clear buy_elsewhere — it only resets
+    // completed-state columns (checked / have_it / removed / ordered /
+    // product_*) since buy-elsewhere'd rows are still active, not completed.
     const libMeal = await pickLibraryMealWithIngredients(authedPage);
     await seedLibraryMeal(authedPage, libMeal);
     await setMealOnDate(authedPage, todayIso(), libMeal.name);
@@ -137,9 +141,9 @@ test.describe("Grocery invariants", () => {
     const grocAfter = await fetchGrocery(authedPage);
     expect(activeNamesLower(grocAfter)).toContain(targetLower);
 
-    // Undo via the unified /grocery/undo endpoint — clears buy_elsewhere flag.
+    // Toggle buy-elsewhere off — same endpoint, second POST.
     const undoResp = await authedPage.request.post(
-      `/api/grocery/undo/${target.id}`,
+      `/api/grocery/buy-elsewhere/${target.id}`,
     );
     expect(undoResp.ok()).toBe(true);
 
@@ -153,44 +157,6 @@ test.describe("Grocery invariants", () => {
     );
     expect(beNames2).not.toContain(targetLower);
     expect(pendingNames2).toContain(targetLower);
-  });
-
-  test("smart-swap: ingredients shared with another on-list meal are NOT marked removable", async ({
-    authedPage,
-  }) => {
-    // The whole point of the SwapPrompt: when the user swaps meal A out, only
-    // ingredients that A uses AND no other on-list meal uses should appear in
-    // the "remove these" list. If A and B share an ingredient X, swapping A
-    // away must NOT suggest removing X — B still needs it.
-    //
-    // We can't easily construct two recipes with overlapping ingredients via
-    // the public API, so we use the SAME library recipe on two different dates.
-    // Both occurrences contribute the same ingredients. Swap-smart on date1:
-    // every ingredient is "shared" by date2's occurrence, so removable should
-    // be empty.
-    const libMeal = await pickLibraryMealWithIngredients(authedPage);
-    await seedLibraryMeal(authedPage, libMeal);
-    const date1 = todayIso();
-    const date2 = dateOffset(1);
-    await setMealOnDate(authedPage, date1, libMeal.name);
-    await setMealOnDate(authedPage, date2, libMeal.name);
-
-    // Sync once so meal-source rows exist.
-    await fetchGrocery(authedPage);
-
-    // Smart-swap preview on date1. Backend will replace date1's meal with a
-    // suggestion AND compute removable = (date1's ingredients) - (other
-    // on-list meals' ingredients). Since date2 has the same recipe, every
-    // date1 ingredient is also a date2 ingredient → removable is empty.
-    const swapResp = await authedPage.request.post(
-      `/api/meals/${date1}/swap-smart`,
-      { data: { action: "preview" } },
-    );
-    expect(swapResp.ok()).toBe(true);
-    const swapBody = await swapResp.json();
-    expect(swapBody.swap_prompt).toBeDefined();
-    expect(Array.isArray(swapBody.swap_prompt.removable)).toBe(true);
-    expect(swapBody.swap_prompt.removable.length).toBe(0);
   });
 
   test("pantry vs regulars: regulars auto-add via add-regulars; pantry items don't", async ({
