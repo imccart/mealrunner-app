@@ -37,6 +37,11 @@ export default function TipJarIcon({ size = 24, active = false, onClick }) {
       style={{
         display: 'inline-flex',
         transformOrigin: '50% 100%',
+        // PNG content sits slightly right-of-center inside its bounding box;
+        // a 1px left nudge recentres the icon between the spoon and apron in
+        // the nav row.
+        marginLeft: -1,
+        marginRight: 1,
       }}
     >
       <span
@@ -60,7 +65,7 @@ export default function TipJarIcon({ size = 24, active = false, onClick }) {
           WebkitMaskPosition: 'center',
           maskPosition: 'center',
           cursor: onClick ? 'pointer' : 'default',
-          opacity: active ? 1 : 0.75,
+          opacity: active ? 1 : 0.85,
           transition: 'opacity 0.2s ease',
           userSelect: 'none',
         }}

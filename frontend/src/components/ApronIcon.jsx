@@ -40,7 +40,7 @@ export default function ApronIcon({ size = 24, active = false, onClick }) {
       style={{
         cursor: onClick ? 'pointer' : 'default',
         flexShrink: 0,
-        opacity: active ? 1 : 0.7,
+        opacity: active ? 1 : 0.82,
         transition: 'opacity 0.2s ease',
       }}
     >
