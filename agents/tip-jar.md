@@ -60,8 +60,12 @@ When `STRIPE_SECRET_KEY` is unset (or the sentinel `sk_test_e2e_fake`) AND `PLAY
 - `STRIPE_PRICE_TIP_MONTHLY_5`
 - `STRIPE_PRICE_TIP_MONTHLY_10`
 
-Staging values are test-mode (`pk_test_`, `sk_test_`); production gets a separate set of `pk_live_` / `sk_live_` once Aletheia LLC is activated for live mode.
+Staging values are test-mode (`pk_test_`, `sk_test_`); production has its own set of `pk_live_` / `sk_live_` (Aletheia LLC activated for live mode in session 67).
 
 ## Webhooks are environment-specific
 
-Staging → `https://staging.getmealrunner.app/api/stripe/webhook`. Production needs its OWN destination at `https://getmealrunner.app/api/stripe/webhook` with its own signing secret. They're independent registrations in Stripe — no auto-clone from test to live.
+Staging → `https://staging.getmealrunner.app/api/stripe/webhook`. Production → `https://getmealrunner.app/api/stripe/webhook`. Independent registrations in Stripe — no auto-clone from test to live; each has its own signing secret.
+
+## Frontend gate
+
+The icon in `Nav.jsx` is conditionally rendered on `tipJarEnabled`, set in `App.jsx` after a one-shot probe of `/api/tip/stripe-config`. True when the endpoint returns 200 (real keys configured) OR 503 with `fake: true` (staging fake-mode). False otherwise — protects production users from tapping the icon during any future window where Stripe env vars are missing/rolled. `/tip/stripe-config` is in `SILENT_PATHS` in `client.js` so the probe doesn't toast on 503. `getStripeConfig` returns the parsed body on both 200 and 503 so the gate can read `fake` from the 503 case. Tour overlay's existing skip-when-missing logic drops the tipjar stop automatically when the icon is hidden.
