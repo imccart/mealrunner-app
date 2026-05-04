@@ -69,7 +69,7 @@ def create_one_time_checkout_session(
         }
     stripe = _real_stripe()
     session = stripe.checkout.Session.create(
-        ui_mode="embedded",
+        ui_mode="embedded_page",
         mode="payment",
         return_url=return_url,
         line_items=[{
@@ -101,7 +101,7 @@ def create_monthly_checkout_session(
         }
     stripe = _real_stripe()
     session = stripe.checkout.Session.create(
-        ui_mode="embedded",
+        ui_mode="embedded_page",
         mode="subscription",
         return_url=return_url,
         line_items=[{"price": price_id, "quantity": 1}],
