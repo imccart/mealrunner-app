@@ -80,6 +80,11 @@ def create_one_time_checkout_session(
             },
             "quantity": 1,
         }],
+        # Customer card statement shows "ALETHEIA APPS TIP JAR" — without this
+        # they'd see only "ALETHEIA APPS" and not recognize the charge,
+        # which is the #1 trigger for chargebacks. Account-level prefix is 13
+        # chars + 1 space, suffix budget is 8 chars; "TIP JAR" = 7.
+        payment_intent_data={"statement_descriptor_suffix": "TIP JAR"},
         customer_email=customer_email,
         metadata={"user_id": user_id, "mode": "one_time"},
     )
