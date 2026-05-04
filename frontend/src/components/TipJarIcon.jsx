@@ -65,8 +65,8 @@ export default function TipJarIcon({ size = 24, active = false, onClick }) {
           WebkitMaskPosition: 'center',
           maskPosition: 'center',
           cursor: onClick ? 'pointer' : 'default',
-          opacity: active ? 1 : 0.85,
-          transition: 'opacity 0.2s ease',
+          // Full opacity always — matches the spoon's full-strength accent.
+          // Active state is signalled by the wobble-on-click animation.
           userSelect: 'none',
         }}
       />

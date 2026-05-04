@@ -40,8 +40,9 @@ export default function ApronIcon({ size = 24, active = false, onClick }) {
       style={{
         cursor: onClick ? 'pointer' : 'default',
         flexShrink: 0,
-        opacity: active ? 1 : 0.82,
-        transition: 'opacity 0.2s ease',
+        // Full opacity always — matches the spoon's full-strength accent
+        // colour. Active state is signalled by the sway-on-click animation,
+        // not by a brightness flip.
       }}
     >
       <path d="m742.78 721.22h-285.56c-6 0-12 4.7812-12 12v163.18c0 34.781 28.781 63.609 63.609 63.609h182.39c34.781 0 63.609-28.781 63.609-63.609v-163.18c-0.046874-6-4.8281-12-12.047-12zm-10.781 175.18c0 22.781-18 40.781-40.781 40.781l-182.44 0.046874c-22.781 0-40.781-18-40.781-40.781v-86.391l264-0.046876zm0-110.39h-264v-40.781h264z"/>
