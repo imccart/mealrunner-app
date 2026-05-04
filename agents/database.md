@@ -120,6 +120,18 @@ except Exception as e:
 
 ---
 
+## `with conn.begin():` does not work in route handlers
+
+Don't reach for `with conn.begin():` to wrap a transaction inside a route. It will raise `InvalidRequestError: this connection has already initialized a SQLAlchemy Transaction()`.
+
+**Why:** `AuthMiddleware.dispatch` calls `get_household_owner_id(conn, user_id)` (`auth.py:325`) before the route handler runs. That executes a SELECT, which autobegins a transaction in SQLAlchemy 2.x. By the time the handler reaches `conn.begin()`, the connection is already in a tx, and `Connection.begin()` raises rather than nesting.
+
+This was latent in `swap_meal_smart` from session 18 (the audit "fix" that added `with conn.begin():` for a read-swap-read race) until session 68's e2e suite finally called the endpoint and surfaced the 500.
+
+**Apply:** If you need an explicit transaction inside a handler, use `conn.raw.begin_nested()` (savepoint) instead. Don't try `conn.begin()` even though it parses fine — the middleware's autobegun tx will always be there.
+
+---
+
 ## Legacy single-user UNIQUE-on-name constraints
 
 **Don't trust the SQLAlchemy `Table` definitions in `database.py` to reflect prod's actual unique/primary-key constraints.** The DB has accumulated single-user-era constraints (`UNIQUE(name)`, `PRIMARY KEY(name)`) that the Python schema has long since dropped. They were correct when the app was single-user; they're bugs now.
