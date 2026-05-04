@@ -5574,8 +5574,22 @@ async def stripe_webhook(request: Request):
         event = construct_webhook_event(payload, sig_header)
     except Exception as e:
         logger.warning("Stripe webhook signature failure: %s", e)
-        return JSONResponse({"ok": False}, status_code=400)
-    return _handle_stripe_event(event)
+        return JSONResponse({"ok": False, "error": "signature"}, status_code=400)
+    # Wrap dispatch so a handler bug returns a useful error to Stripe (500)
+    # AND surfaces the traceback in Railway logs. Without this, the bare
+    # exception would leak as an opaque 500 with no log line.
+    try:
+        return _handle_stripe_event(event)
+    except Exception as e:
+        try:
+            etype = event.get("type", "")
+        except Exception:
+            etype = "?"
+        logger.exception("Stripe webhook handler failed (event type=%s)", etype)
+        return JSONResponse(
+            {"ok": False, "error": f"{type(e).__name__}: {e}"},
+            status_code=500,
+        )
 
 
 def _handle_stripe_event(event: dict) -> dict:
