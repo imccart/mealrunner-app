@@ -143,13 +143,22 @@ def retrieve_session(session_id: str) -> dict[str, Any]:
 
 def construct_webhook_event(payload: bytes, sig_header: str) -> dict[str, Any]:
     """Verify the Stripe-Signature header against `STRIPE_WEBHOOK_SECRET` and
-    return the event dict. Raises on invalid signature.
+    return the event as a plain dict. Raises on invalid signature.
+
+    Returns a regular dict (parsed from the raw JSON payload) instead of the
+    Stripe SDK's `Event` object. Stripe SDK's typed Event objects don't behave
+    like plain dicts at every nesting level — `.get()` on `event['data']`
+    raises AttributeError in some SDK versions. Plain-dict downstream removes
+    that footgun and matches the e2e simulator endpoints, which already
+    construct plain-dict events.
 
     In fake mode we never receive real Stripe webhooks (the e2e simulator
     endpoints bypass this entirely), so this should never be called. Raise
     loudly if it is — a misconfigured prod could otherwise quietly accept
     forged events.
     """
+    import json
+
     if _is_fake_mode():
         raise RuntimeError(
             "construct_webhook_event called in fake mode — use the e2e simulator endpoints instead"
@@ -158,8 +167,11 @@ def construct_webhook_event(payload: bytes, sig_header: str) -> dict[str, Any]:
     secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
     if not secret:
         raise RuntimeError("STRIPE_WEBHOOK_SECRET not configured")
-    event = stripe.Webhook.construct_event(payload, sig_header, secret)
-    return event
+    # Verify the signature; this raises on tampered or expired webhooks.
+    # We discard the typed Event return value and parse the raw payload as
+    # a plain dict for downstream processing.
+    stripe.Webhook.construct_event(payload, sig_header, secret)
+    return json.loads(payload.decode("utf-8"))
 
 
 # ── Subscriptions ────────────────────────────────────────
