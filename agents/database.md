@@ -13,11 +13,11 @@ PostgreSQL-specific patterns, gotchas, and operational rules for MealRunner. Pos
 
 ## Production connection
 
-Public URL: `postgresql://postgres:oBfKWpdhuvAVlynKWZZmmZRABXWwNJAi@yamabiko.proxy.rlwy.net:24813/railway`
+**Never paste the full connection string (with password) into any tracked file.** Fetch fresh from Railway when needed: dashboard → mealrunner → Postgres service → Variables → `DATABASE_URL` (public) or `DATABASE_PRIVATE_URL` (internal).
 
-If DNS fails, use IP directly: `host='66.33.22.235', port=24813` (resolve via `nslookup yamabiko.proxy.rlwy.net 8.8.8.8` if IP changes).
+Public host: `yamabiko.proxy.rlwy.net:24813`. Internal host: `postgres.railway.internal:5432`.
 
-Internal URL (Railway-only): `postgresql://postgres:oBfKWpdhuvAVlynKWZZmmZRABXWwNJAi@postgres.railway.internal:5432/railway`
+If DNS fails on the public host, resolve the IP via `nslookup yamabiko.proxy.rlwy.net 8.8.8.8` (was `66.33.22.235` previously; not guaranteed stable).
 
 ### Standing read authorization
 
