@@ -295,6 +295,7 @@ export const api = {
   getPendingInvite: () => request('/household/pending-invite'),
   acceptInvite: () => request('/household/accept-invite', { method: 'POST' }),
   declineInvite: () => request('/household/decline-invite', { method: 'POST' }),
+  removeHouseholdMember: (userId) => request(`/household/members/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
   inviteToBeta: (email) => request('/beta/invite', {
     method: 'POST',
     body: JSON.stringify({ email }),

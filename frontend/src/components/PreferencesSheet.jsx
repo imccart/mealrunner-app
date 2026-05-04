@@ -260,6 +260,19 @@ export default function PreferencesSheet({ onClose, onStartTour }) {
     } catch { /* ignore */ }
   }
 
+  const youAreOwner = !!(members && members.find(m => m.is_you && m.role === 'owner'))
+
+  const handleRemoveMember = async (member) => {
+    if (!window.confirm(`Remove ${member.display_name} from your household?`)) return
+    try {
+      const result = await api.removeHouseholdMember(member.user_id)
+      if (result.ok) {
+        const data = await api.getHouseholdMembers()
+        setMembers(data.members)
+      }
+    } catch { /* ignore */ }
+  }
+
   return (
     <Sheet onClose={onClose} className={styles.prefsSheet}>
         <div className="sheet-title">Account</div>
@@ -324,6 +337,16 @@ export default function PreferencesSheet({ onClose, onStartTour }) {
                     {m.display_name}{m.is_you ? ' (you)' : ''}
                   </span>
                   <span className={ls.listMeta}>{m.role}</span>
+                  {youAreOwner && !m.is_you && m.role !== 'owner' && (
+                    <button
+                      className={ls.remove}
+                      onClick={() => handleRemoveMember(m)}
+                      title={`Remove ${m.display_name}`}
+                      aria-label={`Remove ${m.display_name}`}
+                    >
+                      {'×'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

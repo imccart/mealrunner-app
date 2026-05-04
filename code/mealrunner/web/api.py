@@ -4579,6 +4579,47 @@ async def decline_invite(request: Request):
     return {"ok": True}
 
 
+@router.delete("/household/members/{member_user_id}")
+async def remove_household_member(member_user_id: str, request: Request):
+    """Owner-only: remove a member from the household. Severs the share but
+    does not delete the member's account — they can still log in and will see
+    a fresh, empty workspace."""
+    from mealrunner.web.auth import get_household_id
+
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    conn = _conn()
+
+    hh_id = get_household_id(conn, real_user_id)
+    if not hh_id:
+        return {"ok": False, "error": "No household"}
+
+    caller = conn.execute(
+        text("SELECT role FROM household_members WHERE household_id = :hh_id AND user_id = :uid"),
+        {"hh_id": hh_id, "uid": real_user_id},
+    ).fetchone()
+    if not caller or caller["role"] != "owner":
+        return JSONResponse({"ok": False, "error": "Only the owner can remove members"}, status_code=403)
+
+    if member_user_id == real_user_id:
+        return {"ok": False, "error": "Owner cannot remove self"}
+
+    target = conn.execute(
+        text("SELECT role FROM household_members WHERE household_id = :hh_id AND user_id = :uid"),
+        {"hh_id": hh_id, "uid": member_user_id},
+    ).fetchone()
+    if not target:
+        return {"ok": False, "error": "Member not in this household"}
+    if target["role"] == "owner":
+        return {"ok": False, "error": "Cannot remove the owner"}
+
+    conn.execute(
+        text("DELETE FROM household_members WHERE household_id = :hh_id AND user_id = :uid"),
+        {"hh_id": hh_id, "uid": member_user_id},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
 # ── Account ──────────────────────────────────────────────
 
 
