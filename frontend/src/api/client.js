@@ -26,7 +26,7 @@ function emitToast() {
 }
 
 // Paths where errors are handled by the caller (no toast)
-const SILENT_PATHS = ['/auth/me', '/auth/login', '/auth/google', '/auth/google-client-id']
+const SILENT_PATHS = ['/auth/me', '/auth/login', '/auth/google', '/auth/google-client-id', '/tip/stripe-config']
 
 async function request(path, options = {}) {
   const silent = SILENT_PATHS.some(p => path.startsWith(p))
@@ -346,7 +346,13 @@ export const api = {
   }),
 
   // Tip jar
-  getStripeConfig: () => request('/tip/stripe-config'),
+  // Returns parsed body whether response is 200 or 503 (the 503 carries
+  // {ok: false, fake: bool} which the icon-gating code needs to distinguish
+  // staging-fake-mode from production-not-yet-wired).
+  getStripeConfig: async () => {
+    const res = await fetch(`${BASE}/tip/stripe-config`)
+    try { return await res.json() } catch { return { ok: false, fake: false } }
+  },
   createTipCheckoutSession: (mode, amountCents) => request('/tip/checkout-session', {
     method: 'POST',
     body: JSON.stringify({ mode, amount_cents: amountCents }),

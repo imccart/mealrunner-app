@@ -43,6 +43,7 @@ function App() {
   const [showPrefs, setShowPrefs] = useState(false)
   const [showKitchen, setShowKitchen] = useState(false)
   const [showTipJar, setShowTipJar] = useState(false)
+  const [tipJarEnabled, setTipJarEnabled] = useState(false)
   const [authed, setAuthed] = useState(null)
   const [onboardingDone, setOnboardingDone] = useState(null)
   const [welcomed, setWelcomed] = useState(() => localStorage.getItem('mealrunner_welcomed') === 'true')
@@ -66,6 +67,13 @@ function App() {
     api.getMe()
       .then(() => {
         setAuthed(true)
+        // Probe Stripe config — show the tip jar icon when Stripe is reachable
+        // (real keys configured) OR when staging is in fake mode. Hide it in
+        // production until live-mode keys are added, otherwise tapping the icon
+        // would 500 on session creation.
+        api.getStripeConfig().then(c => {
+          setTipJarEnabled(c?.ok === true || c?.fake === true)
+        }).catch(() => {})
         // Check for pending household invite
         api.getPendingInvite().then(data => {
           if (data.invite) {
@@ -139,7 +147,7 @@ function App() {
 
   return (
     <div className="app">
-      <Nav page={page} setPage={setPage} kitchenOpen={showKitchen} onToggleKitchen={() => setShowKitchen(k => !k)} tipJarOpen={showTipJar} onToggleTipJar={() => setShowTipJar(t => !t)} prefsOpen={showPrefs} onTogglePrefs={() => setShowPrefs(p => !p)} isWide={isWide} />
+      <Nav page={page} setPage={setPage} kitchenOpen={showKitchen} onToggleKitchen={() => setShowKitchen(k => !k)} tipJarOpen={showTipJar} onToggleTipJar={() => setShowTipJar(t => !t)} tipJarEnabled={tipJarEnabled} prefsOpen={showPrefs} onTogglePrefs={() => setShowPrefs(p => !p)} isWide={isWide} />
       <main {...(!isWide ? { onTouchStart: swipeHandlers.onTouchStart, onTouchMove: swipeHandlers.onTouchMove, onTouchEnd: swipeHandlers.onTouchEnd } : {})} style={!isWide ? swipeHandlers.style : undefined}>
         {feedbackResponses.map(fr => (
           <div key={fr.id} className="feedback-response-banner">
