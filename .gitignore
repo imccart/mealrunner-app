@@ -47,3 +47,7 @@ scratch/
 .claude/
 .pytest_cache/
 CLAUDE.md
+
+# Local-only docs (credentials, prod connection details, anything that
+# shouldn't ride along in the public repo). Never commit anything from here.
+agents/local/

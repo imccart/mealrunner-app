@@ -13,11 +13,9 @@ PostgreSQL-specific patterns, gotchas, and operational rules for MealRunner. Pos
 
 ## Production connection
 
-**Never paste the full connection string (with password) into any tracked file.** Fetch fresh from Railway when needed: dashboard → mealrunner → Postgres service → Variables → `DATABASE_URL` (public) or `DATABASE_PRIVATE_URL` (internal).
+**Connection details (host, port, full URL with credentials) live in `agents/local/database.md` — gitignored, local-only.** Never copy any of those values into a tracked file.
 
-Public host: `yamabiko.proxy.rlwy.net:24813`. Internal host: `postgres.railway.internal:5432`.
-
-If DNS fails on the public host, resolve the IP via `nslookup yamabiko.proxy.rlwy.net 8.8.8.8` (was `66.33.22.235` previously; not guaranteed stable).
+If `agents/local/database.md` is missing, repopulate it from Railway: dashboard → mealrunner → Postgres service → Variables → `DATABASE_URL` and `DATABASE_PRIVATE_URL`. The local doc is also the right place for any prod-specific operational notes (DNS fallback IPs, etc.) that would otherwise drift into a tracked file.
 
 ### Standing read authorization
 
