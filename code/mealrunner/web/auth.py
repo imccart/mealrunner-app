@@ -227,6 +227,13 @@ def send_magic_link_email(email: str, token: str) -> bool:
     """Send a magic link email via Resend. Returns True on success."""
     import httpx
 
+    # E2E test emails point at an RFC2606-reserved invalid domain. Never
+    # attempt to send to them; the token is retrievable instead via
+    # /api/admin/e2e-magic-link-token.
+    if is_e2e_email(email):
+        print(f"[auth] e2e magic link suppressed for {email}; fetch token via admin endpoint")
+        return True
+
     if not RESEND_API_KEY:
         # Dev mode: print the link instead
         link = f"{BASE_URL}/api/auth/verify?token={token}"
@@ -286,7 +293,11 @@ def _magic_link_html(link: str) -> str:
 
 
 def is_email_allowed(conn: DictConnection, email: str) -> bool:
-    """Check if an email is on the beta whitelist."""
+    """Check if an email is on the beta whitelist. E2E test emails (RFC2606
+    reserved invalid domain) are auto-allowed so the magic-link login flow
+    can be exercised without seeding the whitelist table."""
+    if is_e2e_email(email):
+        return True
     row = conn.execute(
         text("SELECT 1 FROM allowed_emails WHERE LOWER(email) = LOWER(:email)"),
         {"email": email},

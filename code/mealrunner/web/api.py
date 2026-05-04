@@ -5174,6 +5174,36 @@ async def e2e_create_grocery_row(body: dict, request: Request):
     return {"ok": True, "id": row["id"]}
 
 
+@router.post("/admin/e2e-magic-link-token")
+async def e2e_magic_link_token(body: dict):
+    """Playwright: return the most recent unconsumed magic-link token for an
+    e2e test email. Lets the auth flow be exercised end-to-end without an
+    inbox. Only active when PLAYWRIGHT_TEST_SECRET is set; restricted to
+    e2e-*@mealrunner-test.invalid emails so a misuse can't extract real
+    users' tokens."""
+    from mealrunner.web.auth import e2e_enabled, verify_e2e_secret, E2E_EMAIL_DOMAIN
+
+    if not e2e_enabled():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    if not verify_e2e_secret(body.get("secret", "")):
+        return JSONResponse({"error": "Invalid secret"}, status_code=401)
+
+    email = body.get("email", "").strip().lower()
+    if not email or not email.endswith(E2E_EMAIL_DOMAIN):
+        return JSONResponse({"error": "e2e test email required"}, status_code=400)
+
+    conn = _conn()
+    row = conn.execute(
+        text("""SELECT m.token FROM magic_links m
+                JOIN users u ON u.id = m.user_id
+                WHERE LOWER(u.email) = :email AND m.used_at IS NULL
+                  AND m.expires_at > CURRENT_TIMESTAMP
+                ORDER BY m.created_at DESC LIMIT 1"""),
+        {"email": email},
+    ).fetchone()
+    return {"token": row["token"] if row else None}
+
+
 @router.post("/feedback/{feedback_id}/respond")
 async def respond_to_feedback(feedback_id: int, body: dict, request: Request):
     """Admin: respond to a feedback item."""
