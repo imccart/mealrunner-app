@@ -5,9 +5,7 @@ function getStops() {
   const isWide = window.innerWidth >= 1024
   return [
     {
-      selectors: isWide
-        ? ['[data-tour="plan"]', '[data-tour="plan-content"]']
-        : ['[data-tour="plan-tab"]'],
+      selectors: isWide ? ['[data-tour="plan"]'] : ['[data-tour="plan-tab"]'],
       label: 'Plan',
       desc: 'Your dinners for the week. ' + (isWide ? 'Click' : 'Tap') + ' a day to pick a meal.',
     },
@@ -32,6 +30,11 @@ function getStops() {
       selectors: ['[data-tour="kitchen"]'],
       label: 'Kitchen',
       desc: 'Your meals, sides, staples, and product ratings.',
+    },
+    {
+      selectors: ['[data-tour="tipjar"]'],
+      label: 'Tip jar',
+      desc: 'Be sure to tip your app maker.',
     },
     {
       selectors: ['[data-tour="account"]'],
