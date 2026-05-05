@@ -3056,7 +3056,12 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         result["item_count_footer"] = footer_count
         result["item_count_parsed"] = parsed_qty
         if footer_count != parsed_qty:
-            result["item_count_gap"] = footer_count - parsed_qty
+            gap = footer_count - parsed_qty
+            result["item_count_gap"] = gap
+            logger.warning(
+                "Receipt item-count gap (%s): footer=%d parsed=%d gap=%+d user=%s",
+                receipt_type, footer_count, parsed_qty, gap, user_id,
+            )
     return result
 
 
