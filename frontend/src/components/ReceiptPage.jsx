@@ -307,6 +307,14 @@ export default function ReceiptPage() {
             Found {uploadResult.matched + (uploadResult.extras || 0)} item{(uploadResult.matched + (uploadResult.extras || 0)) !== 1 ? 's' : ''} on the receipt
           </div>
         )}
+        {!uploading && uploadResult && uploadResult.ok && uploadResult.item_count_gap !== undefined && (
+          <div className={styles.receiptCountWarning}>
+            Receipt says {uploadResult.item_count_footer} item{uploadResult.item_count_footer !== 1 ? 's' : ''}, we picked up {uploadResult.item_count_parsed}.
+            {uploadResult.item_count_gap > 0
+              ? ` ${uploadResult.item_count_gap} may be missing — try re-uploading a clearer copy.`
+              : ` ${-uploadResult.item_count_gap} extra detected — review for double-counts.`}
+          </div>
+        )}
       </div>
 
       <button

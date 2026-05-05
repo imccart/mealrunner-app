@@ -284,11 +284,13 @@ def _extract_json(response_text: str) -> list[dict]:
     return json.loads(text)
 
 
-def parse_receipt_pdf(pdf_path: str) -> list[dict]:
+def parse_receipt_pdf(pdf_path: str) -> tuple[list[dict], int | None]:
     """Parse a Kroger PDF receipt. Extracts structured item data directly (no LLM needed).
 
     Falls back to Claude text parsing if the structured format isn't detected.
-    Returns list of {item, qty, price, upc}.
+    Returns (items, footer_count) where footer_count is the chain-printed total
+    item count (e.g. "58 Items" header on Kroger PDFs) for cross-check vs.
+    sum-of-qty, or None if not extractable.
     """
     import fitz  # PyMuPDF
 
@@ -300,13 +302,21 @@ def parse_receipt_pdf(pdf_path: str) -> list[dict]:
     text = "\n".join(page.get_text() for page in doc)
     doc.close()
 
+    footer_count = _extract_kroger_item_count(text)
+
     # Try structured Kroger format first (has UPC lines)
     items = _parse_kroger_structured(text)
     if items:
-        return items
+        return items, footer_count
 
     # Fall back to Claude text parsing
-    return parse_receipt_text(text)
+    return parse_receipt_text(text), footer_count
+
+
+def _extract_kroger_item_count(text: str) -> int | None:
+    """Extract Kroger PDF's "Item Details   N Items" footer count."""
+    m = re.search(r"Item Details\s+(\d+)\s+Items?\b", text)
+    return int(m.group(1)) if m else None
 
 
 def _parse_kroger_structured(text: str) -> list[dict]:

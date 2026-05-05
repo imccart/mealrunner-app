@@ -2739,7 +2739,12 @@ async def get_receipt(request: Request):
 
 
 def _parse_receipt_by_type(receipt_type: str, content: str, grocery_names: list[str] | None = None):
-    """Internal: parse receipt content by type. Only called from trusted code paths."""
+    """Internal: parse receipt content by type. Only called from trusted code paths.
+
+    Returns (items, footer_count). footer_count is the chain-printed total
+    item count from the receipt (e.g. Kroger PDF "58 Items"); None if the
+    parser can't extract one for this receipt type.
+    """
     from mealrunner.reconcile import (
         parse_receipt_text, parse_receipt_pdf, parse_receipt_image,
         parse_receipt_email,
@@ -2747,11 +2752,11 @@ def _parse_receipt_by_type(receipt_type: str, content: str, grocery_names: list[
     if receipt_type == "pdf_path":
         return parse_receipt_pdf(content)
     elif receipt_type == "image_path":
-        return parse_receipt_image(content, grocery_names=grocery_names)
+        return parse_receipt_image(content, grocery_names=grocery_names), None
     elif receipt_type == "eml_path":
-        return parse_receipt_email(content)
+        return parse_receipt_email(content), None
     else:
-        return parse_receipt_text(content)
+        return parse_receipt_text(content), None
 
 
 async def _process_receipt(receipt_type: str, content: str, request: Request):
@@ -2780,7 +2785,7 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
 
     # Parse receipt
     try:
-        receipt_items = _parse_receipt_by_type(receipt_type, content, grocery_names=grocery_names)
+        receipt_items, footer_count = _parse_receipt_by_type(receipt_type, content, grocery_names=grocery_names)
     except Exception as e:
         logger.exception("Failed to parse receipt")
         return {"ok": False, "error": "Failed to parse receipt"}
@@ -3046,6 +3051,12 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         result["previously_matched"] = previously_matched
     if receipt_remaining:
         result["extras"] = len(receipt_remaining)
+    if footer_count is not None:
+        parsed_qty = sum((ri.get("qty") or 1) for ri in receipt_items)
+        result["item_count_footer"] = footer_count
+        result["item_count_parsed"] = parsed_qty
+        if footer_count != parsed_qty:
+            result["item_count_gap"] = footer_count - parsed_qty
     return result
 
 

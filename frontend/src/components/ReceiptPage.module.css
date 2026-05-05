@@ -81,6 +81,17 @@
   font-style: italic;
 }
 
+.receiptCountWarning {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #fdf3d4;
+  border: 1px solid #e6c980;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #5a4a18;
+  line-height: 1.4;
+}
+
 /* ── Sections ─────────────────────────── */
 .receiptSection {
   margin-bottom: 20px;
