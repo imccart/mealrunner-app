@@ -68,14 +68,17 @@ _skip_patterns = re.compile(
 )
 
 
-def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None) -> list[dict]:
+def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None) -> tuple[list[dict], int | None]:
     """Parse a receipt image using Claude Vision (single combined call).
 
     Extracts purchased items AND matches them against the grocery list in one pass.
     Visual context (sizes, brands, position) helps Claude make better matching
     decisions than text-only matching.
 
-    Returns list of {item, raw, qty, price, grocery_match?}.
+    Returns (items, footer_count). footer_count is the chain-printed total
+    item count from the receipt footer ("# ITEMS SOLD 7", "ITEMS SOLD 20",
+    "TOTAL NUMBER OF ITEMS SOLD - 20", etc.) — used by callers to detect
+    extraction misses. None if no count is visible.
     """
     image_data, media_type = _load_image_for_api(image_path)
     client = _get_client()
@@ -97,6 +100,21 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
         "- If unsure whether a line is a product or metadata, SKIP IT.\n"
         "- Only return items ACTUALLY VISIBLE on this receipt. Do NOT invent items "
         "even if they appear on the grocery list.\n\n"
+        "FOOTER ITEM COUNT:\n"
+        "- Many receipts print a TOTAL number of items sold near the bottom or "
+        "in a header/summary block. Common phrasings:\n"
+        "    '# ITEMS SOLD 7' (Walmart)\n"
+        "    'NUMBER OF ITEMS 1' (Save Mart / Albertsons banners)\n"
+        "    'TOTAL NUMBER OF ITEMS SOLD - 20' (Costco)\n"
+        "    'BOB Count 20' (Costco bottom-of-basket)\n"
+        "    'ITEMS 8' (Trader Joe's)\n"
+        "    'ITEMS SOLD 20' (99 Cents Only)\n"
+        "    '15 Artikel' (Aldi, German)\n"
+        "    'N Items' (digital/app receipts)\n"
+        "- If you see one, return that integer as `footer_count`. If multiple "
+        "appear (e.g. Costco shows both 'BOB Count' and 'TOTAL NUMBER OF ITEMS'), "
+        "return the TOTAL NUMBER value.\n"
+        "- If no count is visible, return null.\n\n"
     )
 
     if grocery_names:
@@ -124,15 +142,17 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
             f"Grocery list: {json.dumps(grocery_names)}\n\n"
         )
         schema_line = (
-            "Return ONLY a JSON array (no markdown). Each object:\n"
-            '{"raw": "EXACT text from receipt", "price": 3.67, '
-            '"grocery_match": "exact grocery list item or null"}'
+            "Return ONLY a JSON object (no markdown):\n"
+            '{"footer_count": 20 or null, '
+            '"items": [{"raw": "EXACT text", "price": 3.67, '
+            '"grocery_match": "exact grocery list item or null"}, ...]}'
         )
     else:
         matching_rules = ""
         schema_line = (
-            "Return ONLY a JSON array (no markdown). Each object:\n"
-            '{"raw": "EXACT text from receipt", "price": 3.67}'
+            "Return ONLY a JSON object (no markdown):\n"
+            '{"footer_count": 20 or null, '
+            '"items": [{"raw": "EXACT text", "price": 3.67}, ...]}'
         )
 
     response = client.messages.create(
@@ -154,9 +174,19 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
         }],
     )
 
-    raw_items = _extract_json(response.content[0].text)
-    if not isinstance(raw_items, list) or not raw_items:
-        return []
+    parsed = _extract_json(response.content[0].text)
+    # Accept both new shape {"footer_count": N, "items": [...]} and legacy bare array.
+    if isinstance(parsed, dict):
+        raw_items = parsed.get("items") or []
+        fc = parsed.get("footer_count")
+        footer_count = int(fc) if isinstance(fc, (int, float)) else None
+    elif isinstance(parsed, list):
+        raw_items = parsed
+        footer_count = None
+    else:
+        return [], None
+    if not raw_items:
+        return [], footer_count
 
     # Filter out non-item lines Claude may have included anyway
     filtered = []
@@ -172,7 +202,7 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
         filtered.append(item)
 
     if not filtered:
-        return []
+        return [], footer_count
 
     grocery_lower_set = {g.lower() for g in (grocery_names or [])}
     grocery_canonical = {g.lower(): g for g in (grocery_names or [])}
@@ -214,8 +244,8 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
         })
 
     print(f"[receipt] {matched_count} matched, {len(results) - matched_count} extras "
-          f"(out of {len(filtered)} extracted)", flush=True)
-    return results
+          f"(out of {len(filtered)} extracted, footer_count={footer_count})", flush=True)
+    return results, footer_count
 
 
 def parse_receipt_text(text: str) -> list[dict]:

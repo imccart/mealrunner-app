@@ -2752,7 +2752,7 @@ def _parse_receipt_by_type(receipt_type: str, content: str, grocery_names: list[
     if receipt_type == "pdf_path":
         return parse_receipt_pdf(content)
     elif receipt_type == "image_path":
-        return parse_receipt_image(content, grocery_names=grocery_names), None
+        return parse_receipt_image(content, grocery_names=grocery_names)
     elif receipt_type == "eml_path":
         return parse_receipt_email(content), None
     else:

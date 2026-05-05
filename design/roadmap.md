@@ -4,7 +4,6 @@
 
 ## Pre-Launch / Polish
 - [ ] L5 — Frontend JSON response validation (zod)
-- [ ] Receipt parser item-count check (image path) — Vision prompt extracts the chain footer count; backend computes gap vs. parsed qty; banner surfaces mismatch to user. PDF path shipped; image path still pending.
 - [ ] Receipt fixtures library — collect public receipts from major US grocers (Kroger, Walmart, Target, Publix, Safeway, Aldi, HEB, Whole Foods, Trader Joe's) for both e2e tests AND parser learning. Sources: r/Receipts, r/Frugal, r/inflation; news photos from inflation coverage; SROIE / CORD academic datasets; user's own saved receipts. Goal: stress-test the parser against real layouts beyond Kroger.
 
 ## Monetization
