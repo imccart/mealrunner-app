@@ -65,6 +65,16 @@ Thumbs up/down on reconciled receipt items. Ratings surface on the Order page (p
 - **Confirming a match** sets `checked=1, ordered=0`.
 - **Not-fulfilled** items reset to active (cleared `ordered` / `submitted` / product data) so they can be re-ordered.
 
+## Item-count cross-check (PDF, shipped session 70)
+
+Kroger PDFs print `Item Details   N Items` in the order header. `parse_receipt_pdf` returns `(items, footer_count)`; `_process_receipt` compares `footer_count` to `sum(qty)` of extracted items and writes `item_count_footer` / `item_count_parsed` / `item_count_gap` into the upload response. Mismatches log a `logger.warning`. UI is silent — gap is a backend signal, not a user nag.
+
+Two distinct failure modes the gap can surface, with different recoveries:
+- **Extraction miss (Case A):** parser extracted fewer line items than the footer states. PDF cause is usually a malformed UPC block or new line shape the structural walker doesn't handle. Recovery = re-walk the text with looser patterns. **Not built** — waiting for a real gapped PDF in logs to design against, since the post-weighted-fix structural parser produces gap=0 on real Kroger output.
+- **Matching miss (Case B):** parser got everything but matching couldn't bind some lines to grocery rows. Already largely handled — `diff_grocery_list` runs against `all_name_candidates` (every active grocery row, not just submitted-to-Kroger), and the leftover ends up in `receipt_extra_items` for manual "This is..." binding.
+
+Image path (Claude Vision) doesn't have an item-count check yet. When implemented, the only viable "second pass" is re-prompting Vision with the footer count as a hint, since Vision *is* the parser.
+
 ## Substitution detection
 
 When `diff_order` matches by name (not UPC), the item is marked `substituted` instead of `matched`. Ratings apply to the **received** product (uses `receipt_upc` first).
