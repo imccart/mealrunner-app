@@ -347,6 +347,12 @@ def _parse_kroger_structured(text: str) -> list[dict]:
                     qty = int(qty_match.group(1))
                     continue
 
+                # Weighted qty line: "2.28 lbs x $17.99 each (approx.)" — counts as qty=1
+                # in Kroger's "N Items" total. Without this branch the line gets
+                # captured as the item name and the real product name is lost.
+                if re.match(r"[\d.]+\s*lbs?\s*x\s*\$[\d.]+", prev):
+                    continue
+
                 # Price line: "$5.00" alone
                 price_match = re.match(r"^\$([\d.]+)$", prev)
                 if price_match and price is None:
