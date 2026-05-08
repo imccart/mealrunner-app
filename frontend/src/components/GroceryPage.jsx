@@ -210,10 +210,6 @@ export default function GroceryPage({ sidebar = false }) {
   })
 
   const hasItems = sortedGroups.length > 0
-  // totalItems was only used for the in-shopping-mode "X of Y" header; active
-  // count + completed count gives the same value.
-  const checkedCount = (checked || []).length + (have_it || []).length
-  const totalItems = totalActive + checkedCount
 
   // Shopping mode enter/exit
   const enterShoppingMode = async () => {
@@ -334,7 +330,7 @@ export default function GroceryPage({ sidebar = false }) {
       <div className={styles.shoppingMode}>
         <div className={styles.shoppingHeader}>
           <div className={styles.shoppingCount}>
-            {checkedCount} of {checkedCount + totalActive}
+            {allChecked.length} of {allChecked.length + totalActive}
           </div>
           <button className={styles.shoppingDone} onClick={exitShoppingMode}>Done</button>
         </div>
