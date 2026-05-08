@@ -326,6 +326,13 @@ export const api = {
   getFeedbackResponses: () => request('/feedback/responses'),
   dismissFeedbackResponse: (id) => request(`/feedback/${id}/dismiss`, { method: 'POST' }),
 
+  // Admin feedback
+  getAllFeedback: () => request('/feedback/all'),
+  respondToFeedback: (id, response) => request(`/feedback/${id}/respond`, {
+    method: 'POST',
+    body: JSON.stringify({ response }),
+  }),
+
   // Shopping feedback
   getFeedbackPatterns: () => request('/feedback/patterns'),
   dismissFeedback: (item, meal, kind) => request('/feedback/dismiss', {

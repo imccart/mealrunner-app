@@ -14,6 +14,7 @@ import LoginPage from './components/LoginPage'
 import HouseholdInvitePrompt from './components/HouseholdInvitePrompt'
 import { CrashTest } from './components/ErrorBoundary'
 import TourOverlay from './components/TourOverlay'
+import AdminFeedback from './components/AdminFeedback'
 
 function useIsWide(breakpoint = 1024) {
   const [wide, setWide] = useState(window.innerWidth >= breakpoint)
@@ -54,6 +55,12 @@ function App() {
   const [tourActive, setTourActive] = useState(false)
   const [mealData, setMealData] = useState(null)
   const [feedbackResponses, setFeedbackResponses] = useState([])
+  const [hash, setHash] = useState(window.location.hash)
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
   const mobilePages = useMemo(() => ['plan', 'grocery', 'order', 'receipt'], [])
   const swipeHandlers = useSwipeNav(mobilePages, page, setPage)
 
@@ -108,7 +115,7 @@ function App() {
   const dateRange = mealData ? formatDateRange(mealData.start_date, mealData.end_date) : null
 
   // Test route: getmealrunner.app/app#oops
-  if (window.location.hash === '#oops') {
+  if (hash === '#oops') {
     return <CrashTest />
   }
 
@@ -126,6 +133,10 @@ function App() {
 
   if (!authed) {
     return <LoginPage />
+  }
+
+  if (hash === '#admin') {
+    return <AdminFeedback />
   }
 
   // Show household invite prompt before onboarding — invited members
