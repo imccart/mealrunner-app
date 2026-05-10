@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _CONFIG_DIR = Path.home() / ".mealrunner"
 _ANTHROPIC_CREDS = _CONFIG_DIR / "anthropic_credentials.json"
@@ -41,7 +44,11 @@ def _load_image_for_api(image_path: str) -> tuple[str, str]:
         raise ValueError(f"Unsupported image format: {suffix}")
 
     raw = path.read_bytes()
-    if len(raw) > 4 * 1024 * 1024:
+    # Anthropic Vision caps base64 image data at 5 MB. Base64 inflates raw by
+    # ~33%, so anything over ~3.75 MB raw will exceed the cap after encoding.
+    # Use 3.5 MB threshold to leave headroom (in-app camera at 4096x4096 ideal
+    # routinely produces 4 MB JPEGs that hit this).
+    if len(raw) > 3_500_000:
         from PIL import Image
         import io
         img = Image.open(io.BytesIO(raw))
@@ -81,6 +88,10 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
     extraction misses. None if no count is visible.
     """
     image_data, media_type = _load_image_for_api(image_path)
+    logger.info(
+        "parse_receipt_image: media_type=%s, b64_len=%d, grocery_names=%d",
+        media_type, len(image_data), len(grocery_names) if grocery_names else 0,
+    )
     client = _get_client()
 
     extraction_rules = (
@@ -157,7 +168,7 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
 
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=4096,
+        max_tokens=8192,
         messages=[{
             "role": "user",
             "content": [
@@ -174,7 +185,18 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
         }],
     )
 
-    parsed = _extract_json(response.content[0].text)
+    raw_text = response.content[0].text
+    try:
+        parsed = _extract_json(raw_text)
+    except (ValueError, json.JSONDecodeError) as e:
+        # Long receipts can hit max_tokens and return truncated JSON; Claude
+        # can also wrap the JSON in prose despite instructions. Log the head
+        # of the response so the next failure is debuggable from prod logs.
+        logger.warning(
+            "Vision JSON parse failed (%s): stop_reason=%s, text_head=%r",
+            e, getattr(response, "stop_reason", "?"), raw_text[:800],
+        )
+        raise
     # Accept both new shape {"footer_count": N, "items": [...]} and legacy bare array.
     if isinstance(parsed, dict):
         raw_items = parsed.get("items") or []
