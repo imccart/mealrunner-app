@@ -78,8 +78,21 @@
 }
 
 .pickerSideActions {
-  margin-top: 16px;
+  position: sticky;
+  bottom: 0;
+  margin: 16px -20px 0;
+  padding: 12px 20px calc(16px + env(safe-area-inset-bottom));
+  background: white;
+  border-top: 1px solid var(--warm-white);
   text-align: center;
+  z-index: 2;
+}
+
+@media (min-width: 1024px) {
+  .pickerSideActions {
+    margin: 16px -24px 0;
+    padding: 12px 24px 16px;
+  }
 }
 
 .pickerBack {
