@@ -207,6 +207,21 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
         footer_count = None
     else:
         return [], None
+    # Log Vision's raw item list (pre-filter) so extraction misses are
+    # debuggable after the fact. Without this, post-filter logs show what
+    # made it through but nothing about what Vision actually returned —
+    # making "Vision skipped this line" indistinguishable from "Vision
+    # returned it and our filter dropped it" in production.
+    raw_summary = [
+        {"raw": (it.get("raw") or "")[:80], "price": it.get("price"),
+         "match": it.get("grocery_match")}
+        for it in raw_items
+    ]
+    logger.info(
+        "Vision returned %d items (footer_count=%s): %s",
+        len(raw_items), footer_count, raw_summary,
+    )
+
     if not raw_items:
         return [], footer_count
 
