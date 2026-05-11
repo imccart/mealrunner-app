@@ -27,19 +27,20 @@ def test_grocery_excludes_staples(conn):
         assert item.ingredient_name not in staple_names, f"Staple {item.ingredient_name} in grocery list"
 
 
-def test_grocery_subtracts_pantry(conn):
+def test_grocery_excludes_pantry(conn):
+    """Items the user has marked Keep-on-hand (in pantry) are filtered out
+    of the meal-driven list entirely. Presence filter, not quantity subtraction:
+    the user adds them via /grocery/add-pantry when they actually need them."""
     meals, start, end = _make_meals(conn)
-    gl_before = build_grocery_list(conn, meals, start, end)
+    gl_before = build_grocery_list(conn, meals, start, end, user_id="default")
 
     if gl_before.items:
         target = gl_before.items[0]
-        add_pantry_item(conn, target.ingredient_name, target.total_quantity, target.unit)
+        add_pantry_item(conn, "default", target.ingredient_name, 1.0, "count")
 
-        gl_after = build_grocery_list(conn, meals, start, end)
+        gl_after = build_grocery_list(conn, meals, start, end, user_id="default")
         after_names = {i.ingredient_name for i in gl_after.items}
-        assert target.ingredient_name not in after_names or \
-            any(i.total_quantity < target.total_quantity for i in gl_after.items
-                if i.ingredient_name == target.ingredient_name)
+        assert target.ingredient_name not in after_names
 
 
 def test_split_by_store(conn):

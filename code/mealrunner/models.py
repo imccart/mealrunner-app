@@ -172,7 +172,6 @@ class GroceryListItem:
     unit: str
     store: str  # sams, kroger
     aisle: str = ""
-    from_pantry: float = 0.0
     checked: bool = False
     ingredient_name: str = ""  # populated on read
     category: str = ""

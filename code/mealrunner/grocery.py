@@ -94,47 +94,46 @@ def build_grocery_list(
 
     # Skip ingredients the user has explicitly told us they handle elsewhere:
     # active regulars (the "every trip" checklist) and pantry items they've
-    # said they have on hand. The ingredient-level is_pantry_staple flag is
-    # NOT used for filtering — that's a hint for onboarding / "add to pantry?"
-    # suggestions, not a silent gate on what reaches the grocery list.
+    # marked "Keep on hand". Both are presence-only filters — pantry quantity
+    # is meaningless here because UI flows insert pantry rows as "1.0 count"
+    # while recipe quantities are tbsp/cups/oz, so unit-blind subtraction
+    # (2 tbsp - 1.0 count = 1) used to leak items the user expected to be
+    # held back. Pantry items get added to the trip via /grocery/add-pantry
+    # ("Check my staples"), same shape as the regulars add flow.
+    # The ingredient-level is_pantry_staple flag is NOT used for filtering —
+    # that's a hint for onboarding / "add to pantry?" suggestions.
     from mealrunner.regulars import list_regulars
     from mealrunner.normalize import compare_key
     regular_keys = {compare_key(r.name) for r in list_regulars(conn, user_id)}
 
-    # Bulk-fetch pantry quantities for every aggregated ingredient in one
-    # query (was one query per ingredient via get_pantry_quantity).
-    pantry_qtys: dict[int, float] = {}
+    pantry_ids: set[int] = set()
     if agg:
         agg_ids = list(agg.keys())
         ph = ", ".join(f":i{i}" for i in range(len(agg_ids)))
         ps = {f"i{i}": iid for i, iid in enumerate(agg_ids)}
         ps["uid"] = user_id
         for row in conn.execute(
-            text(f"""SELECT ingredient_id, quantity FROM pantry
+            text(f"""SELECT ingredient_id FROM pantry
                   WHERE user_id = :uid AND ingredient_id IN ({ph})"""),
             ps,
         ).fetchall():
-            pantry_qtys[row["ingredient_id"]] = row["quantity"]
+            pantry_ids.add(row["ingredient_id"])
 
     items: list[GroceryListItem] = []
     for iid, info in sorted(agg.items(), key=lambda x: (x[1]["store"], x[1]["aisle"], x[1]["name"])):
         if compare_key(info["name"]) in regular_keys:
             continue
-
-        pantry_qty = pantry_qtys.get(iid, 0.0)
-        needed = info["quantity"] - pantry_qty
-        if needed <= 0:
+        if iid in pantry_ids:
             continue
 
         items.append(GroceryListItem(
             id=None,
             list_id=0,
             ingredient_id=iid,
-            total_quantity=round(needed, 2),
+            total_quantity=round(info["quantity"], 2),
             unit=info["unit"],
             store=info["store"],
             aisle=info["aisle"],
-            from_pantry=pantry_qty,
             ingredient_name=info["name"],
             category=info["category"],
             meals=sorted(info["meals"]),

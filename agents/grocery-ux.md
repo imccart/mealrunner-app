@@ -49,6 +49,7 @@ Food aisles **plus** Personal Care, Household, Cleaning, Pets for non-food items
 
 - **Regulars delete by ID.** `DELETE /regulars/{id}` uses integer ID, not name-in-URL (name-based path was unreliable).
 - **Staple type prompt.** Adding a staple prompts "Every trip" vs "Keep on hand" before saving.
+- **Both filter meal-driven items by presence.** "Every trip" regulars and "Keep on hand" pantry both get excluded from `build_grocery_list` output by canonical-name / ingredient-id match — so meal ingredients never auto-flow a staple onto the list. User adds them when they want: "Add my regulars" / "Check my staples." The `pantry` table has `quantity` / `unit` columns from an earlier inventory-tracking design that never got a UI; they're written as defaults (1.0 / count) and ignored on read. Don't reintroduce unit-blind quantity subtraction (recipes ask in tbsp/cups, pantry says 1.0 count → leaked items in pre-2026-05-11 builds).
 - **Staple recategorize.** Hamburger icon on each staple opens a category picker.
 - **Passive staple suggestion.** After "Have it" tapped 3+ times on the same item, suggest adding it as a staple.
 - **Smart suggestions.** `last_bought_at` on `regulars` and `pantry`. Learning endpoint suggests removing regulars not bought in 4+ weeks (only if the regular itself is 4+ weeks old) and restocking staples not bought in 6+ weeks (only after first purchase tracked). No skip tracking — unselected regulars are simply not added to a trip.
