@@ -9,6 +9,7 @@ export default function SidePickerSheet({ date, mealName, onSelect, onClose }) {
   const [data, setData] = useState(null)
   const [search, setSearch] = useState('')
   const [selectedSides, setSelectedSides] = useState([])
+  const [initialIds, setInitialIds] = useState(null)
 
   useEffect(() => {
     api.getSides(date).then(d => {
@@ -16,7 +17,9 @@ export default function SidePickerSheet({ date, mealName, onSelect, onClose }) {
       setData(d)
       // Initialize with currently selected sides
       const current = (d.sides || []).filter(s => s.current)
-      setSelectedSides(current.map(s => ({ id: s.id, name: s.name })))
+      const currentList = current.map(s => ({ id: s.id, name: s.name }))
+      setSelectedSides(currentList)
+      setInitialIds(new Set(currentList.map(s => s.id)))
     })
   }, [date])
 
@@ -49,6 +52,16 @@ export default function SidePickerSheet({ date, mealName, onSelect, onClose }) {
     : data.sides
 
   const selectedIds = new Set(selectedSides.map(s => s.id))
+
+  // Confirm button only appears when there's an actual change to commit:
+  // either the user has selected something, or they've deselected
+  // previously-existing sides. Fresh open of a sides-less meal shows
+  // no button — user closes the sheet via X / overlay tap to bail.
+  const dirty = initialIds && (
+    selectedSides.length !== initialIds.size ||
+    selectedSides.some(s => !initialIds.has(s.id))
+  )
+  const showConfirm = selectedSides.length > 0 || dirty
 
   return (
     <Sheet onClose={onClose} className={styles.mealPickerSheet}>
@@ -95,11 +108,13 @@ export default function SidePickerSheet({ date, mealName, onSelect, onClose }) {
         </>
       )}
 
-      <div className={styles.pickerSideActions}>
-        <button className="btn primary" onClick={confirm}>
-          {selectedSides.length === 0 ? 'No sides' : `Done (${selectedSides.length})`}
-        </button>
-      </div>
+      {showConfirm && (
+        <div className={styles.pickerSideActions}>
+          <button className="btn primary" onClick={confirm}>
+            {selectedSides.length === 0 ? 'Done' : `Done (${selectedSides.length})`}
+          </button>
+        </div>
+      )}
     </Sheet>
   )
 }

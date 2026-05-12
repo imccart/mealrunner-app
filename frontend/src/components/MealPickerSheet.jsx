@@ -115,7 +115,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
             )}
             <div className={styles.pickerSideActions}>
               <button className="btn primary" onClick={confirmSides}>
-                {selectedSides.length === 0 ? 'No sides' : `Done (${selectedSides.length})`}
+                {selectedSides.length === 0 ? 'Done' : `Done (${selectedSides.length})`}
               </button>
             </div>
             <button className={styles.pickerBack} onClick={() => { setPickedRecipe(null); setSides(null); setSideSearch(''); setSelectedSides([]) }}>
