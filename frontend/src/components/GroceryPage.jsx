@@ -571,13 +571,13 @@ export default function GroceryPage({ sidebar = false }) {
       <div className={styles.groceryActions}>
         {renderActionCard({
           expanded: regularsExpanded,
-          label: 'Add my regulars',
+          label: 'Add every-trip items',
           onExpand: handleRegularsExpand, onSubmit: handleRegularsSubmit,
           data: regularsData, checkedSet: regularsChecked, setChecked: setRegularsChecked, groupField: 'shopping_group',
         })}
         {renderActionCard({
           expanded: pantryExpanded,
-          label: 'Check my staples',
+          label: 'Check on-hand items',
           onExpand: handlePantryExpand, onSubmit: handlePantrySubmit,
           data: pantryData, checkedSet: pantryChecked, setChecked: setPantryChecked, groupField: null,
         })}
