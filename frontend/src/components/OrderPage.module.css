@@ -751,6 +751,17 @@
   align-items: center;
   gap: 12px;
 }
+.storeDetailsName {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.storeDetailsName .storeSelect {
+  max-width: 100%;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
 .storeSelect {
   font-family: 'Playfair Display', serif;
   font-size: 16px;
@@ -781,10 +792,11 @@
   border: 1.5px solid var(--tan);
   border-radius: 8px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .fulfillmentBtn {
-  padding: 5px 14px;
+  padding: 5px 12px;
   border: none;
   background: none;
   font-family: 'DM Sans', sans-serif;
@@ -793,6 +805,7 @@
   color: var(--brown);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
 }
 
 .fulfillmentBtn.active {
