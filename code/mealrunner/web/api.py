@@ -2627,9 +2627,30 @@ async def get_receipt(request: Request):
     order_source = trip["order_source"] if "order_source" in trip.keys() else "none"
     has_receipt = bool(trip["receipt_data"]) if "receipt_data" in trip.keys() and trip["receipt_data"] else False
 
-    # Get all trip items with their states (single query)
+    # Auto-acknowledge matched/substituted rows older than 10 days so the
+    # receipt page is a queue ("stuff needing attention"), not an unbounded
+    # log of every past purchase. Purchase history lives in /purchases.
+    # submitted_at is the proxy: most matched rows came through a Kroger
+    # order; rows without submitted_at stay unacknowledged until manually
+    # dismissed (rare edge case, no regression).
+    conn.execute(
+        text("""UPDATE grocery_items SET receipt_acknowledged = 1
+           WHERE user_id = :user_id
+             AND receipt_status IN ('matched', 'substituted')
+             AND receipt_acknowledged = 0
+             AND submitted_at IS NOT NULL
+             AND submitted_at < NOW() - INTERVAL '10 days'"""),
+        {"user_id": user_id},
+    )
+    conn.commit()
+
+    # Get trip items, excluding acknowledged matched/substituted/dismissed
+    # rows (purchase log, not queue).
     rows = conn.execute(
-        text("SELECT * FROM grocery_items WHERE user_id = :user_id ORDER BY shopping_group, name"),
+        text("""SELECT * FROM grocery_items WHERE user_id = :user_id
+           AND NOT (receipt_status IN ('matched', 'substituted', 'dismissed')
+                    AND receipt_acknowledged = 1)
+           ORDER BY shopping_group, name"""),
         {"user_id": user_id},
     ).fetchall()
 
