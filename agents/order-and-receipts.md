@@ -28,6 +28,8 @@ Simple ← prev / next → navigation through items.
 - Submitted items excluded from future order flows.
 - Order page refreshes after submit → empty state.
 - **Quantity cap:** clamped to `[1, 24]` in the `select_product` endpoint.
+- **Submit chokepoint filter** (session 73): the submit SELECT is the single guard against closed-state rows reaching Kroger. Filter is `product_upc != '' AND ordered = 1 AND submitted_at IS NULL AND checked = 0 AND have_it = 0 AND removed = 0 AND COALESCE(receipt_status, '') = ''`. The rollback path on failure mirrors the same filter. **Why this matters:** `grocery_items` holds both the active list and the purchase log (matched/substituted rows back ratings, spend totals, `/purchases`, receipt dedup, staple suggestions). `select_product`'s UPDATE matches by `LOWER(name)` with no state filter, so it CAN stamp `ordered=1, product_upc=X` onto a hidden matched row sharing a name with the active pick. Without the chokepoint filter, Kroger's additive `/cart/add` sums the duplicate UPC into qty=2.
+- **Stuck-row repair gate** (`_ensure_active_trip`, api.py:642): clears `submitted_at` on `ordered=0 AND submitted_at IS NOT NULL` rows but **must** exclude `receipt_status != ''` — matched rows legitimately have `ordered=0` with their original `submitted_at` preserved as a "finalized" marker. Clearing it makes them re-pickable by the chokepoint.
 
 ## Meal attribution
 

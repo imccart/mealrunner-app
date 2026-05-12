@@ -141,3 +141,24 @@ Big multi-phase cleanup. The commits below are all referenced from `grocery-sync
 - **Open threads** (carried):
   - Drop the legacy `regulars` and `pantry` tables in a follow-up once confidence is high that nothing reads from them.
   - Carried forward from session 71: Tucker registration paperwork, friends-beta first invite, receipt-fixture commit policy, L5 frontend zod validation, Publix DLI MOZZ LGS extraction miss.
+
+## Session 73 — Kroger duplicate-cart fix + order page toggle clipping
+- **Kroger cart doubling fix** (commit `860bb75`). Items were arriving at Kroger.com at qty=2 even though MealRunner sent qty=1. Bug was a three-step interaction between four code paths in `web/api.py`:
+  1. Receipt reconcile correctly sets `checked=1, ordered=0, receipt_status='matched'` on the bought row, **preserving** `submitted_at` from the original submission as a "safe, finalized" marker (so submit won't re-pull it).
+  2. `_ensure_active_trip`'s stuck-row repair (api.py:642) was clearing `submitted_at` on **any** `ordered=0 AND submitted_at IS NOT NULL` row — including legitimately-finalized matched rows. That repair was originally written for a different inconsistency but didn't gate on `receipt_status`.
+  3. Next time the user planned a meal needing the same ingredient, `_apply_meal_sync` inserted a fresh active row (matched row hidden from `existing_map` by its `receipt_status != ''` filter). Two physical rows now exist sharing a `LOWER(name)`.
+  4. User picks a Kroger product on the order page → `select_product`'s UPDATE matches **both** rows by name with no state filter, stamping `ordered=1, product_upc=X, ordered_at=now` on both. Submit SELECT (`product_upc != '' AND ordered = 1 AND submitted_at IS NULL`) had no state filter either, pulled both, and `add_to_cart` sent the same UPC twice. Kroger's `/cart/add` is additive — it sums duplicate UPCs into one cart line at the combined quantity.
+  
+  Fix: tightened three WHERE clauses. Stuck-row repair now excludes `COALESCE(receipt_status, '') != ''`. Submit SELECT and its on-failure rollback both now require `checked=0 AND have_it=0 AND removed=0 AND COALESCE(receipt_status, '') = ''`. The submit SELECT becomes the single chokepoint deciding what reaches Kroger — easier to reason about than scattered transition guards.
+  
+  **Considered and rejected**: Option B (a `_close_grocery_row` helper called from check/have-it/remove/match endpoints that clears forward-state fields `ordered=0, product_upc=''` at the transition). User pushback: "I'm reluctant to add even more helpers because the stack gets more and more complicated and harder to debug." The chokepoint at submit is sufficient for correctness; the DB can hold inconsistent rows (closed-state + ordered=1) as long as nothing user-visible reads them. Also considered Option C (schema split `grocery_items` → `grocery_items` + `purchases`) but rejected as multi-hour migration for protection we don't need yet.
+  
+  **One-shot cleanup of existing stale rows was NOT needed** — the new submit filter renders them invisible to Kroger regardless of their DB state.
+  
+  Diagnosis process worth noting: shipped no speculative fixes during diagnosis. First hypothesis (duplicate rows on active list) user ruled out. Second hypothesis (stale Kroger cart, additive `/cart/add`) user ruled out by checking kroger.com cart was empty pre-submit. Third hypothesis verified via direct prod DB query — two rows per affected item with matching `ordered_at` timestamps showed `select_product`'s single UPDATE stamped both in one call. Three diagnostic rounds saved three wrong shipped fixes.
+  
+- **Order page pickup/delivery toggle clipped on mobile** (commit `a565e01`). On narrow screens "Delivery" rendered as "delive". `.fulfillmentToggle` had `overflow: hidden` and default `flex-shrink: 1`; the toggle was getting crushed by the Playfair-16px store-name select in the same flex row, and the rightmost button text was clipped by the overflow. Fix: `flex-shrink: 0` on `.fulfillmentToggle` so it can't be squeezed, `min-width: 0` + `text-overflow: ellipsis` + `white-space: nowrap` on `.storeDetailsName` so the store name takes the squeeze instead, button padding tightened `14px → 12px`. → `ui-patterns.md` candidate (flex rows in narrow containers need explicit shrink intent).
+- **Open threads** (carried):
+  - **grocery_items conflates active list + purchase history** — read by `/purchases`, ratings, spend totals, receipt re-upload dedup, staple suggestions, `staples.last_bought_at` writes. Option C split into separate `grocery_items` + `purchases` tables was the structural fix; deferred. If a fourth write path leaks across the active/history boundary, revisit.
+  - Legacy `regulars`/`pantry` tables drop.
+  - Carried forward from session 72: Tucker registration paperwork, friends-beta first invite, receipt-fixture commit policy, L5 frontend zod validation, Publix DLI MOZZ LGS extraction miss.
