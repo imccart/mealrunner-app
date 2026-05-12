@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
 import useSwipeDismiss from '../hooks/useSwipeDismiss'
+import useKeyboardInset from '../hooks/useKeyboardInset'
 
 export default function Sheet({ onClose, className, children }) {
   const swipeHandlers = useSwipeDismiss(onClose)
+  const kbInset = useKeyboardInset()
 
   useEffect(() => {
     const handleKey = (e) => {
@@ -12,8 +14,14 @@ export default function Sheet({ onClose, className, children }) {
     return () => window.removeEventListener('keydown', handleKey)
   }, [onClose])
 
+  const overlayStyle = kbInset > 0 ? { '--kb-inset': `${kbInset}px` } : undefined
+
   return (
-    <div className="sheet-overlay" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div
+      className="sheet-overlay"
+      style={overlayStyle}
+      onPointerDown={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
       <div
         className={`sheet${className ? ` ${className}` : ''}`}
         {...swipeHandlers}

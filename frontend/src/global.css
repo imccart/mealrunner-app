@@ -714,6 +714,9 @@ main {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  /* --kb-inset is set by Sheet.jsx when the on-screen keyboard is open,
+     pushing the sheet up so it sits above the keyboard. */
+  padding-bottom: var(--kb-inset, 0px);
 }
 
 .sheet {
@@ -721,7 +724,7 @@ main {
   background: white;
   border-radius: 24px 24px 0 0;
   padding: 12px 20px calc(32px + env(safe-area-inset-bottom));
-  max-height: 85vh;
+  max-height: calc(85vh - var(--kb-inset, 0px));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -748,7 +751,7 @@ main {
     margin: 0;
     border-radius: 16px;
     padding: 20px 24px 24px;
-    max-height: 75vh;
+    max-height: calc(75vh - var(--kb-inset, 0px));
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
   }
   .sheet-handle {
