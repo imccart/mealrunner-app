@@ -638,9 +638,15 @@ def _ensure_active_trip(conn, mw, user_id: str):
 
     # Fix inconsistent state: items with submitted_at but ordered=0 are stuck
     # (can't be re-ordered, don't show as ordered). Clear stale submitted_at.
+    # Exclude receipt-reconciled rows — those legitimately have ordered=0 with
+    # submitted_at preserved from the original submission, and clearing it
+    # makes them re-pickable by submit if select_product re-stamps ordered=1
+    # via its LOWER(name) match, causing Kroger to receive the same UPC twice
+    # and double the quantity.
     conn.execute(
         text("""UPDATE grocery_items SET submitted_at = NULL
-           WHERE user_id = :user_id AND ordered = 0 AND submitted_at IS NOT NULL"""),
+           WHERE user_id = :user_id AND ordered = 0 AND submitted_at IS NOT NULL
+             AND COALESCE(receipt_status, '') = ''"""),
         {"user_id": user_id},
     )
 
@@ -2507,9 +2513,16 @@ async def submit_order(request: Request):
     mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
+    # Submit chokepoint: only pull rows that are genuinely active (not in a
+    # closed state). select_product's UPDATE matches by LOWER(name) without a
+    # state filter, so a hidden row sharing a name with the active pick can
+    # get its product_upc re-stamped — without these guards, Kroger would
+    # receive the same UPC twice and double the cart quantity.
     rows = conn.execute(
         text("""SELECT product_upc, quantity FROM grocery_items
-           WHERE user_id = :user_id AND product_upc != '' AND ordered = 1 AND submitted_at IS NULL"""),
+           WHERE user_id = :user_id AND product_upc != '' AND ordered = 1 AND submitted_at IS NULL
+             AND checked = 0 AND have_it = 0 AND removed = 0
+             AND COALESCE(receipt_status, '') = ''"""),
         {"user_id": user_id},
     ).fetchall()
 
@@ -2583,9 +2596,15 @@ async def submit_order(request: Request):
         add_to_cart(items, token=token)
         return {"ok": True, "count": len(items)}
     except Exception as e:
-        # Roll back submitted_at so user can retry
+        # Roll back submitted_at so user can retry. Mirror the SELECT filter
+        # above — only clear rows that match the same submit pool, otherwise
+        # a Kroger error would NULL submitted_at on legitimately-finalized
+        # receipt-reconciled rows.
         conn.execute(
-            text("UPDATE grocery_items SET submitted_at = NULL WHERE user_id = :user_id AND product_upc != '' AND ordered = 1"),
+            text("""UPDATE grocery_items SET submitted_at = NULL
+                WHERE user_id = :user_id AND product_upc != '' AND ordered = 1
+                  AND checked = 0 AND have_it = 0 AND removed = 0
+                  AND COALESCE(receipt_status, '') = ''"""),
             {"user_id": user_id},
         )
         conn.commit()
