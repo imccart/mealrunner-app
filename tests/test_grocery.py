@@ -1,7 +1,7 @@
 """Tests for grocery list generation."""
 
 from mealrunner.grocery import build_grocery_list, split_by_store
-from mealrunner.pantry import add_pantry_item
+from mealrunner.staples import KEEP_ON_HAND, add_staple
 from mealrunner.planner import fill_dates, week_range
 
 
@@ -17,26 +17,26 @@ def test_grocery_list_has_items(conn):
     assert len(gl.items) > 0
 
 
-def test_grocery_excludes_staples(conn):
+def test_grocery_excludes_baseline_staples(conn):
     meals, start, end = _make_meals(conn)
     gl = build_grocery_list(conn, meals, start, end)
-    staple_names = {"salt", "black pepper", "garlic powder", "olive oil", "vegetable oil",
-                    "onion powder", "cumin", "chili powder", "italian seasoning", "paprika",
-                    "soy sauce", "worcestershire sauce"}
+    baseline = {"salt", "black pepper", "garlic powder", "olive oil", "vegetable oil",
+                "onion powder", "cumin", "chili powder", "italian seasoning", "paprika",
+                "soy sauce", "worcestershire sauce"}
     for item in gl.items:
-        assert item.ingredient_name not in staple_names, f"Staple {item.ingredient_name} in grocery list"
+        assert item.ingredient_name not in baseline, f"Baseline staple {item.ingredient_name} in grocery list"
 
 
-def test_grocery_excludes_pantry(conn):
-    """Items the user has marked Keep-on-hand (in pantry) are filtered out
-    of the meal-driven list entirely. Presence filter, not quantity subtraction:
-    the user adds them via /grocery/add-pantry when they actually need them."""
+def test_grocery_excludes_staples(conn):
+    """Items the user has marked as a staple (either mode) are filtered out
+    of the meal-driven list entirely. Presence filter — user adds them via
+    /grocery/add-staples when they actually need them."""
     meals, start, end = _make_meals(conn)
     gl_before = build_grocery_list(conn, meals, start, end, user_id="default")
 
     if gl_before.items:
         target = gl_before.items[0]
-        add_pantry_item(conn, "default", target.ingredient_name, 1.0, "count")
+        add_staple(conn, "default", target.ingredient_name, KEEP_ON_HAND)
 
         gl_after = build_grocery_list(conn, meals, start, end, user_id="default")
         after_names = {i.ingredient_name for i in gl_after.items}

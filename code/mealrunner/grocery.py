@@ -92,38 +92,23 @@ def build_grocery_list(
                     "meals": {meal.recipe_name},
                 }
 
-    # Skip ingredients the user has explicitly told us they handle elsewhere:
-    # active regulars (the "every trip" checklist) and pantry items they've
-    # marked "Keep on hand". Both are presence-only filters — pantry quantity
-    # is meaningless here because UI flows insert pantry rows as "1.0 count"
-    # while recipe quantities are tbsp/cups/oz, so unit-blind subtraction
-    # (2 tbsp - 1.0 count = 1) used to leak items the user expected to be
-    # held back. Pantry items get added to the trip via /grocery/add-pantry
-    # ("Check my staples"), same shape as the regulars add flow.
-    # The ingredient-level is_pantry_staple flag is NOT used for filtering —
-    # that's a hint for onboarding / "add to pantry?" suggestions.
-    from mealrunner.regulars import list_regulars
+    # Skip ingredients the user has explicitly told us they handle elsewhere
+    # — anything in their staples list. Presence-only filter on both
+    # ingredient_id (when the staple is linked to a canonical ingredient)
+    # and compare_key on name (covers free-form staples and plural/singular
+    # variants). The user adds these to the trip explicitly via
+    # /grocery/add-staples; they should never auto-flow from meals.
+    from mealrunner.staples import list_staples
     from mealrunner.normalize import compare_key
-    regular_keys = {compare_key(r.name) for r in list_regulars(conn, user_id)}
-
-    pantry_ids: set[int] = set()
-    if agg:
-        agg_ids = list(agg.keys())
-        ph = ", ".join(f":i{i}" for i in range(len(agg_ids)))
-        ps = {f"i{i}": iid for i, iid in enumerate(agg_ids)}
-        ps["uid"] = user_id
-        for row in conn.execute(
-            text(f"""SELECT ingredient_id FROM pantry
-                  WHERE user_id = :uid AND ingredient_id IN ({ph})"""),
-            ps,
-        ).fetchall():
-            pantry_ids.add(row["ingredient_id"])
+    staples = list_staples(conn, user_id)
+    staple_name_keys = {compare_key(s.name) for s in staples}
+    staple_ingredient_ids = {s.ingredient_id for s in staples if s.ingredient_id is not None}
 
     items: list[GroceryListItem] = []
     for iid, info in sorted(agg.items(), key=lambda x: (x[1]["store"], x[1]["aisle"], x[1]["name"])):
-        if compare_key(info["name"]) in regular_keys:
+        if iid in staple_ingredient_ids:
             continue
-        if iid in pantry_ids:
+        if compare_key(info["name"]) in staple_name_keys:
             continue
 
         items.append(GroceryListItem(

@@ -441,18 +441,18 @@ export default function GroceryPage({ sidebar = false }) {
     } catch {}
   }
 
-  // Regulars prompt handlers
+  // "Every trip" staples — the regulars prompt. Pre-checks staples that
+  // aren't already on the list, so the user can one-tap-add what they need.
   const handleRegularsExpand = async () => {
     if (regularsExpanded) {
       setRegularsExpanded(false)
       return
     }
     try {
-      const data = await api.getRegulars()
-      const active = (data.regulars || []).filter(r => r.active)
-      setRegularsData(active)
-      // Pre-check items NOT already on the list
-      setRegularsChecked(new Set(active.filter(r => !onListSet.has(compareKey(r.name))).map(r => r.name)))
+      const data = await api.getStaples('every_trip')
+      const items = data.staples || []
+      setRegularsData(items)
+      setRegularsChecked(new Set(items.filter(s => !onListSet.has(compareKey(s.name))).map(s => s.name)))
     } catch {
       setRegularsData([])
     }
@@ -460,19 +460,21 @@ export default function GroceryPage({ sidebar = false }) {
   }
 
   const handleRegularsSubmit = async () => {
-    await submitPrompt(api.addRegulars, [...regularsChecked])
+    await submitPrompt((selected) => api.addStaplesToGrocery(selected, 'every_trip'), [...regularsChecked])
     setRegularsExpanded(false)
   }
-  // Pantry handlers
+
+  // "Keep on hand" staples — the pantry prompt. Defaults to nothing checked
+  // (user opts in to what they actually need this trip).
   const handlePantryExpand = async () => {
     if (pantryExpanded) {
       setPantryExpanded(false)
       return
     }
     try {
-      const data = await api.getPantry()
-      setPantryData(data.items || [])
-      setPantryChecked(new Set()) // default unchecked, user checks what they need
+      const data = await api.getStaples('keep_on_hand')
+      setPantryData(data.staples || [])
+      setPantryChecked(new Set())
     } catch {
       setPantryData([])
     }
@@ -480,7 +482,7 @@ export default function GroceryPage({ sidebar = false }) {
   }
 
   const handlePantrySubmit = async () => {
-    await submitPrompt(api.addPantryItems, [...pantryChecked])
+    await submitPrompt((selected) => api.addStaplesToGrocery(selected, 'keep_on_hand'), [...pantryChecked])
     setPantryExpanded(false)
   }
 
@@ -715,7 +717,7 @@ export default function GroceryPage({ sidebar = false }) {
           <span>You always have <strong>{stapleSuggestion}</strong> on hand.</span>
           <div className={styles.stapleSuggestionActions}>
             <button onClick={() => {
-              api.addPantryItem(stapleSuggestion, '').catch(() => {})
+              api.addStaple(stapleSuggestion, 'keep_on_hand').catch(() => {})
               setStapleSuggestion(null)
             }}>Add to staples</button>
             <button className={styles.dismiss} onClick={() => setStapleSuggestion(null)}>Not now</button>

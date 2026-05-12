@@ -87,10 +87,10 @@ function IngredientSection({ title, recipeId, allIngredients }) {
               <button
                 style={{ background: 'none', border: 'none', color: 'var(--rust)', fontWeight: 600, cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
                 onClick={() => {
-                  api.addPantryItem(stapleSuggestion.name).catch(() => {})
+                  api.addStaple(stapleSuggestion.name, 'keep_on_hand').catch(() => {})
                   setStapleSuggestion(null)
                 }}
-              >Add to pantry?</button>
+              >Add as a staple?</button>
               {' '}
               <button
                 style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0, fontSize: 'inherit' }}

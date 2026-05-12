@@ -85,6 +85,10 @@ def init_db(conn: DictConnection) -> None:
     _migrate_drop_legacy_single_user_uniques(conn)
     print("[db] legacy uniques migration done", flush=True)
 
+    print("[db] Running consolidate-staples migration...", flush=True)
+    _migrate_consolidate_staples(conn)
+    print("[db] consolidate-staples migration done", flush=True)
+
     print("[db] init_db complete", flush=True)
 
 
@@ -408,6 +412,100 @@ def _migrate_drop_legacy_single_user_uniques(conn: DictConnection) -> None:
                 print(f"[db] skip drop {row[0]}: {e}", flush=True)
     except Exception as e:
         print(f"[db] learning_dismissed PK probe skipped: {e}", flush=True)
+
+
+def _migrate_consolidate_staples(conn: DictConnection) -> None:
+    """Consolidate the legacy regulars + pantry tables into a single
+    `staples` table with a `mode` column.
+
+    Pre-2026-05-11 split: regulars (Every trip) and pantry (Keep on hand)
+    were two separate tables, but from the user's perspective both are
+    "staples" with different default-add behavior. The split surfaced as
+    items appearing in both lists when add paths didn't cross-check.
+
+    This migration creates the unified `staples` table on existing DBs
+    (create_tables() doesn't run for established databases) and copies
+    surviving rows in:
+
+    1. `regulars` rows → staples with mode='every_trip'.
+    2. `pantry` rows → staples with mode='keep_on_hand'.
+
+    Conflict resolution: when both tables held a row for the same
+    (user_id, ingredient_id), regulars wins ('every_trip' is the more
+    explicit user choice — pantry has passive entry points like
+    onboarding bulk-add). The pantry insert step is gated on
+    `NOT EXISTS` against staples, so the previously-inserted regular
+    row blocks the pantry row from cloning.
+
+    Idempotent: re-running after rows already exist is a no-op because
+    every INSERT is guarded by a `NOT EXISTS` lookup against staples.
+    The legacy regulars / pantry tables are left in place by this
+    migration; a follow-up can drop them once enough time has passed
+    that we're confident nothing reads from them.
+    """
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS staples (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT NOT NULL DEFAULT 'default',
+                name TEXT NOT NULL,
+                ingredient_id INTEGER REFERENCES ingredients(id),
+                shopping_group TEXT NOT NULL DEFAULT '',
+                store_pref TEXT NOT NULL DEFAULT 'either',
+                mode TEXT NOT NULL DEFAULT 'every_trip',
+                last_bought_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS staples_user_id_idx ON staples(user_id)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS staples_user_id_ingredient_id_idx"
+            " ON staples(user_id, ingredient_id)"
+        ))
+    except Exception as e:
+        print(f"[db] staples table create skipped: {e}", flush=True)
+        return
+
+    try:
+        result = conn.execute(text("""
+            INSERT INTO staples (user_id, name, ingredient_id, shopping_group, store_pref, mode)
+            SELECT r.user_id, r.name, r.ingredient_id, r.shopping_group, r.store_pref, 'every_trip'
+            FROM regulars r
+            WHERE NOT EXISTS (
+                SELECT 1 FROM staples s
+                WHERE s.user_id = r.user_id
+                  AND (
+                    (s.ingredient_id IS NOT NULL AND s.ingredient_id = r.ingredient_id)
+                    OR (s.ingredient_id IS NULL AND r.ingredient_id IS NULL
+                        AND LOWER(s.name) = LOWER(r.name))
+                  )
+            )
+        """))
+        if result.rowcount:
+            print(f"[db] copied {result.rowcount} regulars rows into staples", flush=True)
+    except Exception as e:
+        print(f"[db] regulars → staples copy skipped: {e}", flush=True)
+
+    try:
+        result = conn.execute(text("""
+            INSERT INTO staples (user_id, name, ingredient_id, shopping_group, mode, last_bought_at, updated_at)
+            SELECT p.user_id, i.name, p.ingredient_id,
+                   COALESCE(i.aisle, '') AS shopping_group,
+                   'keep_on_hand', p.last_bought_at, p.updated_at
+            FROM pantry p
+            JOIN ingredients i ON i.id = p.ingredient_id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM staples s
+                WHERE s.user_id = p.user_id AND s.ingredient_id = p.ingredient_id
+            )
+        """))
+        if result.rowcount:
+            print(f"[db] copied {result.rowcount} pantry rows into staples", flush=True)
+    except Exception as e:
+        print(f"[db] pantry → staples copy skipped: {e}", flush=True)
 
 
 def _run_column_migrations(conn: DictConnection) -> None:

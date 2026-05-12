@@ -45,14 +45,17 @@ Groups with no active items are hidden. The all-done state shows the bent-spoon 
 
 Food aisles **plus** Personal Care, Household, Cleaning, Pets for non-food items.
 
-## Regulars + staples lifecycle
+## Staples lifecycle
 
-- **Regulars delete by ID.** `DELETE /regulars/{id}` uses integer ID, not name-in-URL (name-based path was unreliable).
-- **Staple type prompt.** Adding a staple prompts "Every trip" vs "Keep on hand" before saving.
-- **Both filter meal-driven items by presence.** "Every trip" regulars and "Keep on hand" pantry both get excluded from `build_grocery_list` output by canonical-name / ingredient-id match — so meal ingredients never auto-flow a staple onto the list. User adds them when they want: "Add my regulars" / "Check my staples." The `pantry` table has `quantity` / `unit` columns from an earlier inventory-tracking design that never got a UI; they're written as defaults (1.0 / count) and ignored on read. Don't reintroduce unit-blind quantity subtraction (recipes ask in tbsp/cups, pantry says 1.0 count → leaked items in pre-2026-05-11 builds).
-- **Staple recategorize.** Hamburger icon on each staple opens a category picker.
-- **Passive staple suggestion.** After "Have it" tapped 3+ times on the same item, suggest adding it as a staple.
-- **Smart suggestions.** `last_bought_at` on `regulars` and `pantry`. Learning endpoint suggests removing regulars not bought in 4+ weeks (only if the regular itself is 4+ weeks old) and restocking staples not bought in 6+ weeks (only after first purchase tracked). No skip tracking — unselected regulars are simply not added to a trip.
+- **One unified `staples` table.** From the user's view there's one list of "staples" — items they keep around or buy regularly. The legacy split into `regulars` / `pantry` tables was retired in commit `<staples-consolidation>` (2026-05-11). The `staples` table has a `mode` column with values `'every_trip'` or `'keep_on_hand'` that controls default-add behavior. Mutual exclusion (an item is in exactly one mode at a time) is enforced by table identity: one row per (user_id, ingredient_id).
+- **Add via /staples POST.** Body: `{name, mode, shopping_group?, store_pref?}`. If the user already has a staple for the same ingredient (or same free-form name), `add_staple` updates the mode in place rather than creating a duplicate — toggling between modes is a property change, not a delete+add.
+- **Delete by ID.** `DELETE /staples/{id}` uses the integer ID. The "don't re-suggest" signal goes to `learning_dismissed`.
+- **Mode flip.** `PATCH /staples/{id}` with `{mode}` flips between `'every_trip'` and `'keep_on_hand'` on the same row. Replaces the old "Move to pantry" / "Move to regulars" remove+add dance — no churn on the row id, no race window where the staple briefly exists in neither place.
+- **Both modes filter meal-driven items by presence.** `build_grocery_list` excludes ingredients in the user's `staples` table by both ingredient_id and compare_key on name — meal ingredients never auto-flow a staple onto the list. User adds them when they want: "Add my regulars" (mode='every_trip') / "Check my staples" (mode='keep_on_hand'). The legacy `pantry` table had `quantity` / `unit` columns from an inventory-tracking design that never got a UI; don't reintroduce unit-blind quantity subtraction.
+- **Staple recategorize.** Hamburger icon on each staple opens a category picker; submits `PATCH /staples/{id}` with `{shopping_group}`.
+- **Passive staple suggestion.** After "Have it" tapped 3+ times on the same item, suggest adding it as a staple (defaults to `keep_on_hand` since that's the "I have it" semantic).
+- **Smart suggestions.** `last_bought_at` on `staples`. Learning endpoint suggests removing every_trip staples not bought in 4+ weeks (only if 4+ weeks old) and restocking keep_on_hand staples not bought in 6+ weeks (only after first purchase tracked). No skip tracking — unselected every_trip staples are simply not added to a trip.
+- **Legacy `regulars` and `pantry` tables remain in the schema** for now (idempotent NOT EXISTS gates in the consolidation migration), but nothing reads from them. They can be dropped in a follow-up once we're confident no callers remain.
 
 ## Buy elsewhere
 

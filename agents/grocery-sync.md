@@ -122,7 +122,7 @@ The dedup invariant: **at most one active row per canonical item name across all
 ### Where it's called
 
 **Python:**
-- `/grocery/add`, `/grocery/add-regulars`, `/grocery/add-pantry` — active-row existence checks
+- `/grocery/add`, `/grocery/add-staples` (mode=every_trip|keep_on_hand) — active-row existence checks
 - `_refresh_trip_meal_items` — keys both `existing_map` and `fresh_meal_items`
 - `build_grocery_list` — filters regulars
 - `feedback.py`, `/learning-suggestions` — filters regulars exclusion

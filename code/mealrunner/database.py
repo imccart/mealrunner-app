@@ -233,6 +233,29 @@ regulars = Table(
     Column("active", Integer, nullable=False, server_default=text("0")),
 )
 
+# Unified staples table. Replaces the legacy regulars + pantry split: from
+# the user's perspective both are "staples" — items they keep around or
+# buy regularly. `mode` distinguishes the two behaviors:
+#   - 'every_trip'   → default-suggested for the next grocery list
+#                      (matches the old regulars semantics)
+#   - 'keep_on_hand' → user has it on hand; only added when explicitly chosen
+#                      (matches the old pantry semantics)
+# Mutual exclusion (an item belongs to exactly one mode at a time) is
+# enforced by the table itself: there's only one row per (user_id, ingredient_id).
+staples = Table(
+    "staples", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, nullable=False, server_default=text("'default'")),
+    Column("name", Text, nullable=False),
+    Column("ingredient_id", Integer, ForeignKey("ingredients.id")),
+    Column("shopping_group", Text, nullable=False, server_default=text("''")),
+    Column("store_pref", Text, nullable=False, server_default=text("'either'")),
+    Column("mode", Text, nullable=False, server_default=text("'every_trip'")),
+    Column("last_bought_at", TS),
+    Column("created_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("updated_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
 product_scores = Table(
     "product_scores", metadata,
     Column("upc", Text, primary_key=True),

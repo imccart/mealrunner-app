@@ -61,7 +61,7 @@ def detect_extra_meal_links(conn: DictConnection, user_id: str, min_occurrences:
     Uses calendar-week grouping over the last 20 weeks.
     Returns list of {"item", "meal", "times_together", "meal_weeks"} dicts.
     """
-    from mealrunner.regulars import list_regulars
+    from mealrunner.staples import list_staples
 
     # Get all meal-sourced and extra items from the last 20 weeks
     rows = conn.execute(text("""
@@ -77,9 +77,9 @@ def detect_extra_meal_links(conn: DictConnection, user_id: str, min_occurrences:
     if not rows:
         return []
 
-    # Exclude items already in regulars (compare_key so plural variants collapse)
+    # Exclude items already a staple (compare_key so plural variants collapse)
     from mealrunner.normalize import compare_key
-    regular_keys = {compare_key(r.name) for r in list_regulars(conn, user_id, active_only=False)}
+    regular_keys = {compare_key(s.name) for s in list_staples(conn, user_id)}
 
     # Group by calendar week
     week_data: dict[tuple, dict] = {}

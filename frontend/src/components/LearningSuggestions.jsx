@@ -16,13 +16,13 @@ export default function LearningSuggestions({ onChange }) {
   if (add.length === 0 && remove_regulars.length === 0 && restock_staples.length === 0) return null
 
   const handleAddYes = async (name) => {
-    await api.addRegular(name)
+    await api.addStaple(name, 'every_trip')
     setSuggestions(prev => ({ ...prev, add: prev.add.filter(s => s.name !== name) }))
     onChange?.()
   }
 
   const handleRemoveYes = async (id, name) => {
-    await api.toggleRegular(id)
+    await api.removeStaple(id)
     setSuggestions(prev => ({ ...prev, remove_regulars: prev.remove_regulars.filter(s => s.id !== id) }))
     onChange?.()
   }

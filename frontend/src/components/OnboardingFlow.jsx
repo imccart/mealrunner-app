@@ -199,11 +199,11 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
           await api.saveTimeBaseline(timeBaseline)
         }
       } else if (step === 2) {
-        // Save staples
-        await api.saveOnboardingStaples([...selectedStaples])
+        // Save "keep on hand" staples (the pantry checklist)
+        await api.saveOnboardingStaples([...selectedStaples], 'keep_on_hand')
       } else if (step === 3) {
-        // Save regulars
-        await api.saveOnboardingRegulars([...selectedRegulars])
+        // Save "every trip" staples (the regulars checklist)
+        await api.saveOnboardingStaples([...selectedRegulars], 'every_trip')
       } else if (step === 4) {
         // Store — save location + enable price tracking by default
         if (selectedLocation) {

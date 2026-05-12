@@ -22,8 +22,9 @@ export default function MyKitchenSheet({ onClose }) {
   const [activeTab, setActiveTab] = useState('meals')
   const [detailRecipe, setDetailRecipe] = useState(null)
   const [recipes, setRecipes] = useState(null)
-  const [regulars, setRegulars] = useState(null)
-  const [pantry, setPantry] = useState(null)
+  // staples is one list with `mode: 'every_trip' | 'keep_on_hand'` per row.
+  // Replaces the old separate regulars + pantry state — same UX, one source.
+  const [staples, setStaples] = useState(null)
   const [allIngredients, setAllIngredients] = useState(null)
 
   // Meals/Sides add state
@@ -36,8 +37,8 @@ export default function MyKitchenSheet({ onClose }) {
   // Staples add state
   const [addStapleText, setAddStapleText] = useState('')
   const [showStapleInfo, setShowStapleInfo] = useState(false)
-  const [recatStaple, setRecatStaple] = useState(null) // { name, type, id }
-  const [pendingStaple, setPendingStaple] = useState(null) // name waiting for type choice
+  const [recatStaple, setRecatStaple] = useState(null) // { name, id }
+  const [pendingStaple, setPendingStaple] = useState(null) // name waiting for mode choice
 
   // History state (replaces Favorites)
   const [purchases, setPurchases] = useState(null)
@@ -49,10 +50,12 @@ export default function MyKitchenSheet({ onClose }) {
   const [cookingNotes, setCookingNotes] = useState('')
   const [stapleSuggestion, setStapleSuggestion] = useState(null)
 
+  const loadStaples = () =>
+    api.getStaples().then(data => setStaples(data.staples)).catch(() => setStaples([]))
+
   useEffect(() => {
     api.getRecipes().then(data => setRecipes(data.recipes)).catch(() => setRecipes([]))
-    api.getRegulars().then(data => setRegulars(data.regulars)).catch(() => setRegulars([]))
-    api.getPantry().then(data => setPantry(data.items)).catch(() => setPantry([]))
+    loadStaples()
     api.getGrocerySuggestions().then(data => setAllIngredients(data.suggestions)).catch(() => {})
     api.getPurchases().then(data => setPurchases(data.purchases || [])).catch(() => setPurchases([]))
   }, [])
@@ -158,59 +161,30 @@ export default function MyKitchenSheet({ onClose }) {
     setAddStapleText('')
   }
 
-  const handleConfirmStaple = async (type) => {
+  // mode is 'every_trip' (Every trip) or 'keep_on_hand' (Keep on hand).
+  const handleConfirmStaple = async (mode) => {
     if (!pendingStaple) return
     try {
-      if (type === 'regular') {
-        await api.addRegular(pendingStaple)
-        const data = await api.getRegulars()
-        setRegulars(data.regulars)
-      } else {
-        await api.addPantryItem(pendingStaple)
-        const data = await api.getPantry()
-        setPantry(data.items)
-      }
+      await api.addStaple(pendingStaple, mode)
+      await loadStaples()
     } catch { /* ignore */ }
     setPendingStaple(null)
   }
 
-  const handleRemoveRegular = async (id) => {
+  const handleRemoveStaple = async (id) => {
     try {
-      await api.removeRegular(id)
-      const data = await api.getRegulars()
-      setRegulars(data.regulars)
+      await api.removeStaple(id)
+      await loadStaples()
     } catch { /* ignore */ }
   }
 
-  const handleRemovePantry = async (id) => {
+  // Mode flip — replaces the old "Move to pantry" / "Move to regulars"
+  // delete-and-add dance with a single PATCH that toggles the mode column.
+  const handleSetStapleMode = async (id, mode) => {
     try {
-      await api.removePantryItem(id)
-      const data = await api.getPantry()
-      setPantry(data.items)
+      await api.updateStaple(id, { mode })
+      await loadStaples()
     } catch { /* ignore */ }
-  }
-
-  const handleMoveToPantry = async (id, name, shoppingGroup) => {
-    try {
-      await api.removeRegular(id)
-      await api.addPantryItem(name, shoppingGroup || 'Other')
-      const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
-      setRegulars(rData.regulars)
-      setPantry(pData.items)
-    } catch { /* ignore */ }
-  }
-
-  const handleMoveToRegulars = async (name, id, shoppingGroup) => {
-    setPantry(prev => (prev || []).filter(p => p.id !== id))
-    try {
-      await api.removePantryItem(id)
-      await api.addRegular(name, shoppingGroup || '')
-      const rData = await api.getRegulars()
-      setRegulars(rData.regulars)
-    } catch {
-      const pData = await api.getPantry()
-      setPantry(pData.items)
-    }
   }
 
   const handleRatePurchase = async (item, rating) => {
@@ -237,36 +211,27 @@ export default function MyKitchenSheet({ onClose }) {
   const handleRecatStaple = async (group) => {
     if (!recatStaple) return
     try {
-      await api.recategorizeStaple(recatStaple.name, recatStaple.type, recatStaple.id, group)
-      const [rData, pData] = await Promise.all([api.getRegulars(), api.getPantry()])
-      setRegulars(rData.regulars)
-      setPantry(pData.items)
+      await api.updateStaple(recatStaple.id, { shoppingGroup: group })
+      await loadStaples()
     } catch { /* ignore */ }
     setRecatStaple(null)
   }
 
-  const staples = []
-  if (regulars) {
-    for (const r of regulars) {
-      staples.push({ ...r, type: 'regular' })
-    }
-  }
-  if (pantry) {
-    for (const p of pantry) {
-      staples.push({ ...p, type: 'pantry', shopping_group: p.shopping_group || 'Other' })
-    }
-  }
+  const stapleRows = (staples || []).map(s => ({
+    ...s,
+    shopping_group: s.shopping_group || 'Other',
+  }))
 
   // Group staples by shopping_group
   const stapleGroups = {}
-  for (const s of staples) {
-    const g = s.shopping_group || 'Other'
+  for (const s of stapleRows) {
+    const g = s.shopping_group
     if (!stapleGroups[g]) stapleGroups[g] = []
     stapleGroups[g].push(s)
   }
 
   const existingDetailNames = new Set((detailIngredients || []).map(i => compareKey(i.name)))
-  const existingStapleNames = new Set(staples.map(s => compareKey(s.name)))
+  const existingStapleNames = new Set(stapleRows.map(s => compareKey(s.name)))
 
   const meals = recipes ? recipes.filter(r => r.recipe_type !== 'side') : []
   const sides = recipes ? recipes.filter(r => r.recipe_type === 'side') : []
@@ -303,10 +268,10 @@ export default function MyKitchenSheet({ onClose }) {
             <button
               style={{ background: 'none', border: 'none', color: 'var(--rust)', fontWeight: 600, cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
               onClick={() => {
-                api.addPantryItem(stapleSuggestion.name).catch(() => {})
+                api.addStaple(stapleSuggestion.name, 'keep_on_hand').catch(() => {})
                 setStapleSuggestion(null)
               }}
-            >Add to pantry?</button>
+            >Add as a staple?</button>
             {' '}
             <button
               style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
@@ -466,15 +431,15 @@ export default function MyKitchenSheet({ onClose }) {
             <div className={styles.stapleTypePrompt}>
               <span className={styles.stapleTypeName}>{pendingStaple}</span>
               <div className={styles.stapleTogglePair}>
-                <button className={styles.stapleToggle} onClick={() => handleConfirmStaple('regular')}>Every trip</button>
-                <button className={styles.stapleToggle} onClick={() => handleConfirmStaple('pantry')}>Keep on hand</button>
+                <button className={styles.stapleToggle} onClick={() => handleConfirmStaple('every_trip')}>Every trip</button>
+                <button className={styles.stapleToggle} onClick={() => handleConfirmStaple('keep_on_hand')}>Keep on hand</button>
               </div>
               <button className={styles.stapleTypeCancel} onClick={() => setPendingStaple(null)}>{'\u00D7'}</button>
             </div>
           )}
-          {regulars === null && pantry === null ? (
+          {staples === null ? (
             <div className={ls.sectionHint}>Loading...</div>
-          ) : staples.length === 0 ? (
+          ) : stapleRows.length === 0 ? (
             <div className={ls.sectionHint}>No staples yet</div>
           ) : (
             <div className={ls.list}>
@@ -482,31 +447,28 @@ export default function MyKitchenSheet({ onClose }) {
                 <div key={group}>
                   <div className={ls.listGroup}>{group}</div>
                   {stapleGroups[group].map(s => (
-                    <div key={`${s.type}-${s.id}`} className={ls.listItem}>
+                    <div key={s.id} className={ls.listItem}>
                       <span className={ls.listName}>{s.name}</span>
                       <button
                         className="recat-btn"
                         title="Change category"
-                        onClick={() => setRecatStaple({ name: s.name, type: s.type, id: s.id })}
+                        onClick={() => setRecatStaple({ name: s.name, id: s.id })}
                       >{'\u2630'}</button>
                       <div className={styles.stapleTogglePair}>
                         <button
-                          className={`${styles.stapleToggle}${s.type === 'regular' ? ` ${styles.active}` : ''}`}
-                          onClick={() => { if (s.type !== 'regular') handleMoveToRegulars(s.name, s.id, s.shopping_group) }}
+                          className={`${styles.stapleToggle}${s.mode === 'every_trip' ? ` ${styles.active}` : ''}`}
+                          onClick={() => { if (s.mode !== 'every_trip') handleSetStapleMode(s.id, 'every_trip') }}
                         >
                           Every trip
                         </button>
                         <button
-                          className={`${styles.stapleToggle}${s.type === 'pantry' ? ` ${styles.active}` : ''}`}
-                          onClick={() => { if (s.type !== 'pantry') handleMoveToPantry(s.id, s.name, s.shopping_group) }}
+                          className={`${styles.stapleToggle}${s.mode === 'keep_on_hand' ? ` ${styles.active}` : ''}`}
+                          onClick={() => { if (s.mode !== 'keep_on_hand') handleSetStapleMode(s.id, 'keep_on_hand') }}
                         >
                           Keep on hand
                         </button>
                       </div>
-                      <button className={ls.remove} onClick={() => {
-                        if (s.type === 'regular') handleRemoveRegular(s.id)
-                        else handleRemovePantry(s.id)
-                      }}>{'\u00D7'}</button>
+                      <button className={ls.remove} onClick={() => handleRemoveStaple(s.id)}>{'\u00D7'}</button>
                     </div>
                   ))}
                 </div>

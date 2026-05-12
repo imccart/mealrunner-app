@@ -91,22 +91,22 @@ export async function createGroceryRow(page, fields) {
 }
 
 export async function addRegular(page, name, shopping_group = "") {
-  const resp = await page.request.post("/api/regulars", {
-    data: { name, shopping_group, store_pref: "either" },
+  const resp = await page.request.post("/api/staples", {
+    data: { name, mode: "every_trip", shopping_group, store_pref: "either" },
   });
   if (!resp.ok()) {
-    throw new Error(`POST /api/regulars ${resp.status()}: ${await resp.text()}`);
+    throw new Error(`POST /api/staples ${resp.status()}: ${await resp.text()}`);
   }
   return await resp.json();
 }
 
 export async function addRegularsToGrocery(page, names) {
-  const resp = await page.request.post("/api/grocery/add-regulars", {
-    data: { selected: names },
+  const resp = await page.request.post("/api/grocery/add-staples", {
+    data: { selected: names, mode: "every_trip" },
   });
   if (!resp.ok()) {
     throw new Error(
-      `POST /api/grocery/add-regulars ${resp.status()}: ${await resp.text()}`,
+      `POST /api/grocery/add-staples ${resp.status()}: ${await resp.text()}`,
     );
   }
   return await resp.json();

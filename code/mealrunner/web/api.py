@@ -481,8 +481,8 @@ def _normalize_name(conn, raw_name: str) -> tuple[str, int | None]:
 
 
 def _infer_item_group(conn, name: str, user_id: str) -> str:
-    """Resolve shopping group: user override > ingredient aisle > regulars > keyword inference."""
-    from mealrunner.regulars import _infer_group
+    """Resolve shopping group: user override > ingredient aisle > staples > keyword inference."""
+    from mealrunner.staples import _infer_group
 
     # 1. User override (highest priority)
     row = conn.execute(
@@ -502,9 +502,9 @@ def _infer_item_group(conn, name: str, user_id: str) -> str:
         if row and row["aisle"]:
             return row["aisle"]
 
-    # 3. Regulars
+    # 3. Staples
     row = conn.execute(
-        text("SELECT shopping_group FROM regulars WHERE LOWER(name) = LOWER(:name) AND user_id = :user_id"),
+        text("SELECT shopping_group FROM staples WHERE LOWER(name) = LOWER(:name) AND user_id = :user_id"),
         {"name": name, "user_id": user_id},
     ).fetchone()
     if row and row["shopping_group"]:
@@ -520,7 +520,7 @@ def _build_group_resolver(conn, user_id: str):
     Returns a function: resolve(name) -> str that uses the same priority
     as _infer_item_group but without per-item DB queries.
     """
-    from mealrunner.regulars import _infer_group
+    from mealrunner.staples import _infer_group
 
     # Load all user overrides
     rows = conn.execute(
@@ -533,12 +533,12 @@ def _build_group_resolver(conn, user_id: str):
     rows = conn.execute(text("SELECT LOWER(name) AS name, aisle FROM ingredients WHERE aisle != ''")).fetchall()
     aisles = {r["name"]: r["aisle"] for r in rows}
 
-    # Load all regulars groups
+    # Load all staples groups
     rows = conn.execute(
-        text("SELECT LOWER(name) AS name, shopping_group FROM regulars WHERE user_id = :user_id AND shopping_group != ''"),
+        text("SELECT LOWER(name) AS name, shopping_group FROM staples WHERE user_id = :user_id AND shopping_group != ''"),
         {"user_id": user_id},
     ).fetchall()
-    reg_groups = {r["name"]: r["shopping_group"] for r in rows}
+    staple_groups = {r["name"]: r["shopping_group"] for r in rows}
 
     def resolve(name: str) -> str:
         nl = name.strip().lower()
@@ -546,8 +546,8 @@ def _build_group_resolver(conn, user_id: str):
             return overrides[nl]
         if nl in aisles:
             return aisles[nl]
-        if nl in reg_groups:
-            return reg_groups[nl]
+        if nl in staple_groups:
+            return staple_groups[nl]
         return _infer_group(nl)
 
     return resolve
@@ -1297,18 +1297,16 @@ async def toggle_grocery_item(id: int, request: Request):
                    END WHERE user_id = :user_id"""),
                 {"user_id": user_id},
             )
-        # Track last_bought_at on source table (keyed on name)
-        if row["source"] == "regular":
+        # Track last_bought_at on the unified staples table (any mode). Sources
+        # 'regular' / 'pantry' both correspond to a staple row.
+        if row["source"] in ("regular", "pantry"):
             conn.execute(
-                text("UPDATE regulars SET last_bought_at = CURRENT_TIMESTAMP WHERE user_id = :uid AND LOWER(name) = LOWER(:name)"),
-                {"uid": user_id, "name": item_name},
-            )
-        elif row["source"] == "pantry":
-            conn.execute(
-                text("""UPDATE pantry SET last_bought_at = CURRENT_TIMESTAMP
-                    WHERE user_id = :uid AND ingredient_id IN (
-                        SELECT id FROM ingredients WHERE LOWER(name) = LOWER(:name)
-                    )"""),
+                text("""UPDATE staples SET last_bought_at = CURRENT_TIMESTAMP
+                        WHERE user_id = :uid
+                          AND (LOWER(name) = LOWER(:name)
+                               OR ingredient_id IN (
+                                   SELECT id FROM ingredients WHERE LOWER(name) = LOWER(:name)
+                               ))"""),
                 {"uid": user_id, "name": item_name},
             )
         conn.commit()
@@ -1431,12 +1429,10 @@ async def have_it_grocery_item(id: int, request: Request):
             {"id": row["id"]},
         )
         # Check if this item has been marked "have it" 3+ times — suggest as staple
-        from mealrunner.regulars import list_regulars
-        from mealrunner.pantry import list_pantry
-        reg_names = {r.name.lower() for r in list_regulars(conn, user_id)}
-        pantry_names = {p.ingredient_name.lower() for p in list_pantry(conn, user_id)}
+        from mealrunner.staples import list_staples
+        staple_names = {s.name.lower() for s in list_staples(conn, user_id)}
         name_lower = item_name.strip().lower()
-        if name_lower not in reg_names and name_lower not in pantry_names:
+        if name_lower not in staple_names:
             have_it_count = conn.execute(
                 text("""SELECT COUNT(*) as cnt FROM grocery_items ti
                    WHERE ti.user_id = :uid AND LOWER(ti.name) = LOWER(:name) AND ti.have_it = 1"""),
@@ -1451,22 +1447,36 @@ async def have_it_grocery_item(id: int, request: Request):
     return result
 
 
-@router.post("/grocery/add-regulars")
-async def add_regulars_to_grocery(body: dict, request: Request):
-    """Add selected regulars to the active trip. Records skipped regulars for learning."""
+@router.post("/grocery/add-staples")
+async def add_staples_to_grocery(body: dict, request: Request):
+    """Add selected staples to the active trip.
+
+    Body: {"selected": [names], "mode": "every_trip" | "keep_on_hand"}.
+
+    The mode determines which grocery_state flag gets advanced
+    (regulars_added or pantry_checked) and which `source` value the
+    grocery_items rows are tagged with — 'regular' for every_trip,
+    'pantry' for keep_on_hand. The source distinction is preserved
+    so existing meal-sync / TTL logic that branches on source keeps
+    working without a data migration.
+    """
     from mealrunner.planner import load_rolling_week
-    from mealrunner.regulars import list_regulars
+    from mealrunner.staples import EVERY_TRIP, KEEP_ON_HAND
 
     user_id = request.state.user_id
     selected = body.get("selected", [])
-    selected_lower = {n.lower() for n in selected}
+    mode = body.get("mode", EVERY_TRIP)
+    if mode not in (EVERY_TRIP, KEEP_ON_HAND):
+        return {"ok": False, "error": "invalid mode"}
+
+    source = "regular" if mode == EVERY_TRIP else "pantry"
 
     conn = _conn()
     mw = load_rolling_week(conn, user_id)
     trip = _ensure_active_trip(conn, mw, user_id)
 
-    # Bulk-load the user's active rows once, dedup against them on compare_key
-    # (so "apple" doesn't get added when "apples" is already on the list).
+    # Dedup against the user's active rows on compare_key so "apple" doesn't
+    # get added when "apples" is already on the list.
     from mealrunner.normalize import compare_key
     active_rows = conn.execute(
         text("""SELECT name FROM grocery_items
@@ -1485,63 +1495,21 @@ async def add_regulars_to_grocery(body: dict, request: Request):
         conn.execute(
             text("""INSERT INTO grocery_items
                  (user_id, name, shopping_group, source, for_meals, meal_count)
-                 VALUES (:user_id, :name, :group, 'regular', '', 0)"""),
-            {"user_id": user_id, "name": name_lower, "group": group},
+                 VALUES (:user_id, :name, :group, :source, '', 0)"""),
+            {"user_id": user_id, "name": name_lower, "group": group, "source": source},
         )
         on_list.add(key)
 
-    # Mark regulars as handled for this trip
-    conn.execute(
-        text("UPDATE grocery_state SET regulars_added = 1, regulars_added_at = CURRENT_TIMESTAMP WHERE user_id = :user_id"),
-        {"user_id": user_id},
-    )
-    conn.commit()
-
-    request.state._skip_ensure_active = True
-    return await get_grocery(request)
-
-
-@router.post("/grocery/add-pantry")
-async def add_pantry_to_grocery(body: dict, request: Request):
-    """Add selected pantry items to the active trip."""
-    from mealrunner.planner import load_rolling_week
-
-    user_id = request.state.user_id
-    selected = body.get("selected", [])
-
-    conn = _conn()
-    mw = load_rolling_week(conn, user_id)
-    trip = _ensure_active_trip(conn, mw, user_id)
-
-    # Same canonical-name dedup as add-regulars.
-    from mealrunner.normalize import compare_key
-    active_rows = conn.execute(
-        text("""SELECT name FROM grocery_items
-                WHERE user_id = :user_id
-                  AND have_it = 0 AND checked = 0 AND removed = 0"""),
-        {"user_id": user_id},
-    ).fetchall()
-    on_list = {compare_key(r["name"]) for r in active_rows}
-
-    for name in selected:
-        name_lower = name.lower()
-        key = compare_key(name_lower)
-        if key in on_list:
-            continue
-        group = _infer_item_group(conn, name_lower, user_id)
+    if mode == EVERY_TRIP:
         conn.execute(
-            text("""INSERT INTO grocery_items
-                 (user_id, name, shopping_group, source, for_meals, meal_count)
-                 VALUES (:user_id, :name, :group, 'pantry', '', 0)"""),
-            {"user_id": user_id, "name": name_lower, "group": group},
+            text("UPDATE grocery_state SET regulars_added = 1, regulars_added_at = CURRENT_TIMESTAMP WHERE user_id = :user_id"),
+            {"user_id": user_id},
         )
-        on_list.add(key)
-
-    # Mark pantry as handled for this trip
-    conn.execute(
-        text("UPDATE grocery_state SET pantry_checked = 1, pantry_checked_at = CURRENT_TIMESTAMP WHERE user_id = :user_id"),
-        {"user_id": user_id},
-    )
+    else:
+        conn.execute(
+            text("UPDATE grocery_state SET pantry_checked = 1, pantry_checked_at = CURRENT_TIMESTAMP WHERE user_id = :user_id"),
+            {"user_id": user_id},
+        )
     conn.commit()
 
     request.state._skip_ensure_active = True
@@ -3351,98 +3319,130 @@ async def get_favorites(request: Request):
 # ── Regulars ─────────────────────────────────────────────
 
 
-@router.get("/regulars")
-async def get_regulars(request: Request):
-    """Get all regulars, grouped by shopping_group."""
-    from mealrunner.regulars import list_regulars
+@router.get("/staples")
+async def get_staples(request: Request):
+    """List all staples for the user, optionally filtered by mode.
+
+    Query: ?mode=every_trip or ?mode=keep_on_hand to filter; omit for all.
+    """
+    from mealrunner.staples import list_staples, VALID_MODES
 
     user_id = request.state.user_id
     conn = _conn()
-    regulars = list_regulars(conn, user_id, active_only=True)
+    mode = request.query_params.get("mode")
+    if mode is not None and mode not in VALID_MODES:
+        return {"ok": False, "error": "invalid mode"}
+    staples = list_staples(conn, user_id, mode=mode)
     resolve = _build_group_resolver(conn, user_id)
     return {
-        "regulars": [
+        "staples": [
             {
-                "id": r.id,
-                "name": r.name,
-                "shopping_group": resolve(r.name),
-                "store_pref": r.store_pref,
-                "active": r.active,
+                "id": s.id,
+                "name": s.name,
+                "ingredient_id": s.ingredient_id,
+                "shopping_group": resolve(s.name),
+                "store_pref": s.store_pref,
+                "mode": s.mode,
             }
-            for r in regulars
+            for s in staples
         ]
     }
 
 
-@router.post("/regulars")
-async def add_regular(body: dict, request: Request):
-    """Add a new regular item."""
-    from mealrunner.regulars import add_regular as do_add
+@router.post("/staples")
+async def post_staple(body: dict, request: Request):
+    """Add a staple (or update mode on an existing one).
+
+    Body: {name, mode: 'every_trip'|'keep_on_hand', shopping_group?, store_pref?}.
+    """
+    from mealrunner.staples import add_staple, VALID_MODES
 
     user_id = request.state.user_id
     conn = _conn()
-    if not body.get("name"):
+    name = (body.get("name") or "").strip()
+    mode = body.get("mode", "every_trip")
+    if not name:
         return {"ok": False, "error": "name required"}
-    r = do_add(conn, user_id, body["name"], body.get("shopping_group", ""), body.get("store_pref", "either"))
-    # Auto-dismiss any "remove" learning suggestion for this item
+    if mode not in VALID_MODES:
+        return {"ok": False, "error": "invalid mode"}
+
+    s = add_staple(
+        conn, user_id, name, mode,
+        shopping_group=body.get("shopping_group", ""),
+        store_pref=body.get("store_pref", "either"),
+    )
+    # Adding a staple is an explicit "I want this" signal — dismiss any
+    # pending learning suggestion to remove or re-add it.
     conn.execute(
         text("INSERT INTO learning_dismissed (name, user_id) VALUES (:name, :user_id) ON CONFLICT DO NOTHING"),
-        {"name": r.name.lower(), "user_id": user_id},
+        {"name": s.name.lower(), "user_id": user_id},
     )
     conn.commit()
     return {
-        "id": r.id,
-        "name": r.name,
-        "shopping_group": r.shopping_group,
-        "store_pref": r.store_pref,
-        "active": r.active,
+        "id": s.id,
+        "name": s.name,
+        "shopping_group": s.shopping_group,
+        "store_pref": s.store_pref,
+        "mode": s.mode,
     }
 
 
-@router.post("/regulars/{regular_id}/toggle")
-async def toggle_regular(regular_id: int, request: Request):
-    """Toggle a regular's active state."""
-    from mealrunner.regulars import toggle_regular as do_toggle
+@router.patch("/staples/{staple_id}")
+async def patch_staple(staple_id: int, body: dict, request: Request):
+    """Update a staple's mode and/or shopping group.
+
+    Mode flip (every_trip ↔ keep_on_hand) is the replacement for the old
+    "Move to pantry" / "Move to regulars" delete+add dance — same row,
+    same id, just a different attribute.
+    """
+    from mealrunner.staples import update_staple, VALID_MODES
 
     user_id = request.state.user_id
     conn = _conn()
-    r = do_toggle(conn, user_id, regular_id)
-    if r is None:
+    mode = body.get("mode")
+    group = body.get("shopping_group")
+    if mode is not None and mode not in VALID_MODES:
+        return {"ok": False, "error": "invalid mode"}
+
+    s = update_staple(conn, user_id, staple_id, mode=mode, shopping_group=group)
+    if s is None:
         return {"ok": False}
-    # Auto-dismiss learning suggestion: "add" if deactivated, "remove" if reactivated
-    conn.execute(
-        text("INSERT INTO learning_dismissed (name, user_id) VALUES (:name, :user_id) ON CONFLICT DO NOTHING"),
-        {"name": r.name.lower(), "user_id": user_id},
-    )
-    conn.commit()
+
+    if group is not None and s.name:
+        # Persist as user override for grocery list rows too.
+        conn.execute(
+            text("""INSERT INTO user_item_groups (user_id, item_name, shopping_group)
+               VALUES (:user_id, :name, :group)
+               ON CONFLICT (user_id, item_name) DO UPDATE SET shopping_group = :group, updated_at = CURRENT_TIMESTAMP"""),
+            {"user_id": user_id, "name": s.name.lower(), "group": group},
+        )
+        conn.commit()
+
     return {
-        "id": r.id,
-        "name": r.name,
-        "shopping_group": r.shopping_group,
-        "store_pref": r.store_pref,
-        "active": r.active,
+        "id": s.id,
+        "name": s.name,
+        "shopping_group": s.shopping_group,
+        "store_pref": s.store_pref,
+        "mode": s.mode,
     }
 
 
-@router.delete("/regulars/{regular_id}")
-async def remove_regular(regular_id: int, request: Request):
-    """Delete a regular by ID. Hard-delete: the row goes away. If a meal needs
-    the ingredient later it flows onto the grocery list as a meal-source item
-    like any other ingredient. The 'don't re-suggest' signal is preserved
-    separately via learning_dismissed."""
+@router.delete("/staples/{staple_id}")
+async def delete_staple(staple_id: int, request: Request):
+    """Delete a staple. The 'don't re-suggest' signal goes to learning_dismissed
+    so the learning loop doesn't immediately re-suggest the item the user just
+    removed."""
+    from mealrunner.staples import remove_staple
+
     user_id = request.state.user_id
     conn = _conn()
     row = conn.execute(
-        text("SELECT name FROM regulars WHERE id = :id AND user_id = :user_id"),
-        {"id": regular_id, "user_id": user_id},
+        text("SELECT name FROM staples WHERE id = :id AND user_id = :user_id"),
+        {"id": staple_id, "user_id": user_id},
     ).fetchone()
     if not row:
         return {"ok": False}
-    conn.execute(
-        text("DELETE FROM regulars WHERE id = :id"),
-        {"id": regular_id},
-    )
-    # Remember not to re-suggest this as an "extra to add" learning hint.
+    remove_staple(conn, user_id, staple_id)
     conn.execute(
         text("INSERT INTO learning_dismissed (name, user_id) VALUES (:name, :user_id) ON CONFLICT DO NOTHING"),
         {"name": row["name"].lower(), "user_id": user_id},
@@ -3451,44 +3451,10 @@ async def remove_regular(regular_id: int, request: Request):
     return {"ok": True}
 
 
-@router.post("/staples/recategorize")
-async def recategorize_staple(body: dict, request: Request):
-    """Change a staple's shopping group. Updates the source table and user override."""
-    user_id = request.state.user_id
-    conn = _conn()
-    name = body.get("name", "").strip()
-    item_type = body.get("type", "")  # 'regular' or 'pantry'
-    item_id = body.get("id")
-    group = body.get("shopping_group", "").strip()
-    if not name or not group or not item_id:
-        return {"ok": False}
-
-    # Update the source table
-    if item_type == "regular":
-        conn.execute(
-            text("UPDATE regulars SET shopping_group = :group WHERE id = :id AND user_id = :user_id"),
-            {"group": group, "id": item_id, "user_id": user_id},
-        )
-    elif item_type == "pantry":
-        # Pantry doesn't have shopping_group column, but user_item_groups handles it
-        pass
-
-    # Persist as user override for grocery list too
-    conn.execute(
-        text("""INSERT INTO user_item_groups (user_id, item_name, shopping_group)
-           VALUES (:user_id, :name, :group)
-           ON CONFLICT (user_id, item_name) DO UPDATE SET shopping_group = :group, updated_at = CURRENT_TIMESTAMP"""),
-        {"user_id": user_id, "name": name.lower(), "group": group},
-    )
-    conn.commit()
-    return {"ok": True, "shopping_group": group}
-
-
 @router.get("/grocery/suggestions")
 async def grocery_suggestions(request: Request):
-    """Return all known item names for autocomplete (combined pool: ingredients + regulars + pantry)."""
-    from mealrunner.regulars import list_regulars
-    from mealrunner.pantry import list_pantry
+    """Return all known item names for autocomplete (ingredients + the user's staples)."""
+    from mealrunner.staples import list_staples
 
     user_id = request.state.user_id
     conn = _conn()
@@ -3499,14 +3465,10 @@ async def grocery_suggestions(request: Request):
     for row in rows:
         names.add(row["name"].lower())
 
-    # Regulars
-    for r in list_regulars(conn, user_id, active_only=False):
-        names.add(r.name.lower())
-
-    # Pantry items
-    for p in list_pantry(conn, user_id):
-        if p.ingredient_name:
-            names.add(p.ingredient_name.lower())
+    # User's staples (both modes)
+    for s in list_staples(conn, user_id):
+        if s.name:
+            names.add(s.name.lower())
 
     return {"suggestions": sorted(names)}
 
@@ -3696,14 +3658,15 @@ async def add_recipe_ingredient(recipe_id: int, body: dict, request: Request):
     if name.lower() != raw_name.lower():
         result["renamed_from"] = raw_name
 
-    # Suggest adding to pantry if this is a known staple the user doesn't already have
+    # Suggest adding as a staple if this is a known pantry-staple ingredient
+    # and the user doesn't already have a staple row for it (either mode).
     staple = conn.execute(
         text("SELECT id, name FROM ingredients WHERE id = :id AND is_pantry_staple = 1"),
         {"id": ingredient_id},
     ).fetchone()
     if staple:
         already = conn.execute(
-            text("SELECT id FROM pantry WHERE user_id = :uid AND ingredient_id = :iid"),
+            text("SELECT id FROM staples WHERE user_id = :uid AND ingredient_id = :iid"),
             {"uid": user_id, "iid": ingredient_id},
         ).fetchone()
         if not already:
@@ -3729,82 +3692,6 @@ async def remove_recipe_ingredient(recipe_id: int, ri_id: int, request: Request)
     conn.execute(
         text("DELETE FROM recipe_ingredients WHERE id = :id AND recipe_id = :rid"),
         {"id": ri_id, "rid": recipe_id},
-    )
-    conn.commit()
-    return {"ok": True}
-
-
-# ── Pantry ──────────────────────────────────────────────
-
-
-@router.get("/pantry")
-async def get_pantry(request: Request):
-    """List all pantry items."""
-    from mealrunner.pantry import list_pantry
-
-    user_id = request.state.user_id
-    conn = _conn()
-    items = list_pantry(conn, user_id)
-    resolve = _build_group_resolver(conn, user_id)
-    return {
-        "items": [
-            {
-                "id": p.id,
-                "ingredient_id": p.ingredient_id,
-                "name": p.ingredient_name,
-                "quantity": p.quantity,
-                "unit": p.unit,
-                "shopping_group": resolve(p.ingredient_name),
-            }
-            for p in items
-        ]
-    }
-
-
-@router.post("/pantry")
-async def add_pantry(body: dict, request: Request):
-    """Add a pantry item by ingredient name."""
-    from mealrunner.pantry import add_pantry_item
-
-    user_id = request.state.user_id
-    conn = _conn()
-    raw_name = body.get("name", "").strip()
-    if not raw_name:
-        return {"ok": False, "error": "name required"}
-    quantity = body.get("quantity", 1.0)
-    unit = body.get("unit", "count")
-
-    # Normalize to canonical ingredient name
-    name, _ = _normalize_name(conn, raw_name)
-
-    # If ingredient doesn't exist, create it
-    ing = conn.execute(
-        text("SELECT id FROM ingredients WHERE LOWER(name) = :name"),
-        {"name": name},
-    ).fetchone()
-    if not ing:
-        from mealrunner.normalize import invalidate_cache
-        conn.execute(
-            text("INSERT INTO ingredients (name, aisle) VALUES (:name, :aisle)"),
-            {"name": name, "aisle": body.get("shopping_group", "Other")},
-        )
-        conn.commit()
-        invalidate_cache()
-
-    result = add_pantry_item(conn, user_id, name, quantity, unit)
-    if result is None:
-        return {"ok": False}
-    return {"ok": True, "id": result.id, "name": result.ingredient_name}
-
-
-@router.delete("/pantry/{item_id}")
-async def remove_pantry(item_id: int, request: Request):
-    """Remove a pantry item."""
-    conn = _conn()
-    user_id = request.state.user_id
-    conn.execute(
-        text("DELETE FROM pantry WHERE id = :id AND user_id = :user_id"),
-        {"id": item_id, "user_id": user_id},
     )
     conn.commit()
     return {"ok": True}
@@ -3984,39 +3871,26 @@ async def get_onboarding_staples(request: Request):
 
 @router.post("/onboarding/save-staples")
 async def save_onboarding_staples(body: dict, request: Request):
-    """Bulk-add staple items to user's pantry."""
-    from mealrunner.pantry import add_pantry_item
+    """Bulk-add staple items for the user.
+
+    Body: {"names": [...], "mode": "every_trip" | "keep_on_hand"}.
+    Defaults mode to 'keep_on_hand' to match the original onboarding
+    semantic (the staples checklist was 'things you keep at home').
+    """
+    from mealrunner.staples import add_staple, VALID_MODES, KEEP_ON_HAND
 
     user_id = request.state.user_id
     conn = _conn()
     names = body.get("names", [])
+    mode = body.get("mode", KEEP_ON_HAND)
+    if mode not in VALID_MODES:
+        return {"ok": False, "error": "invalid mode"}
     for name in names:
         name = name.strip()
         if not name:
             continue
         try:
-            add_pantry_item(conn, user_id, name, 1.0, "count")
-        except Exception:
-            pass
-    conn.commit()
-    return {"ok": True, "count": len(names)}
-
-
-@router.post("/onboarding/save-regulars")
-async def save_onboarding_regulars(body: dict, request: Request):
-    """Bulk-add regular items for user."""
-    from mealrunner.regulars import add_regular
-
-    user_id = request.state.user_id
-    conn = _conn()
-    names = body.get("names", [])
-    for name in names:
-        name = name.strip()
-        if not name:
-            continue
-        try:
-            group = _infer_item_group(conn, name, user_id)
-            add_regular(conn, user_id, name, group)
+            add_staple(conn, user_id, name, mode)
         except Exception:
             pass
     conn.commit()
@@ -4173,10 +4047,11 @@ async def get_meal_history(request: Request):
 
 @router.get("/learning/suggestions")
 async def get_learning_suggestions(request: Request):
-    """Suggest regulars additions based on purchase frequency,
-    removals for stale regulars, and restocks for staples not bought recently.
+    """Suggest staple additions based on purchase frequency,
+    removals for stale every_trip staples, and restocks for keep_on_hand
+    staples not bought recently.
     """
-    from mealrunner.regulars import list_regulars
+    from mealrunner.staples import list_staples, EVERY_TRIP, KEEP_ON_HAND
 
     user_id = request.state.user_id
     conn = _conn()
@@ -4187,7 +4062,7 @@ async def get_learning_suggestions(request: Request):
     ).fetchall()
     dismissed = {r["name"] for r in dismissed_rows}
 
-    # --- Addition suggestions (items bought frequently but not a regular) ---
+    # --- Addition suggestions (items bought frequently but not yet a staple) ---
     add_suggestions = []
     rows = conn.execute(
         text("""SELECT LOWER(ti.name) as name,
@@ -4211,8 +4086,7 @@ async def get_learning_suggestions(request: Request):
         sorted_weeks = sorted(week_items.keys(), reverse=True)[:5]
         if len(sorted_weeks) >= 4:
             from mealrunner.normalize import compare_key
-            regulars = list_regulars(conn, user_id, active_only=False)
-            regular_keys = {compare_key(r.name) for r in regulars}
+            staple_keys = {compare_key(s.name) for s in list_staples(conn, user_id)}
             dismissed_keys = {compare_key(n) for n in dismissed}
             item_week_count: dict[str, int] = {}
             for week_key in sorted_weeks:
@@ -4220,33 +4094,32 @@ async def get_learning_suggestions(request: Request):
                     item_week_count[name] = item_week_count.get(name, 0) + 1
             for name, week_count in item_week_count.items():
                 key = compare_key(name)
-                if week_count >= 4 and key not in regular_keys and key not in dismissed_keys:
+                if week_count >= 4 and key not in staple_keys and key not in dismissed_keys:
                     add_suggestions.append({"name": name, "trip_count": week_count, "total_trips": len(sorted_weeks)})
 
-    # --- Removal suggestions (regulars not bought in 4+ weeks) ---
+    # --- Removal suggestions (every_trip staples not bought in 4+ weeks) ---
     remove_regulars = []
     stale_rows = conn.execute(
-        text("""SELECT id, name FROM regulars
-            WHERE user_id = :uid AND active = 1
+        text("""SELECT id, name FROM staples
+            WHERE user_id = :uid AND mode = :mode
               AND created_at IS NOT NULL AND created_at::timestamp < NOW() - INTERVAL '4 weeks'
               AND (last_bought_at IS NULL OR last_bought_at::timestamp < NOW() - INTERVAL '4 weeks')"""),
-        {"uid": user_id},
+        {"uid": user_id, "mode": EVERY_TRIP},
     ).fetchall()
     for r in stale_rows:
         if r["name"].lower() not in dismissed:
             remove_regulars.append({"name": r["name"], "id": r["id"]})
 
-    # --- Restock suggestions (staples not bought in 6+ weeks) ---
+    # --- Restock suggestions (keep_on_hand staples not bought in 6+ weeks) ---
     restock_staples = []
-    pantry_rows = conn.execute(
-        text("""SELECT p.id, i.name FROM pantry p
-            JOIN ingredients i ON i.id = p.ingredient_id
-            WHERE p.user_id = :uid
-              AND p.last_bought_at IS NOT NULL
-              AND p.last_bought_at::timestamp < NOW() - INTERVAL '6 weeks'"""),
-        {"uid": user_id},
+    stale_pantry = conn.execute(
+        text("""SELECT id, name FROM staples
+            WHERE user_id = :uid AND mode = :mode
+              AND last_bought_at IS NOT NULL
+              AND last_bought_at::timestamp < NOW() - INTERVAL '6 weeks'"""),
+        {"uid": user_id, "mode": KEEP_ON_HAND},
     ).fetchall()
-    for r in pantry_rows:
+    for r in stale_pantry:
         if r["name"].lower() not in dismissed:
             restock_staples.append({"name": r["name"], "id": r["id"]})
 

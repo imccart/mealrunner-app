@@ -135,13 +135,9 @@ export const api = {
   removeGroceryItem: (id) => request(`/grocery/item/${id}`, { method: 'DELETE' }),
   undoGroceryItem: (id) => request(`/grocery/undo/${id}`, { method: 'POST' }),
   buyElsewhere: (id) => request(`/grocery/buy-elsewhere/${id}`, { method: 'POST' }),
-  addRegulars: (selected) => request('/grocery/add-regulars', {
+  addStaplesToGrocery: (selected, mode) => request('/grocery/add-staples', {
     method: 'POST',
-    body: JSON.stringify({ selected }),
-  }),
-  addPantryItems: (selected) => request('/grocery/add-pantry', {
-    method: 'POST',
-    body: JSON.stringify({ selected }),
+    body: JSON.stringify({ selected, mode }),
   }),
 
   // Receipt
@@ -175,20 +171,26 @@ export const api = {
     }),
   }),
 
-  // Staples
-  recategorizeStaple: (name, type, id, shoppingGroup) => request('/staples/recategorize', {
+  // Staples (unified — replaces the old regulars + pantry endpoints).
+  // mode is 'every_trip' or 'keep_on_hand'.
+  getStaples: (mode) => request(`/staples${mode ? `?mode=${mode}` : ''}`),
+  addStaple: (name, mode, shoppingGroup, storePref) => request('/staples', {
     method: 'POST',
-    body: JSON.stringify({ name, type, id, shopping_group: shoppingGroup }),
+    body: JSON.stringify({
+      name,
+      mode,
+      shopping_group: shoppingGroup || '',
+      store_pref: storePref || 'either',
+    }),
   }),
-
-  // Regulars
-  getRegulars: () => request('/regulars'),
-  addRegular: (name, shoppingGroup, storePref) => request('/regulars', {
-    method: 'POST',
-    body: JSON.stringify({ name, shopping_group: shoppingGroup || '', store_pref: storePref || 'either' }),
+  updateStaple: (id, { mode, shoppingGroup } = {}) => request(`/staples/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      ...(mode !== undefined ? { mode } : {}),
+      ...(shoppingGroup !== undefined ? { shopping_group: shoppingGroup } : {}),
+    }),
   }),
-  toggleRegular: (id) => request(`/regulars/${id}/toggle`, { method: 'POST' }),
-  removeRegular: (id) => request(`/regulars/${id}`, { method: 'DELETE' }),
+  removeStaple: (id) => request(`/staples/${id}`, { method: 'DELETE' }),
 
   // Recipes
   getRecipes: () => request('/recipes'),
@@ -207,14 +209,6 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ notes }),
   }),
-
-  // Pantry
-  getPantry: () => request('/pantry'),
-  addPantryItem: (name, shoppingGroup) => request('/pantry', {
-    method: 'POST',
-    body: JSON.stringify({ name, shopping_group: shoppingGroup || 'Other' }),
-  }),
-  removePantryItem: (id) => request(`/pantry/${id}`, { method: 'DELETE' }),
 
   // Stores
   getStores: () => request('/stores'),
@@ -265,13 +259,9 @@ export const api = {
     body: JSON.stringify({ meal_ids: mealIds, side_ids: sideIds, custom_meals: customMeals, custom_sides: customSides }),
   }),
   getOnboardingStaples: () => request('/onboarding/staples'),
-  saveOnboardingStaples: (names) => request('/onboarding/save-staples', {
+  saveOnboardingStaples: (names, mode) => request('/onboarding/save-staples', {
     method: 'POST',
-    body: JSON.stringify({ names }),
-  }),
-  saveOnboardingRegulars: (names) => request('/onboarding/save-regulars', {
-    method: 'POST',
-    body: JSON.stringify({ names }),
+    body: JSON.stringify({ names, mode }),
   }),
   saveTimeBaseline: (value) => request('/onboarding/time-baseline', {
     method: 'POST',

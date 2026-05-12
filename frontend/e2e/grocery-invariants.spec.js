@@ -159,36 +159,39 @@ test.describe("Grocery invariants", () => {
     expect(pendingNames2).toContain(targetLower);
   });
 
-  test("pantry vs regulars: regulars auto-add via add-regulars; pantry items don't", async ({
+  test("staples: every_trip mode auto-adds via add-staples; keep_on_hand doesn't", async ({
     authedPage,
   }) => {
-    // Regulars = "every trip" — `/grocery/add-regulars` pushes them all on the
-    // list (one tap of the Add my regulars button). Source = 'regular'.
-    // Pantry = "on hand" — added via /grocery/add-pantry only when the user
-    // explicitly checks them as needing replenishment. Source = 'pantry'.
-    // Different code paths, different sources. This test asserts the boundary:
-    // creating a pantry row does NOT cause it to appear on the grocery list.
+    // Both modes live in the unified `staples` table now. The difference is
+    // strictly behavioral: every_trip rows get pushed onto the grocery list
+    // when the user taps "Add my regulars" (POST /grocery/add-staples with
+    // mode=every_trip), while keep_on_hand rows only flow when the user
+    // explicitly checks them in the "Check my staples" picker. Neither mode
+    // auto-syncs onto the list on its own — that's the boundary this test
+    // pins down.
     const regularName = `e2e-regular-${Date.now()}`;
     const pantryName = `e2e-pantry-${Date.now()}`;
 
     await addRegular(authedPage, regularName);
 
-    const pantryResp = await authedPage.request.post("/api/pantry", {
-      data: { name: pantryName, quantity: 1, unit: "count" },
+    const pantryResp = await authedPage.request.post("/api/staples", {
+      data: { name: pantryName, mode: "keep_on_hand" },
     });
     expect(pantryResp.ok()).toBe(true);
 
-    // Neither should be on the grocery list yet — the regular needs the
-    // explicit "Add my regulars" tap, and the pantry item never auto-syncs.
+    // Neither should be on the grocery list yet — the every_trip staple
+    // needs the explicit "Add my regulars" tap, and the keep_on_hand staple
+    // never auto-syncs.
     const before = await fetchGrocery(authedPage);
     const beforeNames = activeNamesLower(before);
     expect(beforeNames).not.toContain(regularName.toLowerCase());
     expect(beforeNames).not.toContain(pantryName.toLowerCase());
 
-    // Trigger "Add my regulars" with only the regular selected.
+    // Trigger "Add my regulars" with only the every_trip staple selected.
     await addRegularsToGrocery(authedPage, [regularName]);
 
-    // Now: regular is on the list with source='regular'; pantry is still off.
+    // Now: regular is on the list with source='regular' (preserved for
+    // historical / sync compat); keep_on_hand is still off.
     const after = await fetchGrocery(authedPage);
     const afterItems = flattenActive(after);
     const regRow = afterItems.find(

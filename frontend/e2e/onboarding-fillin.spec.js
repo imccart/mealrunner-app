@@ -2,8 +2,8 @@ import { test, expect, makeTestEmail } from "./fixtures.js";
 
 // Companion to onboarding.spec.js, which only covers the skip-everything
 // happy path. This test fills in real data — name, a meal, a staple, a
-// regular — and asserts the picks show up on /api/recipes, /api/pantry,
-// /api/regulars, /api/auth/me. Friends-beta cold-start path.
+// regular — and asserts the picks show up on /api/recipes, /api/staples
+// (both modes), /api/auth/me. Friends-beta cold-start path.
 
 test.describe("Onboarding fill-in path", () => {
   test("fresh user picks a meal, staple, and regular; data persists end-to-end", async ({
@@ -110,20 +110,20 @@ test.describe("Onboarding fill-in path", () => {
         `picked library meal "${firstMeal.name}" is in user's recipes`,
       ).toBeTruthy();
 
-      const regulars =
-        (await (await page.request.get("/api/regulars")).json()).regulars || [];
-      const matchedReg = regulars.find(
-        (r) => r.name.toLowerCase() === regularName,
+      const everyTrip =
+        (await (await page.request.get("/api/staples?mode=every_trip")).json()).staples || [];
+      const matchedReg = everyTrip.find(
+        (s) => s.name.toLowerCase() === regularName,
       );
       expect(
         matchedReg,
-        `picked regular "${regularName}" is in user's regulars`,
+        `picked regular "${regularName}" is in user's every-trip staples`,
       ).toBeTruthy();
 
-      const pantry =
-        (await (await page.request.get("/api/pantry")).json()).items || [];
-      const matchedStaple = pantry.find(
-        (p) => p.name.toLowerCase() === firstStaple.name.toLowerCase(),
+      const keepOnHand =
+        (await (await page.request.get("/api/staples?mode=keep_on_hand")).json()).staples || [];
+      const matchedStaple = keepOnHand.find(
+        (s) => s.name.toLowerCase() === firstStaple.name.toLowerCase(),
       );
       expect(
         matchedStaple,
