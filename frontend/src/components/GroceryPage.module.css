@@ -32,21 +32,30 @@
 .groceryActionBtn {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 2px;
   padding: 10px 12px;
   background: var(--cream);
   border: 1px solid var(--tan-light);
   border-radius: 10px;
   font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
-  font-weight: 500;
   color: var(--brown);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  line-height: 1.2;
 }
 .groceryActionBtn:active { background: var(--tan-light); }
+.groceryActionVerb {
+  font-size: 14px;
+  font-weight: 600;
+}
+.groceryActionNoun {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 .groceryPromptCompact {
   display: flex;
   align-items: center;

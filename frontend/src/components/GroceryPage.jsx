@@ -504,12 +504,12 @@ export default function GroceryPage({ sidebar = false }) {
     } catch { rollback(prev) }
   }
 
-  const renderActionCard = ({ expanded, label, onExpand, onSubmit, data, checkedSet, setChecked, groupField }) => {
+  const renderActionCard = ({ expanded, verb, noun, onExpand, onSubmit, data, checkedSet, setChecked, groupField }) => {
     if (expanded) {
       return (
         <div className={styles.groceryPromptCard}>
           <div className={styles.groceryPromptBody}>
-            <div className={styles.groceryPromptTitle}>{label}</div>
+            <div className={styles.groceryPromptTitle}>{`${verb} ${noun}`}</div>
             <div className={styles.groceryPromptDesc}>
               {groupField ? 'Uncheck anything you don\'t need this time.' : 'Check anything you need to restock.'}
             </div>
@@ -560,8 +560,8 @@ export default function GroceryPage({ sidebar = false }) {
 
     return (
       <button className={styles.groceryActionBtn} onClick={onExpand}>
-        <span>{label}</span>
-        <span className={styles.groceryPromptArrow}>{'\u203A'}</span>
+        <span className={styles.groceryActionVerb}>{verb}</span>
+        <span className={styles.groceryActionNoun}>{noun}</span>
       </button>
     )
   }
@@ -571,13 +571,13 @@ export default function GroceryPage({ sidebar = false }) {
       <div className={styles.groceryActions}>
         {renderActionCard({
           expanded: regularsExpanded,
-          label: 'Add every-trip items',
+          verb: 'Add', noun: 'every-trip items',
           onExpand: handleRegularsExpand, onSubmit: handleRegularsSubmit,
           data: regularsData, checkedSet: regularsChecked, setChecked: setRegularsChecked, groupField: 'shopping_group',
         })}
         {renderActionCard({
           expanded: pantryExpanded,
-          label: 'Check on-hand items',
+          verb: 'Check', noun: 'on-hand items',
           onExpand: handlePantryExpand, onSubmit: handlePantrySubmit,
           data: pantryData, checkedSet: pantryChecked, setChecked: setPantryChecked, groupField: null,
         })}
