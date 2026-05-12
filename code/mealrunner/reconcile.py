@@ -558,33 +558,44 @@ def diff_grocery_list(grocery_names: list[str], receipt_items: list[dict]) -> di
             g_words = set(g_norm.split())
             g_compact = _compact(g_original)
 
-            # Spaceless substring match: "lacroix" in "lacroixlimeflavored..."
-            # Require grocery name covers at least 50% of the receipt text to avoid
-            # "bread" matching "breadbutterwine"
+            # Take the max across independent strategies — earlier code used
+            # if/elif, which let a low-coverage substring hit silently block
+            # the word-subset fallback ("maple syrup" never matched a long
+            # Kroger description because "maplesyrup" was a substring of the
+            # 54-char compact form but coverage was 0.18, under the 0.5 cap).
+            score = 0
+
+            # Spaceless substring (either direction). Coverage cap prevents
+            # "bread" from matching "breadbutterwine".
             if g_compact and len(g_compact) >= 4 and g_compact in r_compact:
                 coverage = len(g_compact) / len(r_compact)
                 if coverage >= 0.5:
-                    score = max(coverage, 0.6)
-            elif r_compact and len(r_compact) >= 4 and r_compact in g_compact:
+                    score = max(score, max(coverage, 0.6))
+            if r_compact and len(r_compact) >= 4 and r_compact in g_compact:
                 coverage = len(r_compact) / len(g_compact)
                 if coverage >= 0.5:
-                    score = max(coverage, 0.6)
-            # Word subset match: "ground beef" words in "Kroger 93/7 Ground Beef Tray"
-            # Require at least 2 grocery words to avoid single-word false positives
-            elif g_words and len(g_words) >= 2 and g_words.issubset(r_words):
-                score = max(len(g_words) / len(r_words), 0.6)
-            else:
-                # Stem-aware overlap: "banana" matches "bananas"
-                overlap = 0
-                for gw in g_words:
-                    for rw in r_words:
-                        if gw.startswith(rw) or rw.startswith(gw):
-                            overlap += 1
-                            break
-                # Use the larger word count as denominator to penalize partial matches
-                # e.g. "eggs" (1 word) matching 1 of 5 receipt words = 0.2, not 1.0
-                total = max(len(g_words), len(r_words), 1)
-                score = overlap / total
+                    score = max(score, max(coverage, 0.6))
+
+            # Every grocery word appears as an exact word in the receipt text.
+            # Single-word groceries ("bacon", "eggs") allowed when the word is
+            # >=4 chars, so distinctive head nouns match long Kroger product
+            # descriptions. Tokens are _norm()'d, so "eggs" doesn't false-match
+            # "Eggless Pasta" — "eggs" isn't a token in {eggless, pasta}. The
+            # length floor blocks short ambiguous nouns like "tea" matching
+            # "Tea Tree Oil".
+            if g_words and g_words.issubset(r_words):
+                if len(g_words) >= 2 or all(len(w) >= 4 for w in g_words):
+                    score = max(score, max(len(g_words) / len(r_words), 0.6))
+
+            # Stem-aware overlap: "banana" matches "bananas".
+            overlap = 0
+            for gw in g_words:
+                for rw in r_words:
+                    if gw.startswith(rw) or rw.startswith(gw):
+                        overlap += 1
+                        break
+            total = max(len(g_words), len(r_words), 1)
+            score = max(score, overlap / total)
 
             if score > best_score:
                 best_score = score
