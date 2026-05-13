@@ -67,6 +67,25 @@ Thumbs up/down on reconciled receipt items. Ratings surface on the Order page (p
 - **Confirming a match** sets `checked=1, ordered=0`.
 - **Not-fulfilled** items reset to active (cleared `ordered` / `submitted` / product data) so they can be re-ordered.
 
+## diff_grocery_list scoring (session 74 restructure)
+
+Match score = `max()` across three independent strategies, not a cascading if/elif. Earlier code's if/elif let a low-coverage substring hit silently block the word-subset fallback: `g_compact in r_compact` could enter the outer branch, fail the inner `coverage >= 0.5` check, and exit without setting score AND without falling through. Production manifestation: "maple syrup" (10-char compact) inside a 54-char Kroger description = coverage 0.18, blocked match. `score` also wasn't initialized per inner iteration, so first hit threw UnboundLocalError; later iterations silently carried stale scores from prior iterations. Repro in `scratch/repro_match_bug.py`.
+
+Strategies (each emits 0 if its predicate fails, score capped at min 0.6 if it fires):
+- **Spaceless substring** (either direction): `g_compact in r_compact` (or reverse), >= 4 chars, coverage >= 0.5. Coverage cap blocks "bread" → "breadbutterwine".
+- **Word subset**: every grocery word appears as an exact token in r_words. Single-word groceries allowed when the word is >= 4 chars — distinctive head nouns ("bacon", "eggs") match long descriptions; short ambiguous nouns ("tea", "oil") don't false-positive on "Tea Tree Oil". Token comparison protects against "eggs" matching "Eggless Pasta" (eggs not a token in {eggless, pasta}).
+- **Stem-aware overlap**: `gw.startswith(rw) or rw.startswith(gw)` (so "banana" matches "bananas"), denominator = max(len(g_words), len(r_words)).
+
+Match threshold remains 0.6. AI fallback (`_ai_match`) still runs on the unmatched remainder.
+
+## Receipt page is a queue, not a log (session 74)
+
+`/receipt` GET has two new behaviors:
+- **Lazy auto-ack**: before reading rows, `UPDATE grocery_items SET receipt_acknowledged=1 WHERE user_id=:u AND receipt_status IN ('matched','substituted') AND receipt_acknowledged=0 AND submitted_at IS NOT NULL AND submitted_at < NOW() - INTERVAL '10 days'`. `submitted_at` is the proxy for "match age" since most matched rows came through a Kroger order. Rows without `submitted_at` (rare — e.g. checked-off-list rows matched via receipt) stay unacknowledged until manual dismiss.
+- **Acknowledged-purchase filter**: row query excludes `receipt_status IN ('matched','substituted','dismissed') AND receipt_acknowledged=1`. `not_fulfilled` and `''` (active list) always show. The 10-day window matches the rolling plan window for consistency.
+
+Purchase history (`/purchases`), receipt re-upload dedup (`api.py:2826`), and price logging all query `grocery_items` directly and aren't affected by the receipt-page filter.
+
 ## Item-count cross-check (shipped session 70)
 
 `_process_receipt` writes `item_count_footer` / `item_count_parsed` / `item_count_gap` into the upload response when a parser returns a footer count, and logs `logger.warning` on mismatch. UI is silent — gap is a backend signal, not a user nag.
