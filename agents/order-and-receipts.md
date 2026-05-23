@@ -65,7 +65,15 @@ Thumbs up/down on reconciled receipt items. Ratings surface on the Order page (p
 - Matches against all unreconciled items regardless of checked state — auto-prune handles stale.
 - Submitted items that fail UPC match get a second pass through `diff_grocery_list` (smarter word-subset matching).
 - **Confirming a match** sets `checked=1, ordered=0`.
-- **Not-fulfilled** items reset to active (cleared `ordered` / `submitted` / product data) so they can be re-ordered.
+- **Not-fulfilled** items reset to active so they can be re-ordered. `_not_fulfilled_sql` clears `ordered` / `submitted_at` / `product_*` **and** `receipt_item` / `receipt_upc` / `receipt_price` (session 77 — previously left the latter three populated, so demoted rows carried stale match evidence).
+
+## No match-side dedup on re-upload (session 77)
+
+`_process_receipt` does **not** filter incoming receipt items against past *matched* grocery rows. An earlier `already_matched_names` filter (set of `receipt_item` strings from prior matches) was deleted — it blocked a repeat purchase of the same Kroger description from ever matching again (obvious items like bacon / hot dogs / edamame silently went to Extras). Only `already_extra_names` is kept, which prevents duplicate **extras** inserts on re-upload. Worst case of no match-dedup is a recoverable flood of extras, not a lost match. No order-number / (store,date,total) dedup key was added — re-running reconciliation against the current list is idempotent enough.
+
+## Receipt metadata (session 77)
+
+`parse_receipt_pdf` / `parse_receipt_image` return `(items, footer_count, metadata)`. `metadata` is `{store, store_location, order_date (ISO YYYY-MM-DD), order_number, total_price}` — empty string / null for fields not present. PDF path uses `_extract_kroger_metadata(text)` (regex on the Kroger order block); image path asks Vision via a RECEIPT METADATA prompt block + schema fields. `grocery_state.receipt_data` entries are now dicts (`store / store_location / order_date / order_number / total_price / footer_count / items`) instead of bare item lists; `_process_receipt` wraps any legacy bare-list entry as a dict on read (every upload).
 
 ## diff_grocery_list scoring (session 74 restructure)
 
