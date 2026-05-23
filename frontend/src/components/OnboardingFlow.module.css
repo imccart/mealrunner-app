@@ -472,6 +472,11 @@
   margin-top: 20px;
 }
 .btnSpacer { flex: 1; }
+@media (max-width: 640px) {
+  .btnRow { flex-wrap: wrap; justify-content: flex-start; }
+  .btnRow .skip { flex-basis: 100%; text-align: left; }
+  .btnRow .btnSpacer { display: none; }
+}
 .obBtn {
   padding: 12px 24px;
   border-radius: 8px;
