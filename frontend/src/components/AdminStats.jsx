@@ -26,7 +26,12 @@ export default function AdminStats() {
 
   useEffect(() => { load() }, [])
 
-  if (error) return <div className={styles.error}>{error}</div>
+  if (error) return (
+    <div className={styles.error}>
+      {error}
+      <button className={styles.retry} onClick={() => { setM(null); setError(null); load() }}>Retry</button>
+    </div>
+  )
   if (!m) return <div className={styles.empty}>Loading…</div>
 
   const groups = [
@@ -34,9 +39,10 @@ export default function AdminStats() {
       title: 'Users',
       tiles: [
         { label: 'Total users', value: m.users_total },
+        { label: 'Active (signed in)', value: m.active_signed_in },
+        { label: 'Households', value: m.households },
         { label: 'New this week', value: m.users_new_7d },
-        { label: 'Active (7d)', value: m.active_7d },
-        { label: 'Active (30d)', value: m.active_30d },
+        { label: 'Invited, not active', value: m.pending_activation },
         { label: 'Waitlist', value: m.waitlist },
       ],
     },
@@ -44,9 +50,15 @@ export default function AdminStats() {
       title: 'Engagement (last 7 days)',
       tiles: [
         { label: 'Kroger linked', value: m.kroger_linked },
-        { label: 'Meals planned', value: m.meals_planned_7d, sub: `${m.meal_planners_7d} planners` },
+        { label: 'Meals planned', value: m.meals_planned_7d },
         { label: 'Grocery items added', value: m.grocery_items_7d },
         { label: 'Receipts parsed', value: m.receipts_7d },
+      ],
+    },
+    {
+      title: 'Invites',
+      tiles: [
+        { label: 'Invites sent', value: m.invites_sent, sub: `${m.invites_accepted ?? 0} accepted` },
       ],
     },
     {

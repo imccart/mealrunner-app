@@ -4923,16 +4923,24 @@ async def get_admin_metrics(request: Request):
                     pass
             return 0
 
+    # NOTE on "active": last_login is a poor proxy because household members log
+    # in once and stay signed in, so they never refresh it. A live (unexpired)
+    # session is the truthful "currently has access / using it" signal and counts
+    # household members. Engagement counts (meals/grocery/receipts) are aggregate,
+    # not per-user, because a household member's activity is written under the
+    # household owner's user_id — so distinct-user counts would undercount.
     metrics = {
         "users_total": scalar("SELECT COUNT(*) FROM users"),
         "users_new_7d": scalar("SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days'"),
-        "active_7d": scalar("SELECT COUNT(*) FROM users WHERE last_login > NOW() - INTERVAL '7 days'"),
-        "active_30d": scalar("SELECT COUNT(*) FROM users WHERE last_login > NOW() - INTERVAL '30 days'"),
+        "active_signed_in": scalar("SELECT COUNT(DISTINCT user_id) FROM sessions WHERE expires_at > NOW()"),
+        "pending_activation": scalar("SELECT COUNT(*) FROM users WHERE last_login IS NULL"),
+        "households": scalar("SELECT COUNT(DISTINCT household_id) FROM household_members"),
         "kroger_linked": scalar("SELECT COUNT(DISTINCT user_id) FROM user_kroger_tokens"),
         "meals_planned_7d": scalar("SELECT COUNT(*) FROM meals WHERE created_at > NOW() - INTERVAL '7 days'"),
-        "meal_planners_7d": scalar("SELECT COUNT(DISTINCT user_id) FROM meals WHERE created_at > NOW() - INTERVAL '7 days'"),
         "grocery_items_7d": scalar("SELECT COUNT(*) FROM grocery_items WHERE added_at > NOW() - INTERVAL '7 days'"),
         "receipts_7d": scalar("SELECT COUNT(*) FROM grocery_state WHERE receipt_parsed_at > NOW() - INTERVAL '7 days'"),
+        "invites_sent": scalar("SELECT COUNT(*) FROM household_invites"),
+        "invites_accepted": scalar("SELECT COUNT(*) FROM household_invites WHERE status = 'accepted'"),
         "open_feedback": scalar("SELECT COUNT(*) FROM user_feedback WHERE status != 'responded'"),
         "waitlist": scalar("SELECT COUNT(*) FROM waitlist"),
         "tip_subscribers": scalar("SELECT COUNT(*) FROM users WHERE active_tip_subscription_id IS NOT NULL"),

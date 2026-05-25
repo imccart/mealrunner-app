@@ -84,7 +84,12 @@ export default function AdminFeedback({ embedded = false }) {
           ))}
         </div>
 
-        {error && <div className={styles.error}>{error}</div>}
+        {error && (
+          <div className={styles.error}>
+            {error}
+            <button className={styles.retry} onClick={() => { setItems(null); load() }}>Retry</button>
+          </div>
+        )}
 
         {items === null && !error && (
           <div className={styles.empty}>Loading…</div>
