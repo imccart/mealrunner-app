@@ -34,16 +34,21 @@ export default function AdminStats() {
   )
   if (!m) return <div className={styles.empty}>Loading…</div>
 
+  // Each concept is a single tile; the breakdowns live in the subtitle so no
+  // number is shown twice (total = active + not-logged-in, etc.).
+  const usersSub = `${m.active_signed_in} active · ${m.pending_activation} not logged in`
+    + (m.users_new_7d > 0 ? ` · ${m.users_new_7d} new this wk` : '')
+  const tipsSub = money(m.tips_cents)
+    + (m.tip_subscribers > 0 ? ` · ${m.tip_subscribers} monthly` : '')
+
   const groups = [
     {
-      title: 'Users',
+      title: 'Overview',
       tiles: [
-        { label: 'Total users', value: m.users_total },
-        { label: 'Active (signed in)', value: m.active_signed_in },
+        { label: 'Users', value: m.users_total, sub: usersSub },
         { label: 'Households', value: m.households },
-        { label: 'New this week', value: m.users_new_7d },
-        { label: 'Invited, not active', value: m.pending_activation },
         { label: 'Waitlist', value: m.waitlist },
+        { label: 'Invites sent', value: m.invites_sent, sub: `${m.invites_accepted ?? 0} accepted` },
       ],
     },
     {
@@ -56,18 +61,10 @@ export default function AdminStats() {
       ],
     },
     {
-      title: 'Invites',
-      tiles: [
-        { label: 'Invites sent', value: m.invites_sent, sub: `${m.invites_accepted ?? 0} accepted` },
-      ],
-    },
-    {
-      title: 'Support & tips',
+      title: 'Support & money',
       tiles: [
         { label: 'Open feedback', value: m.open_feedback, alert: m.open_feedback > 0 },
-        { label: 'Tip subscribers', value: m.tip_subscribers },
-        { label: 'Tips received', value: m.tips_total },
-        { label: 'Total collected', value: money(m.tips_cents), raw: true },
+        { label: 'Tips received', value: m.tips_total, sub: tipsSub },
       ],
     },
   ]
