@@ -4899,9 +4899,11 @@ async def get_all_feedback(request: Request):
 async def get_admin_metrics(request: Request):
     """Admin: high-level usage metrics for the beta dashboard.
 
-    Each scalar runs inside its own savepoint so a single bad query (e.g. a
-    table that doesn't exist yet on a fresh DB) can't abort the surrounding
-    transaction and blank out every other number.
+    Plain SELECTs on the request connection (same as /feedback/all). An earlier
+    version wrapped each query in conn.raw.begin_nested() so a bad query couldn't
+    poison the transaction, but that savepoint call failed in this GET context and
+    silently zeroed every metric. All queries here hit confirmed-existing tables;
+    if one ever errors, let it 500 loudly rather than masking it as zeros.
     """
     real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
     conn = _conn()
@@ -4909,19 +4911,8 @@ async def get_admin_metrics(request: Request):
         return {"ok": False, "error": "Not authorized"}
 
     def scalar(sql: str) -> int:
-        sp = None
-        try:
-            sp = conn.raw.begin_nested()
-            row = conn.execute(text(sql)).fetchone()
-            sp.commit()
-            return int(row[0]) if row and row[0] is not None else 0
-        except Exception:
-            if sp is not None:
-                try:
-                    sp.rollback()
-                except Exception:
-                    pass
-            return 0
+        row = conn.execute(text(sql)).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
 
     # NOTE on "active": last_login is a poor proxy because household members log
     # in once and stay signed in, so they never refresh it. A live (unexpired)
