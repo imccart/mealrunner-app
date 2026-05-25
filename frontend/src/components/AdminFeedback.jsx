@@ -12,7 +12,7 @@ function formatWhen(iso) {
   })
 }
 
-export default function AdminFeedback() {
+export default function AdminFeedback({ embedded = false }) {
   const [items, setItems] = useState(null)
   const [error, setError] = useState(null)
   const [filter, setFilter] = useState('open')
@@ -70,19 +70,8 @@ export default function AdminFeedback() {
     return acc
   }, { all: 0, open: 0, responded: 0 })
 
-  return (
-    <div className={styles.page}>
-      <div className={styles.container}>
-        <div className={styles.header}>
-          <h1 className={styles.title}>User feedback</h1>
-          <button className={styles.exit} onClick={() => {
-            history.replaceState(null, '', window.location.pathname + window.location.search)
-            window.dispatchEvent(new HashChangeEvent('hashchange'))
-          }}>
-            Back to app
-          </button>
-        </div>
-
+  const inner = (
+    <>
         <div className={styles.tabs}>
           {['open', 'responded', 'all'].map(t => (
             <button
@@ -144,6 +133,24 @@ export default function AdminFeedback() {
             )}
           </div>
         ))}
+    </>
+  )
+
+  if (embedded) return inner
+
+  return (
+    <div className={styles.page}>
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <h1 className={styles.title}>User feedback</h1>
+          <button className={styles.exit} onClick={() => {
+            history.replaceState(null, '', window.location.pathname + window.location.search)
+            window.dispatchEvent(new HashChangeEvent('hashchange'))
+          }}>
+            Back to app
+          </button>
+        </div>
+        {inner}
       </div>
     </div>
   )

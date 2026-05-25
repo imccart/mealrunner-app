@@ -14,7 +14,7 @@ import LoginPage from './components/LoginPage'
 import HouseholdInvitePrompt from './components/HouseholdInvitePrompt'
 import { CrashTest } from './components/ErrorBoundary'
 import TourOverlay from './components/TourOverlay'
-import AdminFeedback from './components/AdminFeedback'
+import AdminPanel from './components/AdminPanel'
 
 function useIsWide(breakpoint = 1024) {
   const [wide, setWide] = useState(window.innerWidth >= breakpoint)
@@ -136,7 +136,7 @@ function App() {
   }
 
   if (hash === '#admin') {
-    return <AdminFeedback />
+    return <AdminPanel />
   }
 
   // Show household invite prompt before onboarding — invited members

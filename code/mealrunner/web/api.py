@@ -4895,6 +4895,53 @@ async def get_all_feedback(request: Request):
     return {"feedback": [dict(r._mapping) for r in rows]}
 
 
+@router.get("/admin/metrics")
+async def get_admin_metrics(request: Request):
+    """Admin: high-level usage metrics for the beta dashboard.
+
+    Each scalar runs inside its own savepoint so a single bad query (e.g. a
+    table that doesn't exist yet on a fresh DB) can't abort the surrounding
+    transaction and blank out every other number.
+    """
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    conn = _conn()
+    if not _is_admin(conn, real_user_id):
+        return {"ok": False, "error": "Not authorized"}
+
+    def scalar(sql: str) -> int:
+        sp = None
+        try:
+            sp = conn.raw.begin_nested()
+            row = conn.execute(text(sql)).fetchone()
+            sp.commit()
+            return int(row[0]) if row and row[0] is not None else 0
+        except Exception:
+            if sp is not None:
+                try:
+                    sp.rollback()
+                except Exception:
+                    pass
+            return 0
+
+    metrics = {
+        "users_total": scalar("SELECT COUNT(*) FROM users"),
+        "users_new_7d": scalar("SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days'"),
+        "active_7d": scalar("SELECT COUNT(*) FROM users WHERE last_login > NOW() - INTERVAL '7 days'"),
+        "active_30d": scalar("SELECT COUNT(*) FROM users WHERE last_login > NOW() - INTERVAL '30 days'"),
+        "kroger_linked": scalar("SELECT COUNT(DISTINCT user_id) FROM user_kroger_tokens"),
+        "meals_planned_7d": scalar("SELECT COUNT(*) FROM meals WHERE created_at > NOW() - INTERVAL '7 days'"),
+        "meal_planners_7d": scalar("SELECT COUNT(DISTINCT user_id) FROM meals WHERE created_at > NOW() - INTERVAL '7 days'"),
+        "grocery_items_7d": scalar("SELECT COUNT(*) FROM grocery_items WHERE added_at > NOW() - INTERVAL '7 days'"),
+        "receipts_7d": scalar("SELECT COUNT(*) FROM grocery_state WHERE receipt_parsed_at > NOW() - INTERVAL '7 days'"),
+        "open_feedback": scalar("SELECT COUNT(*) FROM user_feedback WHERE status != 'responded'"),
+        "waitlist": scalar("SELECT COUNT(*) FROM waitlist"),
+        "tip_subscribers": scalar("SELECT COUNT(*) FROM users WHERE active_tip_subscription_id IS NOT NULL"),
+        "tips_total": scalar("SELECT COUNT(*) FROM tips WHERE status = 'succeeded'"),
+        "tips_cents": scalar("SELECT COALESCE(SUM(amount_cents), 0) FROM tips WHERE status = 'succeeded'"),
+    }
+    return {"ok": True, "metrics": metrics}
+
+
 @router.get("/admin/unknown-brands")
 async def get_unknown_brands(request: Request):
     """Admin: list unknown brands sorted by frequency."""

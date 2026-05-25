@@ -317,6 +317,7 @@ export const api = {
   dismissFeedbackResponse: (id) => request(`/feedback/${id}/dismiss`, { method: 'POST' }),
 
   // Admin feedback
+  getAdminMetrics: () => request('/admin/metrics'),
   getAllFeedback: () => request('/feedback/all'),
   respondToFeedback: (id, response) => request(`/feedback/${id}/respond`, {
     method: 'POST',
