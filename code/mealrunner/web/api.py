@@ -4899,11 +4899,11 @@ async def get_all_feedback(request: Request):
 async def get_admin_metrics(request: Request):
     """Admin: high-level usage metrics for the beta dashboard.
 
-    Plain SELECTs on the request connection (same as /feedback/all). An earlier
-    version wrapped each query in conn.raw.begin_nested() so a bad query couldn't
-    poison the transaction, but that savepoint call failed in this GET context and
-    silently zeroed every metric. All queries here hit confirmed-existing tables;
-    if one ever errors, let it 500 loudly rather than masking it as zeros.
+    Plain SELECTs on the request connection (same as /feedback/all). The request
+    connection's fetchone() returns a RowMapping (dict-like, keyed by column NAME),
+    so positional row[0] raises KeyError — read the single value via .values()
+    instead. An earlier savepoint wrapper's broad except was silently swallowing
+    that KeyError and zeroing every metric.
     """
     real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
     conn = _conn()
@@ -4912,7 +4912,10 @@ async def get_admin_metrics(request: Request):
 
     def scalar(sql: str) -> int:
         row = conn.execute(text(sql)).fetchone()
-        return int(row[0]) if row and row[0] is not None else 0
+        if not row:
+            return 0
+        val = next(iter(row.values()), None)
+        return int(val) if val is not None else 0
 
     # NOTE on "active": last_login is a poor proxy because household members log
     # in once and stay signed in, so they never refresh it. A live (unexpired)
