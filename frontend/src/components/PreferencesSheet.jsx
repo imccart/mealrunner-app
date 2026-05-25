@@ -121,7 +121,7 @@ function BasketTrendInsight() {
   )
 }
 
-export default function PreferencesSheet({ onClose, onStartTour }) {
+export default function PreferencesSheet({ onClose, onStartTour, isAdmin }) {
   const [members, setMembers] = useState(null)
   const [householdEmail, setHouseholdEmail] = useState('')
   const [betaEmail, setBetaEmail] = useState('')
@@ -619,6 +619,13 @@ export default function PreferencesSheet({ onClose, onStartTour }) {
         {onStartTour && (
           <button className={styles.prefsTourBtn} onClick={onStartTour}>
             Take the tour
+          </button>
+        )}
+
+        {/* Admin dashboard (only rendered for the admin account) */}
+        {isAdmin && (
+          <button className={styles.prefsTourBtn} onClick={() => { onClose?.(); window.location.hash = 'admin' }}>
+            Admin dashboard
           </button>
         )}
 

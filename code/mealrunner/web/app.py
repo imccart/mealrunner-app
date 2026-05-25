@@ -402,11 +402,24 @@ async def auth_me(request: Request):
         text("SELECT value FROM settings WHERE user_id = :uid AND key = 'home_zip'"),
         {"uid": user_id},
     ).fetchone()
+
+    # Admin = whoever ADMIN_USER_ID points to, else the first-registered user.
+    # Mirrors _is_admin in api.py; kept inline here to avoid an import cycle.
+    admin_id = os.environ.get("ADMIN_USER_ID")
+    if admin_id:
+        is_admin = (user_id == admin_id)
+    else:
+        first = conn.execute(
+            text("SELECT id FROM users ORDER BY created_at LIMIT 1")
+        ).fetchone()
+        is_admin = bool(first and first["id"] == user_id)
+
     return {
         "id": user["id"], "email": user["email"], "display_name": user["display_name"],
         "first_name": user["first_name"], "last_name": user["last_name"],
         "tos_accepted_at": user["tos_accepted_at"], "tos_version": user["tos_version"],
         "home_zip": home_zip_row["value"] if home_zip_row else "",
+        "is_admin": is_admin,
     }
 
 

@@ -46,6 +46,7 @@ function App() {
   const [showTipJar, setShowTipJar] = useState(false)
   const [tipJarEnabled, setTipJarEnabled] = useState(false)
   const [authed, setAuthed] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [onboardingDone, setOnboardingDone] = useState(null)
   const [welcomed, setWelcomed] = useState(() => localStorage.getItem('mealrunner_welcomed') === 'true')
   const [pendingInvite, setPendingInvite] = useState(null) // { inviter_name } or null
@@ -72,8 +73,9 @@ function App() {
 
   useEffect(() => {
     api.getMe()
-      .then(() => {
+      .then((me) => {
         setAuthed(true)
+        setIsAdmin(!!me?.is_admin)
         // Probe Stripe config — show the tip jar icon when Stripe is reachable
         // (real keys configured) OR when staging is in fake mode. Hide it in
         // production until live-mode keys are added, otherwise tapping the icon
@@ -135,7 +137,7 @@ function App() {
     return <LoginPage />
   }
 
-  if (hash === '#admin') {
+  if (hash === '#admin' && isAdmin) {
     return <AdminPanel />
   }
 
@@ -218,7 +220,7 @@ function App() {
 
       {showKitchen && <MyKitchenSheet onClose={() => setShowKitchen(false)} />}
       {showTipJar && <TipJarSheet onClose={() => setShowTipJar(false)} />}
-      {showPrefs && <PreferencesSheet onClose={() => setShowPrefs(false)} onStartTour={() => { setShowPrefs(false); setTourActive(true) }} />}
+      {showPrefs && <PreferencesSheet isAdmin={isAdmin} onClose={() => setShowPrefs(false)} onStartTour={() => { setShowPrefs(false); setTourActive(true) }} />}
       {tourActive && <TourOverlay onComplete={() => setTourActive(false)} />}
     </div>
   )
