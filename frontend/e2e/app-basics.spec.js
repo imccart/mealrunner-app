@@ -39,9 +39,9 @@ test.describe("App basics", () => {
     await search.fill(libMeal.name);
     await search.press("Enter");
 
-    // Sides step — click "No sides"
+    // Picked state — confirm with no sides via the single Done button
     await authedPage
-      .getByRole("button", { name: /^No sides$/ })
+      .getByRole("button", { name: /^Done$/ })
       .click();
 
     // Plan should now have a meal-row with this name
