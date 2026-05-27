@@ -168,6 +168,21 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
     } catch { await load() }
   }
 
+  // Inline side-chip actions on the plan row. Remove sends the
+  // remaining list to set-side; that's the same backend contract
+  // the side picker uses, just with one fewer side.
+  const handleRemoveSide = async (date, sideId) => {
+    const day = data?.days?.find(d => d.date === date)
+    if (!day?.meal?.sides) return
+    const remaining = day.meal.sides
+      .filter(s => s.id !== sideId)
+      .map(s => ({ side_recipe_id: s.id, side_name: s.name }))
+    try {
+      const result = await api.setSide(date, remaining)
+      setData(result)
+    } catch { await load() }
+  }
+
 
   const handleStartNewPlan = async () => {
     if (!window.confirm('This clears all your meals and your grocery list. Are you sure?')) return
@@ -274,6 +289,9 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
             )
           }
 
+          const sides = meal.sides || []
+          const hasSides = sides.length > 0
+          const canHaveSides = !isFreeform
           return (
             <div
               key={date}
@@ -286,7 +304,45 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
               <div className={styles.mealDay}>{day_short}</div>
               <div className={styles.mealInfo}>
                 <div className={`${styles.mealName} ${isFreeform ? styles.freeform : ''}`}>{meal.recipe_name}</div>
-                {meal.sides?.length > 0 && <div className={styles.mealSideText}>{meal.sides.map(s => s.name).join(', ')}</div>}
+                {canHaveSides && hasSides && (
+                  <div className={styles.sideStrip}>
+                    {sides.map(s => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className={styles.sideChip}
+                        onClick={(e) => { e.stopPropagation(); handleOpenSidePicker(date) }}
+                        title={`Swap "${s.name}"`}
+                      >
+                        {s.name}
+                        <span
+                          role="button"
+                          aria-label={`Remove ${s.name}`}
+                          className={styles.sideChipX}
+                          onClick={(e) => { e.stopPropagation(); handleRemoveSide(date, s.id) }}
+                        >×</span>
+                      </button>
+                    ))}
+                    {sides.length < 3 && (
+                      <button
+                        type="button"
+                        className={styles.addSideIcon}
+                        aria-label="Add a side"
+                        title="Add a side"
+                        onClick={(e) => { e.stopPropagation(); handleOpenSidePicker(date) }}
+                      >+</button>
+                    )}
+                  </div>
+                )}
+                {canHaveSides && !hasSides && (
+                  <div className={styles.sideStrip}>
+                    <button
+                      type="button"
+                      className={styles.addSideEmpty}
+                      onClick={(e) => { e.stopPropagation(); handleOpenSidePicker(date) }}
+                    >+ sides</button>
+                  </div>
+                )}
                 {meal.notes && <div className={styles.mealNote}>{meal.notes}</div>}
               </div>
             </div>
@@ -306,7 +362,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                     <div className="sheet-opt-icon">{'\u{1F504}'}</div>
                     <div>
                       <div className="sheet-opt-title">Change meal</div>
-                      <div className="sheet-opt-desc">Replace, swap sides, move to a different day, or clear</div>
+                      <div className="sheet-opt-desc">Replace, move to a different day, or clear</div>
                     </div>
                   </button>
                   {!actionIsFreeform && (
@@ -380,15 +436,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                       <div className="sheet-opt-desc">Pick something else for this day</div>
                     </div>
                   </button>
-                  {!actionIsFreeform && (
-                    <button className="sheet-option" onClick={() => handleOpenSidePicker(actionDate)}>
-                      <div className="sheet-opt-icon">{'\u{1F951}'}</div>
-                      <div>
-                        <div className="sheet-opt-title">{actionHasSide ? 'Different sides' : 'Add sides'}</div>
-                        <div className="sheet-opt-desc">{actionHasSide ? 'Keep the meal, change side dishes' : 'Pick side dishes for this meal'}</div>
-                      </div>
-                    </button>
-                  )}
+                  {/* Side editing now lives on the meal row (chips + "+ sides" button). */}
                   <button className="sheet-option" onClick={() => setActionView('move')}>
                     <div className="sheet-opt-icon">{'\u{1F4C5}'}</div>
                     <div>

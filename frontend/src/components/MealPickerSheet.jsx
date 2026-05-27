@@ -26,6 +26,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
   const [pickedRecipe, setPickedRecipe] = useState(null)
   const [sides, setSides] = useState(null)
   const [sideSearch, setSideSearch] = useState('')
+  const [showSideSearch, setShowSideSearch] = useState(false)
   const [selectedSides, setSelectedSides] = useState([])
 
   useEffect(() => {
@@ -41,7 +42,12 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
   // Load sides when a meal is picked
   useEffect(() => {
     if (pickedRecipe) {
-      api.getSides(date).then(data => setSides(data.sides || [])).catch(() => setSides([]))
+      api.getSides(date).then(d => setSides(d.sides || [])).catch(() => setSides([]))
+    } else {
+      setSides(null)
+      setSideSearch('')
+      setShowSideSearch(false)
+      setSelectedSides([])
     }
   }, [pickedRecipe, date])
 
@@ -54,7 +60,8 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
     })
   }
 
-  const confirmSides = () => {
+  const confirmSelection = () => {
+    if (!pickedRecipe) return
     const sidesPayload = selectedSides.map(s => ({
       side_recipe_id: s.custom ? null : s.id,
       side_name: s.name,
@@ -62,72 +69,12 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
     onSelect(pickedRecipe.id, sidesPayload)
   }
 
-  // Step 2: Side selection (multi-select)
-  if (pickedRecipe) {
-    const query = sideSearch.trim().toLowerCase()
-    const filtered = query && sides
-      ? sides.filter(s => s.name.toLowerCase().includes(query))
-      : sides || []
-
-    const selectedIds = new Set(selectedSides.map(s => s.id))
-
-    return (
-      <Sheet onClose={onClose} className={styles.mealPickerSheet}>
-        <div className="sheet-title">{dayName}</div>
-        <div className="sheet-sub">{pickedRecipe.name} + sides? ({selectedSides.length}/{MAX_SIDES})</div>
-        {!sides ? (
-          <div className="loading">Loading sides...</div>
-        ) : (
-          <>
-            <input
-              className={styles.pickerSearch}
-              type="text"
-              placeholder="Search sides..."
-              value={sideSearch}
-              onChange={(e) => setSideSearch(e.target.value)}
-            />
-            {query && filtered.length === 0 ? (
-              <div className={styles.pickerResults}>
-                <button className={`${styles.pickerOption} ${styles.freeform}`} onClick={() => {
-                  if (selectedSides.length < MAX_SIDES) {
-                    const custom = { id: `custom-${sideSearch.trim()}`, name: sideSearch.trim(), custom: true }
-                    setSelectedSides(prev => [...prev, custom])
-                    setSideSearch('')
-                  }
-                }}>
-                  Add "{sideSearch.trim()}" as a side
-                </button>
-              </div>
-            ) : (
-              <div className={styles.pickerPills}>
-                {filtered.map(s => (
-                  <button
-                    key={s.id}
-                    className={`${styles.mealPill} ${selectedIds.has(s.id) ? styles.selectedSide : ''} ${s.in_use ? styles.inUse : ''}`}
-                    onClick={() => toggleSide(s)}
-                    disabled={!selectedIds.has(s.id) && selectedSides.length >= MAX_SIDES}
-                  >
-                    {s.name}
-                    {selectedIds.has(s.id) && ' \u2713'}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className={styles.pickerSideActions}>
-              <button className="btn primary" onClick={confirmSides}>
-                {selectedSides.length === 0 ? 'Done' : `Done (${selectedSides.length})`}
-              </button>
-            </div>
-            <button className={styles.pickerBack} onClick={() => { setPickedRecipe(null); setSides(null); setSideSearch(''); setSelectedSides([]) }}>
-              {'\u2190'} Back to meals
-            </button>
-          </>
-        )}
-      </Sheet>
-    )
+  const pickMeal = (id, name) => {
+    setPickedRecipe({ id, name })
+    setSearch('')
   }
 
-  // Step 1: Meal selection
+  // ── Error state ──
   if (error) return (
     <Sheet onClose={onClose}>
       <div className="sheet-title">{dayName}</div>
@@ -161,7 +108,6 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
 
   const { candidates, all_recipes } = data
   const query = search.trim().toLowerCase()
-
   const filtered = query
     ? all_recipes.filter(r => r.name.toLowerCase().includes(query))
     : []
@@ -170,20 +116,36 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
   const favorites = history
     ? history.filter(h => h.cook_count >= 2).slice(0, 8)
     : []
-
-  // Recipes the user hasn't cooked yet
   const historyIds = new Set((history || []).map(h => h.recipe_id))
   const otherRecipes = candidates.filter(r => !historyIds.has(r.id)).slice(0, 6)
 
-  const pickMeal = (id, name) => {
-    setPickedRecipe({ id, name })
-    setSearch('')
-  }
+  // ── Side filtering (inline section) ──
+  const sideQuery = sideSearch.trim().toLowerCase()
+  const filteredSides = sideQuery && sides
+    ? sides.filter(s => s.name.toLowerCase().includes(sideQuery))
+    : sides || []
+  const selectedSideIds = new Set(selectedSides.map(s => s.id))
+
+  const renderMealPill = (id, name, opts = {}) => (
+    <button
+      key={id}
+      className={`${styles.mealPill} ${pickedRecipe?.id === id ? styles.selectedSide : ''}`}
+      onClick={() => pickMeal(id, name)}
+      title={opts.title}
+    >
+      {name}
+    </button>
+  )
 
   return (
     <Sheet onClose={onClose} className={styles.mealPickerSheet}>
       <div className="sheet-title">{dayName}</div>
-      <div className="sheet-sub">What are you making?</div>
+      <div className="sheet-sub">
+        {pickedRecipe
+          ? `${pickedRecipe.name}${selectedSides.length > 0 ? ` + ${selectedSides.length} side${selectedSides.length > 1 ? 's' : ''}` : ''}`
+          : "What's for dinner?"}
+      </div>
+
       <input
         className={styles.pickerSearch}
         type="text"
@@ -225,35 +187,22 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
         </div>
       ) : (
         <>
-          {/* Favorites */}
           {favorites.length > 0 && (
             <>
               <div className={styles.pickerSectionLabel}>Your favorites</div>
               <div className={styles.pickerPills} style={{ marginBottom: '16px' }}>
-                {favorites.map(f => (
-                  <button
-                    key={f.recipe_id}
-                    className={styles.mealPill}
-                    onClick={() => pickMeal(f.recipe_id, f.recipe_name)}
-                    title={`Made ${f.cook_count} times, last ${daysAgo(f.last_made)}`}
-                  >
-                    {f.recipe_name}
-                  </button>
-                ))}
+                {favorites.map(f => renderMealPill(f.recipe_id, f.recipe_name, {
+                  title: `Made ${f.cook_count} times, last ${daysAgo(f.last_made)}`,
+                }))}
               </div>
             </>
           )}
 
-          {/* Suggested / Other */}
           <div className={styles.pickerSectionLabel}>
             {favorites.length > 0 ? 'Other recipes' : 'Suggested'}
           </div>
           <div className={styles.pickerPills}>
-            {(favorites.length > 0 ? otherRecipes : candidates.slice(0, 8)).map(r => (
-              <button key={r.id} className={styles.mealPill} onClick={() => pickMeal(r.id, r.name)}>
-                {r.name}
-              </button>
-            ))}
+            {(favorites.length > 0 ? otherRecipes : candidates.slice(0, 8)).map(r => renderMealPill(r.id, r.name))}
             <button
               className={`${styles.mealPill} ${styles.eatingOut}`}
               onClick={() => onFreeform('Eating Out')}
@@ -262,6 +211,77 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
             </button>
           </div>
         </>
+      )}
+
+      {/* Inline sides — appears once a meal is picked */}
+      {pickedRecipe && (
+        <div className={styles.inlineSides}>
+          <div className={styles.inlineSidesHead}>
+            <span className={styles.inlineSidesTitle}>
+              Add sides <span className={styles.inlineSidesCount}>({selectedSides.length}/{MAX_SIDES})</span>
+            </span>
+            <button
+              type="button"
+              className={styles.inlineSidesSearchToggle}
+              onClick={() => setShowSideSearch(v => !v)}
+              aria-label="Search sides"
+              title={showSideSearch ? 'Hide search' : 'Search sides'}
+            >{showSideSearch ? '×' : '\u{1F50D}'}</button>
+          </div>
+
+          {showSideSearch && (
+            <input
+              className={styles.pickerSearch}
+              style={{ marginBottom: 10 }}
+              type="text"
+              placeholder="Search sides..."
+              value={sideSearch}
+              onChange={(e) => setSideSearch(e.target.value)}
+              autoFocus
+            />
+          )}
+
+          {!sides ? (
+            <div className="loading">Loading sides...</div>
+          ) : sideQuery && filteredSides.length === 0 ? (
+            <button
+              className={`${styles.pickerOption} ${styles.freeform}`}
+              onClick={() => {
+                if (selectedSides.length < MAX_SIDES) {
+                  const custom = { id: `custom-${sideSearch.trim()}`, name: sideSearch.trim(), custom: true }
+                  setSelectedSides(prev => [...prev, custom])
+                  setSideSearch('')
+                }
+              }}>
+              Add "{sideSearch.trim()}" as a side
+            </button>
+          ) : (
+            <div className={styles.pickerPills}>
+              {filteredSides.map(s => (
+                <button
+                  key={s.id}
+                  className={`${styles.mealPill} ${selectedSideIds.has(s.id) ? styles.selectedSide : ''} ${s.in_use ? styles.inUse : ''}`}
+                  onClick={() => toggleSide(s)}
+                  disabled={!selectedSideIds.has(s.id) && selectedSides.length >= MAX_SIDES}
+                >
+                  {s.name}
+                  {selectedSideIds.has(s.id) && ' ✓'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Done button — only visible after a meal is picked */}
+      {pickedRecipe && (
+        <div className={styles.pickerSideActions}>
+          <button className="btn primary" onClick={confirmSelection}>
+            {selectedSides.length === 0
+              ? `Done · ${pickedRecipe.name}`
+              : `Done · ${pickedRecipe.name} + ${selectedSides.length} side${selectedSides.length > 1 ? 's' : ''}`}
+          </button>
+        </div>
       )}
     </Sheet>
   )

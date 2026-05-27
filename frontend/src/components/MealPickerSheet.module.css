@@ -86,6 +86,57 @@
   z-index: 2;
 }
 
+/* Inline-sides block (appears under the meal pills once a meal is picked) */
+.inlineSides {
+  margin-top: 18px;
+  padding: 14px;
+  background: var(--warm-white);
+  border: 1px dashed var(--tan);
+  border-radius: 12px;
+}
+
+.inlineSidesHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.inlineSidesTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--brown);
+}
+
+.inlineSidesCount {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.inlineSidesSearchToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-family: inherit;
+  opacity: 0.6;
+  transition: opacity 0.12s, background 0.12s;
+}
+
+.inlineSidesSearchToggle:hover {
+  opacity: 1;
+  background: white;
+}
+
 .pickerBack {
   display: block;
   margin: 16px auto 0;
