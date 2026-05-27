@@ -320,7 +320,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
                       <input
                         className={styles.customInline}
                         type="text"
-                        placeholder="Side name…"
+                        placeholder="Search or add a side…"
                         value={sideSearch}
                         autoFocus
                         onChange={(e) => setSideSearch(e.target.value)}
@@ -358,7 +358,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
                 ) : selectedSides.length < MAX_SIDES ? (
                   <button className={styles.sideRow} onClick={() => setAddingCustom(true)}>
                     <span className={`${styles.tick} ${styles.tickDashed}`}>+</span>
-                    <span className={styles.somethingElseLabel}>Add a new side…</span>
+                    <span className={styles.somethingElseLabel}>Search or add a new side</span>
                   </button>
                 ) : null}
               </div>

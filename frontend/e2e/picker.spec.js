@@ -76,8 +76,8 @@ test.describe("Meal picker (redesign)", () => {
     await search.press("Enter");
 
     // Open the custom-side input, type a side, commit with Enter.
-    await sheet.getByText(/Something else/).click();
-    const sideInput = sheet.getByPlaceholder(/Side name/);
+    await sheet.getByText(/add a new side/i).click();
+    const sideInput = sheet.getByPlaceholder(/add a side/i);
     await sideInput.fill("Garlic Bread");
     await sideInput.press("Enter");
 
