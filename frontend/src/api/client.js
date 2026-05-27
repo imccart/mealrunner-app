@@ -71,6 +71,8 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ recipe_id: recipeId, sides }),
   }),
+  surprisePick: (date, cuisine, excludeIds) =>
+    request(`/meals/${date}/surprise?cuisine=${encodeURIComponent(cuisine || 'all')}&exclude=${(excludeIds || []).join(',')}`),
   suggestMeals: () => request('/meals/suggest', { method: 'POST' }),
   freshStart: () => request('/meals/fresh-start', { method: 'POST' }),
   allToGrocery: () => request('/meals/all-to-grocery', { method: 'POST' }),

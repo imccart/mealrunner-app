@@ -701,30 +701,86 @@ def set_freeform_meal(conn: DictConnection, user_id: str, slot_date: str, name: 
 
 
 def get_candidates(conn: DictConnection, user_id: str, slot_date: str) -> list:
-    """Return valid recipe candidates for a date, with last-made context."""
+    """Return valid recipe candidates for a date, with last-made context.
+
+    The manual picker shows the full library minus what's already used this
+    week or cooked in the last two weeks. Cuisine/effort narrowing is opt-in
+    by the user via filter chips (applied client-side), not a silent day-theme
+    filter. Day themes still drive auto-generation elsewhere.
+    """
     s, e = week_range(slot_date)
     week_meals = load_meals(conn, user_id, s, e)
 
     used_ids = {m.recipe_id for m in week_meals if m.recipe_id and m.slot_date != slot_date}
     used_ids |= _get_recent_recipe_ids(conn, user_id, s)
 
-    weekday = date.fromisoformat(slot_date).weekday()
-    theme = DAY_THEMES.get(weekday, {}) or {}
-
-    cuisine = theme.get("cuisine")
-    exclude_cuisines = None if cuisine else RESERVED_CUISINES
-
-    candidates = filter_recipes(
-        conn, cuisine=cuisine, effort=theme.get("effort"),
-        outdoor=theme.get("outdoor"), kid_friendly=theme.get("kid_friendly"),
-        exclude_ids=used_ids, exclude_cuisines=exclude_cuisines,
-        user_id=user_id,
-    )
-    if not candidates:
-        candidates = filter_recipes(conn, exclude_ids=used_ids, exclude_cuisines=exclude_cuisines, user_id=user_id)
-
+    candidates = filter_recipes(conn, exclude_ids=used_ids, user_id=user_id)
     candidates = [r for r in candidates if r.name not in FOLLOWUP_ONLY]
     return candidates
+
+
+def _most_paired_side(conn: DictConnection, user_id: str, recipe_id: int) -> dict | None:
+    """The side most often served with a given meal in this user's history.
+    Falls back to the user's most-used side overall when there's no pairing."""
+    row = conn.execute(
+        text("""SELECT ms.side_recipe_id, ms.side_name, COUNT(*) AS c
+                FROM meal_sides ms JOIN meals m ON m.id = ms.meal_id
+                WHERE m.user_id = :u AND m.recipe_id = :rid
+                  AND ms.side_recipe_id IS NOT NULL
+                GROUP BY ms.side_recipe_id, ms.side_name
+                ORDER BY c DESC LIMIT 1"""),
+        {"u": user_id, "rid": recipe_id},
+    ).fetchone()
+    if not row:
+        row = conn.execute(
+            text("""SELECT ms.side_recipe_id, ms.side_name, COUNT(*) AS c
+                    FROM meal_sides ms JOIN meals m ON m.id = ms.meal_id
+                    WHERE m.user_id = :u AND ms.side_recipe_id IS NOT NULL
+                    GROUP BY ms.side_recipe_id, ms.side_name
+                    ORDER BY c DESC LIMIT 1"""),
+            {"u": user_id},
+        ).fetchone()
+    if not row:
+        return None
+    return {"side_recipe_id": row["side_recipe_id"], "side_name": row["side_name"]}
+
+
+def surprise_pick(conn: DictConnection, user_id: str, slot_date: str,
+                  cuisine: str | None = None, exclude_ids: set[int] | None = None) -> dict | None:
+    """One smart suggestion: a meal not cooked in the last 14 days (optionally
+    within a cuisine, or quick/easy), weighted slightly toward familiar
+    favorites, paired with its most-frequent side. Returns recipe fields plus
+    last_made/cook_count and a suggested side, or None if nothing eligible."""
+    exclude_ids = set(exclude_ids or [])
+    effort = None
+    if cuisine == "quick":
+        effort, cuisine = "easy", None
+
+    recent = _get_recent_recipe_ids(conn, user_id, slot_date)
+    pool = [r for r in filter_recipes(conn, cuisine=cuisine, effort=effort, user_id=user_id)
+            if r.name not in FOLLOWUP_ONLY and r.id not in recent and r.id not in exclude_ids]
+    if not pool:
+        # Re-rolled through everything (or filter too tight): relax exclusions,
+        # keeping only the cuisine/effort intent.
+        pool = [r for r in filter_recipes(conn, cuisine=cuisine, effort=effort, user_id=user_id)
+                if r.name not in FOLLOWUP_ONLY]
+    if not pool:
+        return None
+
+    counts = {r["recipe_id"]: r["c"] for r in conn.execute(
+        text("""SELECT recipe_id, COUNT(*) AS c FROM meals
+                WHERE user_id = :u AND recipe_id IS NOT NULL GROUP BY recipe_id"""),
+        {"u": user_id},
+    ).fetchall()}
+    weights = [1 + counts.get(r.id, 0) for r in pool]
+    meal = random.choices(pool, weights=weights, k=1)[0]
+
+    last_made = get_last_made(conn, user_id, meal.id)
+    return {
+        "meal": {"id": meal.id, "name": meal.name, "cuisine": meal.cuisine,
+                 "cook_count": counts.get(meal.id, 0), "last_made": last_made},
+        "side": _most_paired_side(conn, user_id, meal.id),
+    }
 
 
 def toggle_grocery(conn: DictConnection, user_id: str, slot_date: str) -> Meal | None:

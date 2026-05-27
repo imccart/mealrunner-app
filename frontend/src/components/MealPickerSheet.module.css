@@ -91,52 +91,264 @@
   width: 100%;
 }
 
-/* Sides — same pill language as the meal step, no surrounding chrome. */
-.sidesSection {
-  margin-top: 18px;
+/* ════ Redesigned picker (empty + picked states) ════ */
+
+.pickerBody { animation: pickerFade 0.18s ease-out; }
+@keyframes pickerFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Leading check on a selected pill — reserves its own space so toggling
-   selection doesn't reflow the pill row. */
-.pillCheck {
-  margin-right: 5px;
-  font-size: 11px;
+/* Search row with dice button */
+.searchRow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 12px;
 }
+.searchRow .pickerSearch { margin-bottom: 0; flex: 1; }
 
-/* "+ your own" — dashed pill matching the "+ sides" chip on the plan row. */
-.addOwnPill {
+.diceBtn {
+  flex-shrink: 0;
+  width: 40px;
+  border: 1px solid var(--tan);
+  border-radius: 8px;
+  background: var(--warm-white);
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  padding: 4px;
+  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.diceBtn:hover { border-color: var(--accent-light); background: var(--accent-bg); }
+.diceBtn:active { transform: rotate(-12deg) scale(0.94); }
+.diceBtn:disabled { opacity: 0.6; }
+.dieGlyph { width: 26px; height: 26px; object-fit: contain; display: block; }
+
+/* Surprise-me banner */
+.surpriseBanner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-light);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  animation: pickerFade 0.18s ease-out;
+}
+.bannerContent { min-width: 0; }
+.bannerMeal {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--dark);
+  line-height: 1.2;
+}
+.bannerSide { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.bannerSide strong { color: var(--brown); font-weight: 600; }
+.bannerActions { display: flex; gap: 6px; flex-shrink: 0; }
+.bannerReroll, .bannerAccept {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 14px; line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+.bannerReroll { background: white; border: 1px solid var(--accent-light); color: var(--accent); }
+.bannerReroll:disabled { opacity: 0.5; }
+.bannerAccept { background: var(--accent); border: 1px solid var(--accent); color: white; }
+.bannerDismiss {
+  position: absolute;
+  top: 2px; right: 4px;
+  background: none; border: none;
+  color: var(--text-light);
+  font-size: 14px; line-height: 1;
+  cursor: pointer; padding: 2px 4px;
+}
+
+/* Cuisine filter chips */
+.cuisineRow {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 14px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.cuisineRow::-webkit-scrollbar { display: none; }
+.cuisineChip {
+  flex-shrink: 0;
+  border: 1px solid var(--tan);
   border-radius: 20px;
-  padding: 7px 14px;
-  font-size: 13px;
+  padding: 5px 12px;
+  font-size: 12px;
   font-family: 'DM Sans', sans-serif;
-  background: transparent;
-  border: 1px dashed var(--accent);
+  color: var(--brown);
+  background: white;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.12s;
+}
+.cuisineChipOn { background: var(--dark); border-color: var(--dark); color: var(--cream); }
+
+/* Section labels (italic Playfair) */
+.sectionLabel {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--brown);
+  margin: 4px 0 6px;
+}
+
+/* Scrolling meal lists with bottom fade */
+.scrollList {
+  max-height: 46vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.scrollListShort {
+  max-height: 160px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 16px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+}
+
+.kitchenRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 2px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px solid #F0E9DE;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.1s;
+}
+.kitchenRow:active { background: var(--accent-bg); }
+.kitchenName { font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--dark); }
+.kitchenHint { font-size: 11px; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
+.createNew { color: var(--accent); font-weight: 500; }
+.emptyHint { font-size: 13px; color: var(--text-muted); padding: 8px 2px; }
+
+/* Chef's night off */
+.chefsNight {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 8px;
+  padding: 12px 2px 4px;
+  border: none;
+  border-top: 1px solid var(--tan);
+  background: none;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 14px;
   color: var(--accent);
   cursor: pointer;
-  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.addOwnPill:hover {
-  background: var(--accent-bg);
-}
-
-.customSideInput {
-  border: 1px solid var(--accent);
-  border-radius: 20px;
-  padding: 7px 14px;
+/* ── Picked state ── */
+.backLink {
+  display: block;
+  margin-bottom: 10px;
+  background: none; border: none;
+  color: var(--text-muted);
   font-size: 13px;
-  font-family: 'DM Sans', sans-serif;
-  background: white;
+  cursor: pointer;
+  padding: 0;
+}
+.pickedMeal {
+  text-align: center;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 18px;
   color: var(--dark);
-  outline: none;
-  width: 130px;
+}
+.withLabel {
+  text-align: center;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--brown);
+  margin: 4px 0 12px;
 }
 
-.customSideInput::placeholder {
-  color: var(--text-light);
+/* Sides as a vertical checklist */
+.sideList { display: flex; flex-direction: column; }
+.sideRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 2px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px solid #F0E9DE;
+  -webkit-tap-highlight-color: transparent;
 }
+.sideRowInput { cursor: text; }
+.tick {
+  flex-shrink: 0;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--tan);
+  background: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: white;
+  line-height: 1;
+}
+.tickOn { background: var(--accent); border-color: var(--accent); }
+.tickDashed { border-style: dashed; border-color: var(--accent); color: var(--accent); }
+.sideName { font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--dark); }
+.sideNameOn { font-weight: 500; }
+.somethingElseLabel {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--accent);
+}
+.customInline {
+  flex: 1;
+  border: none;
+  border-bottom: 1px solid var(--accent);
+  background: none;
+  outline: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  color: var(--dark);
+  padding: 2px 0;
+}
+.suggestPrefix { font-size: 11px; color: var(--text-muted); margin-right: 2px; }
+
+.doneRow {
+  position: sticky;
+  bottom: 0;
+  margin-top: 18px;
+  padding: 10px 0 calc(8px + env(safe-area-inset-bottom));
+  background: white;
+  z-index: 2;
+}
+.doneRow :global(.btn) { width: 100%; }
 
 .pickerBack {
   display: block;

@@ -397,6 +397,23 @@ async def get_candidates(date: str, request: Request):
     }
 
 
+@router.get("/meals/{date}/surprise")
+async def surprise_meal(date: str, request: Request):
+    """One smart meal suggestion (+ most-paired side) for the surprise-me banner.
+    Query params: cuisine (italian/mexican/asian/american/quick), exclude
+    (comma-separated recipe ids already shown this banner session)."""
+    from mealrunner.planner import surprise_pick
+
+    user_id = request.state.user_id
+    conn = _conn()
+    cuisine = request.query_params.get("cuisine") or None
+    if cuisine == "all":
+        cuisine = None
+    exclude = request.query_params.get("exclude", "")
+    exclude_ids = {int(x) for x in exclude.split(",") if x.strip().isdigit()}
+    return surprise_pick(conn, user_id, date, cuisine=cuisine, exclude_ids=exclude_ids) or {"meal": None}
+
+
 # ── Grocery (trip-based) ──────────────────────────────────
 
 
