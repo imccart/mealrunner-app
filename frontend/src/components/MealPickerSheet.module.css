@@ -91,55 +91,51 @@
   width: 100%;
 }
 
-/* Inline-sides block (appears under the meal pills once a meal is picked) */
-.inlineSides {
+/* Sides — same pill language as the meal step, no surrounding chrome. */
+.sidesSection {
   margin-top: 18px;
-  padding: 14px;
-  background: var(--warm-white);
-  border: 1px dashed var(--tan);
-  border-radius: 12px;
 }
 
-.inlineSidesHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
+/* Leading check on a selected pill — reserves its own space so toggling
+   selection doesn't reflow the pill row. */
+.pillCheck {
+  margin-right: 5px;
+  font-size: 11px;
 }
 
-.inlineSidesTitle {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--brown);
-}
-
-.inlineSidesCount {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 400;
-  margin-left: 4px;
-}
-
-.inlineSidesSearchToggle {
+/* "+ your own" — dashed pill matching the "+ sides" chip on the plan row. */
+.addOwnPill {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
+  border-radius: 20px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-family: 'DM Sans', sans-serif;
   background: transparent;
-  border-radius: 999px;
+  border: 1px dashed var(--accent);
+  color: var(--accent);
   cursor: pointer;
-  color: var(--text-muted);
-  font-size: 14px;
-  font-family: inherit;
-  opacity: 0.6;
-  transition: opacity 0.12s, background 0.12s;
+  transition: background 0.15s;
 }
 
-.inlineSidesSearchToggle:hover {
-  opacity: 1;
+.addOwnPill:hover {
+  background: var(--accent-bg);
+}
+
+.customSideInput {
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-family: 'DM Sans', sans-serif;
   background: white;
+  color: var(--dark);
+  outline: none;
+  width: 130px;
+}
+
+.customSideInput::placeholder {
+  color: var(--text-light);
 }
 
 .pickerBack {

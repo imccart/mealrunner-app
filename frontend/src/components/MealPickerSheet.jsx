@@ -26,7 +26,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
   const [pickedRecipe, setPickedRecipe] = useState(null)
   const [sides, setSides] = useState(null)
   const [sideSearch, setSideSearch] = useState('')
-  const [showSideSearch, setShowSideSearch] = useState(false)
+  const [addingCustom, setAddingCustom] = useState(false)
   const [selectedSides, setSelectedSides] = useState([])
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
     } else {
       setSides(null)
       setSideSearch('')
-      setShowSideSearch(false)
+      setAddingCustom(false)
       setSelectedSides([])
     }
   }, [pickedRecipe, date])
@@ -119,11 +119,10 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
   const historyIds = new Set((history || []).map(h => h.recipe_id))
   const otherRecipes = candidates.filter(r => !historyIds.has(r.id)).slice(0, 6)
 
-  // ── Side filtering (inline section) ──
-  const sideQuery = sideSearch.trim().toLowerCase()
-  const filteredSides = sideQuery && sides
-    ? sides.filter(s => s.name.toLowerCase().includes(sideQuery))
-    : sides || []
+  // Side options = the user's side library plus any custom sides typed in
+  // this session, so a just-added side shows as a selected pill too.
+  const customSelected = selectedSides.filter(s => s.custom)
+  const sideOptions = sides ? [...sides, ...customSelected] : []
   const selectedSideIds = new Set(selectedSides.map(s => s.id))
 
   const renderMealPill = (id, name, opts = {}) => (
@@ -225,61 +224,53 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
         </>
       )}
 
-      {/* Inline sides — appears once a meal is picked */}
+      {/* Sides — same pill language as the meal step, no chrome. */}
       {pickedRecipe && (
-        <div className={styles.inlineSides}>
-          <div className={styles.inlineSidesHead}>
-            <span className={styles.inlineSidesTitle}>
-              Add sides <span className={styles.inlineSidesCount}>({selectedSides.length}/{MAX_SIDES})</span>
-            </span>
-            <button
-              type="button"
-              className={styles.inlineSidesSearchToggle}
-              onClick={() => setShowSideSearch(v => !v)}
-              aria-label="Search sides"
-              title={showSideSearch ? 'Hide search' : 'Search sides'}
-            >{showSideSearch ? '×' : '\u{1F50D}'}</button>
-          </div>
-
-          {showSideSearch && (
-            <input
-              className={styles.pickerSearch}
-              style={{ marginBottom: 10 }}
-              type="text"
-              placeholder="Search sides..."
-              value={sideSearch}
-              onChange={(e) => setSideSearch(e.target.value)}
-              autoFocus
-            />
-          )}
-
+        <div className={styles.sidesSection}>
+          <div className={styles.pickerSectionLabel}>Add a side</div>
           {!sides ? (
             <div className="loading">Loading sides...</div>
-          ) : sideQuery && filteredSides.length === 0 ? (
-            <button
-              className={`${styles.pickerOption} ${styles.freeform}`}
-              onClick={() => {
-                if (selectedSides.length < MAX_SIDES) {
-                  const custom = { id: `custom-${sideSearch.trim()}`, name: sideSearch.trim(), custom: true }
-                  setSelectedSides(prev => [...prev, custom])
-                  setSideSearch('')
-                }
-              }}>
-              Add "{sideSearch.trim()}" as a side
-            </button>
           ) : (
             <div className={styles.pickerPills}>
-              {filteredSides.map(s => (
+              {sideOptions.map(s => (
                 <button
                   key={s.id}
-                  className={`${styles.mealPill} ${selectedSideIds.has(s.id) ? styles.selectedSide : ''} ${s.in_use ? styles.inUse : ''}`}
+                  className={`${styles.mealPill} ${selectedSideIds.has(s.id) ? styles.selectedSide : ''}`}
                   onClick={() => toggleSide(s)}
                   disabled={!selectedSideIds.has(s.id) && selectedSides.length >= MAX_SIDES}
                 >
+                  {selectedSideIds.has(s.id) && <span className={styles.pillCheck}>✓</span>}
                   {s.name}
-                  {selectedSideIds.has(s.id) && ' ✓'}
                 </button>
               ))}
+              {addingCustom ? (
+                <input
+                  className={styles.customSideInput}
+                  type="text"
+                  placeholder="Side name…"
+                  value={sideSearch}
+                  autoFocus
+                  onChange={(e) => setSideSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && sideSearch.trim() && selectedSides.length < MAX_SIDES) {
+                      const custom = { id: `custom-${sideSearch.trim()}`, name: sideSearch.trim(), custom: true }
+                      setSelectedSides(prev => [...prev, custom])
+                      setSideSearch('')
+                      setAddingCustom(false)
+                    } else if (e.key === 'Escape') {
+                      setSideSearch('')
+                      setAddingCustom(false)
+                    }
+                  }}
+                  onBlur={() => { setSideSearch(''); setAddingCustom(false) }}
+                />
+              ) : selectedSides.length < MAX_SIDES ? (
+                <button
+                  type="button"
+                  className={styles.addOwnPill}
+                  onClick={() => setAddingCustom(true)}
+                >+ your own</button>
+              ) : null}
             </div>
           )}
         </div>
