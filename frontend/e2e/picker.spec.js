@@ -30,7 +30,7 @@ test.describe("Meal picker (redesign)", () => {
     await expect(
       sheet.getByRole("button", { name: "Surprise me" }),
     ).toBeVisible();
-    await expect(sheet.getByPlaceholder(/Search or type/)).toBeVisible();
+    await expect(sheet.getByPlaceholder(/Search or add/)).toBeVisible();
 
     // Cuisine chips render; "All" starts selected, clicking another moves it.
     const all = sheet.getByRole("button", { name: "All", exact: true });
@@ -50,7 +50,7 @@ test.describe("Meal picker (redesign)", () => {
     const sheet = await openPickerOnFirstEmptyDay(authedPage);
 
     // Type + Enter picks the first match and enters the picked state.
-    const search = sheet.getByPlaceholder(/Search or type/);
+    const search = sheet.getByPlaceholder(/Search or add/);
     await search.fill(libMeal.name);
     await search.press("Enter");
 
@@ -71,7 +71,7 @@ test.describe("Meal picker (redesign)", () => {
     await seedLibraryMeal(authedPage, libMeal);
 
     const sheet = await openPickerOnFirstEmptyDay(authedPage);
-    const search = sheet.getByPlaceholder(/Search or type/);
+    const search = sheet.getByPlaceholder(/Search or add/);
     await search.fill(libMeal.name);
     await search.press("Enter");
 

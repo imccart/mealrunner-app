@@ -34,7 +34,7 @@ test.describe("App basics", () => {
     await firstAddRow.click();
 
     // Meal picker opens — type the name and press Enter to pick the first match
-    const search = authedPage.locator('input[placeholder*="Search or type"]');
+    const search = authedPage.locator('input[placeholder*="Search or add"]');
     await expect(search).toBeVisible();
     await search.fill(libMeal.name);
     await search.press("Enter");

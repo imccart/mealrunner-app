@@ -123,7 +123,7 @@ export default function SidePickerSheet({ date, mealName, onSelect, onClose }) {
         ) : selectedSides.length < MAX_SIDES ? (
           <button className={styles.sideRow} onClick={() => setAddingCustom(true)}>
             <span className={`${styles.tick} ${styles.tickDashed}`}>+</span>
-            <span className={styles.somethingElseLabel}>Something else…</span>
+            <span className={styles.somethingElseLabel}>Add a new side…</span>
           </button>
         ) : null}
       </div>
