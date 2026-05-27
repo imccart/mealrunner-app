@@ -9,9 +9,10 @@ jobs:
   e2e:
     name: Playwright against staging
     runs-on: ubuntu-latest
-    # Advisory-only — failures show up here but don't block merges.
-    # Flip to blocking later by making it a required status check.
-    continue-on-error: true
+    # A failed test turns this run RED so regressions are visible. This is NOT
+    # a required status check, so a red here does not block pushes or deploys —
+    # it surfaces the failure and we decide what to do. To make it actually
+    # block, add it as a required status check in branch protection.
     timeout-minutes: 20
     defaults:
       run:
