@@ -444,16 +444,16 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                       <div className="sheet-opt-desc">Swap with another day on the plan</div>
                     </div>
                   </button>
-                  <div className="sheet-divider" />
-                  <button className={styles.chefsNightOption} onClick={() => handleFreeform(actionDate, "Chef's Night Off")}>
-                    Chef's night off {'→'}
-                  </button>
                   <button className="sheet-option sheet-option-destructive" onClick={() => handleClearDay(actionDate)}>
                     <div className="sheet-opt-icon">{'\u{1F5D1}'}</div>
                     <div>
                       <div className="sheet-opt-title">Clear this day</div>
                       <div className="sheet-opt-desc">Empty the slot — meal goes away</div>
                     </div>
+                  </button>
+                  <div className="sheet-divider" />
+                  <button className={styles.chefsNightOption} onClick={() => handleFreeform(actionDate, "Chef's Night Off")}>
+                    Chef's night off {'→'}
                   </button>
                 </div>
               </>
