@@ -20,7 +20,7 @@ function _getWeekLabel(dateStr) {
 
 const CUISINE_OPTS = [
   ['italian', 'Italian'], ['mexican', 'Mexican'], ['asian', 'Asian'],
-  ['american', 'American'], ['', 'Other'],
+  ['american', 'American'], ['other', 'Other'],
 ]
 
 export default function MyKitchenSheet({ onClose }) {
@@ -256,7 +256,7 @@ export default function MyKitchenSheet({ onClose }) {
             <div className={ls.sectionHint} style={{ marginBottom: 6 }}>Cuisine</div>
             <div className={styles.cuisineEditRow}>
               {CUISINE_OPTS.map(([val, label]) => {
-                const sel = ['italian', 'mexican', 'asian', 'american'].includes(cuisineVal) ? cuisineVal : ''
+                const sel = ['italian', 'mexican', 'asian', 'american'].includes(cuisineVal) ? cuisineVal : 'other'
                 return (
                   <button
                     key={val || 'other'}

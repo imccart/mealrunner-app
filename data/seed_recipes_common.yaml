@@ -266,7 +266,7 @@ recipes:
 
   - name: Salmon
     recipe_type: meal
-    cuisine: any
+    cuisine: other
     effort: easy
     cleanup: easy
     kid_friendly: true
@@ -326,7 +326,7 @@ recipes:
 
   - name: Beef Stew
     recipe_type: meal
-    cuisine: comfort
+    cuisine: american
     effort: medium
     cleanup: medium
     kid_friendly: true
@@ -350,7 +350,7 @@ recipes:
 
   - name: Chicken Soup
     recipe_type: meal
-    cuisine: comfort
+    cuisine: american
     effort: medium
     cleanup: easy
     kid_friendly: true
@@ -517,7 +517,7 @@ recipes:
 
   - name: Chili
     recipe_type: meal
-    cuisine: comfort
+    cuisine: american
     effort: medium
     cleanup: easy
     kid_friendly: true

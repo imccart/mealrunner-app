@@ -89,6 +89,10 @@ def init_db(conn: DictConnection) -> None:
     _migrate_consolidate_staples(conn)
     print("[db] consolidate-staples migration done", flush=True)
 
+    print("[db] Running cuisine-category migration...", flush=True)
+    _migrate_cuisine_categories(conn)
+    print("[db] cuisine-category migration done", flush=True)
+
     print("[db] init_db complete", flush=True)
 
 
@@ -148,6 +152,21 @@ _TIMESTAMP_COLUMNS = [
     ("users", "tos_accepted_at"),
     ("waitlist", "requested_at"),
 ]
+
+
+def _migrate_cuisine_categories(conn: DictConnection) -> None:
+    """Collapse legacy cuisine values to the canonical category set
+    (italian/mexican/asian/american/other). 'comfort' food -> american;
+    'any'/blank/unknown -> other. Idempotent; runs every startup."""
+    try:
+        conn.execute(text("UPDATE recipes SET cuisine = 'american' WHERE cuisine = 'comfort'"))
+        conn.execute(text(
+            "UPDATE recipes SET cuisine = 'other' WHERE cuisine IS NULL "
+            "OR cuisine NOT IN ('italian', 'mexican', 'asian', 'american', 'other')"
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"[db] cuisine-category migration skipped: {e}", flush=True)
 
 
 def _migrate_text_to_timestamptz(conn: DictConnection) -> None:
@@ -1487,7 +1506,7 @@ def _seed_recipes(conn: DictConnection, path: Path, user_id: str | None = None) 
     for rec in data.get("recipes", []):
         params = {
             "name": rec["name"],
-            "cuisine": rec.get("cuisine", "any"),
+            "cuisine": rec.get("cuisine", "other"),
             "effort": rec.get("effort", "medium"),
             "cleanup": rec.get("cleanup", "medium"),
             "outdoor": int(rec.get("outdoor", False)),

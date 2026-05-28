@@ -3572,7 +3572,7 @@ async def add_recipe(body: dict, request: Request):
     cursor = conn.execute(
         text("""INSERT INTO recipes (name, cuisine, effort, cleanup, outdoor, kid_friendly, premade,
            prep_minutes, cook_minutes, servings, user_id, recipe_type)
-           VALUES (:name, '', :effort, :cleanup, 0, 1, 0, 0, 0, 4, :user_id, :rtype)
+           VALUES (:name, 'other', :effort, :cleanup, 0, 1, 0, 0, 0, 4, :user_id, :rtype)
            RETURNING id"""),
         {"name": name, "user_id": user_id, "rtype": recipe_type, **defaults},
     )
@@ -3587,7 +3587,7 @@ async def add_recipe(body: dict, request: Request):
     return {"ok": True, "id": recipe_id}
 
 
-VALID_CUISINES = {"italian", "mexican", "asian", "american", "comfort", "any", ""}
+VALID_CUISINES = {"italian", "mexican", "asian", "american", "other"}
 
 
 @router.post("/recipes/{recipe_id}/cuisine")

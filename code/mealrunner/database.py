@@ -114,7 +114,7 @@ recipes = Table(
     "recipes", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("name", Text, nullable=False),
-    Column("cuisine", Text, nullable=False, server_default=text("'any'")),
+    Column("cuisine", Text, nullable=False, server_default=text("'other'")),
     Column("effort", Text, nullable=False, server_default=text("'medium'")),
     Column("cleanup", Text, nullable=False, server_default=text("'medium'")),
     Column("outdoor", Integer, nullable=False, server_default=text("0")),

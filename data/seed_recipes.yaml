@@ -83,7 +83,7 @@ recipes:
         unit: tsp
 
   - name: Chicken and Dumplings
-    cuisine: comfort
+    cuisine: american
     effort: medium
     cleanup: medium
     prep_minutes: 20
@@ -479,7 +479,7 @@ recipes:
         unit: tsp
 
   - name: Chili
-    cuisine: comfort
+    cuisine: american
     effort: medium
     cleanup: easy
     prep_minutes: 15
@@ -816,7 +816,7 @@ recipes:
         unit: tsp
 
   - name: Beans, Rice, and Sausage
-    cuisine: comfort
+    cuisine: american
     effort: easy
     cleanup: easy
     prep_minutes: 10
@@ -856,7 +856,7 @@ recipes:
   # EASY / COMFORT
   # =====================
   - name: Mac and Cheese Plate
-    cuisine: comfort
+    cuisine: american
     effort: easy
     cleanup: easy
     prep_minutes: 10
@@ -922,7 +922,7 @@ recipes:
         unit: count
 
   - name: Breakfast for Dinner
-    cuisine: comfort
+    cuisine: american
     effort: easy
     cleanup: medium
     prep_minutes: 10
@@ -964,7 +964,7 @@ recipes:
         unit: cup
 
   - name: Grilled Cheese with Soup
-    cuisine: comfort
+    cuisine: american
     effort: easy
     cleanup: easy
     prep_minutes: 5
@@ -988,7 +988,7 @@ recipes:
         component: side
 
   - name: Loaded Baked Potatoes
-    cuisine: comfort
+    cuisine: american
     effort: easy
     cleanup: easy
     prep_minutes: 10
