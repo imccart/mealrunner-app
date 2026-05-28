@@ -104,26 +104,23 @@
 }
 
 /* Cuisine filter chips */
-.cuisineRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 14px;
+.cuisineFilter {
+  margin-bottom: 12px;
 }
-.cuisineChip {
-  flex-shrink: 0;
+.cuisineSelect {
+  min-width: 150px;
+  max-width: 100%;
   border: 1px solid var(--tan);
-  border-radius: 20px;
-  padding: 5px 12px;
-  font-size: 12px;
+  border-radius: 8px;
+  padding: 7px 12px;
   font-family: 'DM Sans', sans-serif;
-  color: var(--brown);
-  background: white;
+  font-size: 13px;
+  color: var(--dark);
+  background: var(--warm-white);
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: all 0.12s;
+  outline: none;
 }
-.cuisineChipOn { background: var(--dark); border-color: var(--dark); color: var(--cream); }
+.cuisineSelect:focus { border-color: var(--accent); background: white; }
 
 /* Section labels (italic Playfair) */
 .sectionLabel {
@@ -142,13 +139,13 @@
   padding-right: 10px;
 }
 .scrollListShort {
-  max-height: 160px;
+  max-height: 120px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding-right: 10px;
-  margin-bottom: 16px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+  margin-bottom: 14px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 82%, transparent 100%);
 }
 
 .kitchenRow {

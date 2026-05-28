@@ -22,7 +22,7 @@ test.describe("Meal picker (redesign)", () => {
     return sheet;
   }
 
-  test("empty state shows search, surprise dice, and cuisine chips", async ({
+  test("empty state shows search, surprise dice, and cuisine filter", async ({
     authedPage,
   }) => {
     const sheet = await openPickerOnFirstEmptyDay(authedPage);
@@ -32,13 +32,11 @@ test.describe("Meal picker (redesign)", () => {
     ).toBeVisible();
     await expect(sheet.getByPlaceholder(/Search or add/)).toBeVisible();
 
-    // Cuisine chips render; "All" starts selected, clicking another moves it.
-    const all = sheet.getByRole("button", { name: "All", exact: true });
-    const italian = sheet.getByRole("button", { name: "Italian", exact: true });
-    await expect(all).toHaveClass(/cuisineChipOn/);
-    await italian.click();
-    await expect(italian).toHaveClass(/cuisineChipOn/);
-    await expect(all).not.toHaveClass(/cuisineChipOn/);
+    // Cuisine filter is a dropdown; defaults to "all" and is selectable.
+    const cuisine = sheet.getByRole("combobox");
+    await expect(cuisine).toHaveValue("all");
+    await cuisine.selectOption("italian");
+    await expect(cuisine).toHaveValue("italian");
   });
 
   test("pick a meal → Done with no sides → lands on Plan", async ({

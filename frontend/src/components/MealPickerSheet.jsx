@@ -253,14 +253,17 @@ export default function MealPickerSheet({ date, dayName, onSelect, onFreeform, o
               </div>
             ) : (
               <>
-                <div className={styles.cuisineRow}>
-                  {CUISINES.map(([val, label]) => (
-                    <button
-                      key={val}
-                      className={`${styles.cuisineChip} ${cuisine === val ? styles.cuisineChipOn : ''}`}
-                      onClick={() => setCuisine(val)}
-                    >{label}</button>
-                  ))}
+                <div className={styles.cuisineFilter}>
+                  <select
+                    className={styles.cuisineSelect}
+                    value={cuisine}
+                    onChange={(e) => setCuisine(e.target.value)}
+                    aria-label="Filter by cuisine"
+                  >
+                    {CUISINES.map(([val, label]) => (
+                      <option key={val} value={val}>{val === 'all' ? 'All cuisines' : label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {favorites.length > 0 && (
