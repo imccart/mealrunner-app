@@ -466,13 +466,12 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                 <div className="sheet-sub">From {actionDayName} to...</div>
                 <div className="sheet-options">
                   {days.filter(d => d.date !== actionDate).map(d => {
-                    const targetDayName = new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })
+                    const targetDayName = new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
                     const targetMealLabel = d.meal
                       ? d.meal.recipe_name + (d.meal.sides?.length ? ` + ${d.meal.sides.map(s => s.name).join(', ')}` : '')
                       : 'Empty'
                     return (
                       <button key={d.date} className="sheet-option" onClick={() => handleMoveTo(d.date)}>
-                        <div className="sheet-opt-icon">{d.day_short}</div>
                         <div>
                           <div className="sheet-opt-title">{targetDayName}</div>
                           <div className="sheet-opt-desc">{targetMealLabel}</div>
