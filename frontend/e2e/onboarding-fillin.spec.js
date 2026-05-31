@@ -67,14 +67,12 @@ test.describe("Onboarding fill-in path", () => {
       await page.getByRole("button", { name: /^Next$/ }).click();
 
       // ── Step 2: staples ──
-      // The staples step is opt-OUT: every pantry staple is pre-checked on
-      // load, so firstStaple is already selected. We just proceed — clicking
-      // it here would DESELECT it (the row handler toggles), which is the bug
-      // the old version of this test had. The keep_on_hand assertion below
-      // verifies the pre-selected staple persists through completion.
+      // The staples step is opt-IN: nothing pre-checked. Click firstStaple
+      // so it persists as a keep_on_hand row for the assertion below.
       await expect(
         page.getByText(/already in your kitchen/),
       ).toBeVisible({ timeout: 10_000 });
+      await page.getByText(firstStaple.name, { exact: true }).first().click();
       await page.getByRole("button", { name: /^Next$/ }).click();
 
       // ── Step 3: pick a regular ──

@@ -247,10 +247,11 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
       if (step === 0) {
         // About to enter meals step — library already loaded
       } else if (step === 1) {
-        // About to enter staples — load staples data
+        // About to enter staples — load the checklist but start empty.
+        // Opt-in: only items the user explicitly checks become
+        // keep-on-hand staples (which suppress meal→grocery flow).
         api.getOnboardingStaples().then(data => {
           setStaplesData(data.staples)
-          setSelectedStaples(new Set(data.staples.map(s => s.name)))
         })
       }
     }
@@ -293,10 +294,9 @@ export default function OnboardingFlow({ onComplete, householdInfo }) {
     }
     const nextStep = getNextStep(step)
     if (!isHousehold && step === 1) {
-      // Load staples for next step
+      // Load staples for next step (skip path) — start empty, opt-in
       api.getOnboardingStaples().then(data => {
         setStaplesData(data.staples)
-        setSelectedStaples(new Set(data.staples.map(s => s.name)))
       })
     }
     setStep(nextStep)

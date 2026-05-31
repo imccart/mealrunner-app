@@ -92,15 +92,14 @@ def build_grocery_list(
                     "meals": {meal.recipe_name},
                 }
 
-    # Skip ingredients the user has explicitly told us they handle elsewhere
-    # — anything in their staples list. Presence-only filter on both
-    # ingredient_id (when the staple is linked to a canonical ingredient)
-    # and compare_key on name (covers free-form staples and plural/singular
-    # variants). The user adds these to the trip explicitly via
-    # /grocery/add-staples; they should never auto-flow from meals.
-    from mealrunner.staples import list_staples
+    # Skip only "keep on hand" staples — the user has told us they already
+    # have these and never want them auto-populated. "Every trip" staples are
+    # left to flow through so a recurring item (e.g. bread) lands on the list
+    # whenever a planned meal calls for it. The /grocery/add-staples path
+    # still dedups against existing rows, so there's no double-add.
+    from mealrunner.staples import list_staples, KEEP_ON_HAND
     from mealrunner.normalize import compare_key
-    staples = list_staples(conn, user_id)
+    staples = list_staples(conn, user_id, mode=KEEP_ON_HAND)
     staple_name_keys = {compare_key(s.name) for s in staples}
     staple_ingredient_ids = {s.ingredient_id for s in staples if s.ingredient_id is not None}
 
