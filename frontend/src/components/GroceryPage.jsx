@@ -443,6 +443,15 @@ export default function GroceryPage({ sidebar = false }) {
     } catch {}
   }
 
+  // Collapse every action card. Used when switching between cards so only
+  // one expansion is open at a time (the expanded card replaces the entire
+  // button row, so two open at once would stack confusingly).
+  const collapseAllActions = () => {
+    setRegularsExpanded(false)
+    setPantryExpanded(false)
+    setBundlesExpanded(false)
+  }
+
   // "Every trip" staples — the regulars prompt. Pre-checks staples that
   // aren't already on the list, so the user can one-tap-add what they need.
   const handleRegularsExpand = async () => {
@@ -458,6 +467,7 @@ export default function GroceryPage({ sidebar = false }) {
     } catch {
       setRegularsData([])
     }
+    collapseAllActions()
     setRegularsExpanded(true)
   }
 
@@ -480,6 +490,7 @@ export default function GroceryPage({ sidebar = false }) {
     } catch {
       setPantryData([])
     }
+    collapseAllActions()
     setPantryExpanded(true)
   }
 
@@ -499,6 +510,7 @@ export default function GroceryPage({ sidebar = false }) {
     } catch {
       setBundlesData([])
     }
+    collapseAllActions()
     setBundlesExpanded(true)
   }
 
@@ -636,23 +648,42 @@ export default function GroceryPage({ sidebar = false }) {
     )
   }
 
+  const anyActionExpanded = regularsExpanded || pantryExpanded || bundlesExpanded
   const promptCards = (
     <>
-      <div className={styles.groceryActions}>
-        {renderActionCard({
-          expanded: regularsExpanded,
-          verb: 'Add', noun: 'every-trip items',
-          onExpand: handleRegularsExpand, onSubmit: handleRegularsSubmit,
-          data: regularsData, checkedSet: regularsChecked, setChecked: setRegularsChecked, groupField: 'shopping_group',
-        })}
-        {renderActionCard({
-          expanded: pantryExpanded,
-          verb: 'Check', noun: 'on-hand items',
-          onExpand: handlePantryExpand, onSubmit: handlePantrySubmit,
-          data: pantryData, checkedSet: pantryChecked, setChecked: setPantryChecked, groupField: null,
-        })}
-        {renderBundlesCard()}
-      </div>
+      {!anyActionExpanded && (
+        <div className={styles.groceryActions}>
+          {renderActionCard({
+            expanded: false,
+            verb: 'Add', noun: 'every-trip items',
+            onExpand: handleRegularsExpand, onSubmit: handleRegularsSubmit,
+            data: regularsData, checkedSet: regularsChecked, setChecked: setRegularsChecked, groupField: 'shopping_group',
+          })}
+          {renderActionCard({
+            expanded: false,
+            verb: 'Check', noun: 'on-hand items',
+            onExpand: handlePantryExpand, onSubmit: handlePantrySubmit,
+            data: pantryData, checkedSet: pantryChecked, setChecked: setPantryChecked, groupField: null,
+          })}
+          <button className={styles.groceryActionBtn} onClick={handleBundlesExpand}>
+            <span className={styles.groceryActionVerb}>Add</span>
+            <span className={styles.groceryActionNoun}>bundle</span>
+          </button>
+        </div>
+      )}
+      {regularsExpanded && renderActionCard({
+        expanded: true,
+        verb: 'Add', noun: 'every-trip items',
+        onExpand: handleRegularsExpand, onSubmit: handleRegularsSubmit,
+        data: regularsData, checkedSet: regularsChecked, setChecked: setRegularsChecked, groupField: 'shopping_group',
+      })}
+      {pantryExpanded && renderActionCard({
+        expanded: true,
+        verb: 'Check', noun: 'on-hand items',
+        onExpand: handlePantryExpand, onSubmit: handlePantrySubmit,
+        data: pantryData, checkedSet: pantryChecked, setChecked: setPantryChecked, groupField: null,
+      })}
+      {bundlesExpanded && renderBundlesCard()}
     </>
   )
 
