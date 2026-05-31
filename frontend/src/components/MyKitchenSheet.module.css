@@ -38,11 +38,22 @@
 
 .kitchenTabs {
   display: flex;
-  gap: 0;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--tan);
+  flex-direction: column;
+  gap: 6px;
   margin-bottom: 16px;
+}
+
+.kitchenTabRow {
+  display: flex;
+  gap: 6px;
+}
+
+.kitchenTabRowCentered {
+  justify-content: center;
+}
+
+.kitchenTabRowCentered .kitchenTab {
+  flex: 0 0 calc((100% - 12px) / 3);
 }
 
 .kitchenTab {
@@ -52,7 +63,8 @@
   font-size: 13px;
   font-weight: 500;
   background: none;
-  border: none;
+  border: 1px solid var(--tan);
+  border-radius: 8px;
   cursor: pointer;
   color: var(--text-muted);
   transition: background 0.15s, color 0.15s;
@@ -61,6 +73,7 @@
 .kitchenTab.active {
   background: var(--accent);
   color: white;
+  border-color: var(--accent);
 }
 
 .kitchenTabContent {

@@ -140,6 +140,8 @@ export default function GroceryPage({ sidebar = false }) {
   const [pantryData, setPantryData] = useState(null)
   const [pantryChecked, setPantryChecked] = useState(new Set())
   const [pantryExpanded, setPantryExpanded] = useState(false)
+  const [bundlesData, setBundlesData] = useState(null)
+  const [bundlesExpanded, setBundlesExpanded] = useState(false)
 
   const load = async () => {
     try {
@@ -486,6 +488,28 @@ export default function GroceryPage({ sidebar = false }) {
     setPantryExpanded(false)
   }
 
+  const handleBundlesExpand = async () => {
+    if (bundlesExpanded) {
+      setBundlesExpanded(false)
+      return
+    }
+    try {
+      const data = await api.getBundles()
+      setBundlesData(data.bundles || [])
+    } catch {
+      setBundlesData([])
+    }
+    setBundlesExpanded(true)
+  }
+
+  const handleBundlePick = async (bundleId) => {
+    try {
+      const result = await api.addBundleToGrocery(bundleId)
+      setGrocery(result)
+    } catch {}
+    setBundlesExpanded(false)
+  }
+
   const handleUndoRecent = async (id, name) => {
     const prev = grocery
     // Optimistic: remove from all non-active states. Filter recently_checked
@@ -566,6 +590,50 @@ export default function GroceryPage({ sidebar = false }) {
     )
   }
 
+  const renderBundlesCard = () => {
+    if (bundlesExpanded) {
+      return (
+        <div className={styles.groceryPromptCard}>
+          <div className={styles.groceryPromptBody}>
+            <div className={styles.groceryPromptTitle}>Add a bundle</div>
+            <div className={styles.groceryPromptDesc}>Tap a bundle to add its items to your list.</div>
+            {bundlesData && bundlesData.length > 0 ? (
+              <div className={styles.groceryPromptChecklist}>
+                {bundlesData.map(b => (
+                  <div
+                    key={b.id}
+                    className={styles.groceryPromptCheckItem}
+                    onClick={() => handleBundlePick(b.id)}
+                  >
+                    <span>{b.name}</span>
+                    <span className={styles.groceryPromptGroup}>
+                      {b.items.length} {b.items.length === 1 ? 'item' : 'items'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className={styles.groceryPromptEmpty}>
+                No bundles yet. Create one in My Kitchen.
+              </div>
+            )}
+            <div className={styles.groceryPromptActions}>
+              <button className={styles.groceryPromptDismiss} onClick={handleBundlesExpand}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+    return (
+      <button className={styles.groceryActionBtn} onClick={handleBundlesExpand}>
+        <span className={styles.groceryActionVerb}>Add</span>
+        <span className={styles.groceryActionNoun}>bundle</span>
+      </button>
+    )
+  }
+
   const promptCards = (
     <>
       <div className={styles.groceryActions}>
@@ -581,6 +649,7 @@ export default function GroceryPage({ sidebar = false }) {
           onExpand: handlePantryExpand, onSubmit: handlePantrySubmit,
           data: pantryData, checkedSet: pantryChecked, setChecked: setPantryChecked, groupField: null,
         })}
+        {renderBundlesCard()}
       </div>
     </>
   )

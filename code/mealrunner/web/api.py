@@ -1528,6 +1528,169 @@ async def add_staples_to_grocery(body: dict, request: Request):
     return await get_grocery(request)
 
 
+@router.get("/bundles")
+async def list_bundles(request: Request):
+    """List the user's bundles with their items."""
+    user_id = request.state.user_id
+    conn = _conn()
+    rows = conn.execute(
+        text("SELECT id, name FROM bundles WHERE user_id = :uid ORDER BY name"),
+        {"uid": user_id},
+    ).fetchall()
+    bundles_out = []
+    for r in rows:
+        items = conn.execute(
+            text("SELECT id, name FROM bundle_items WHERE bundle_id = :bid ORDER BY position, id"),
+            {"bid": r["id"]},
+        ).fetchall()
+        bundles_out.append({
+            "id": r["id"],
+            "name": r["name"],
+            "items": [{"id": i["id"], "name": i["name"]} for i in items],
+        })
+    return {"bundles": bundles_out}
+
+
+@router.post("/bundles")
+async def create_bundle(body: dict, request: Request):
+    """Create a new bundle. Body: {name}. Returns {id, name, items: []}."""
+    user_id = request.state.user_id
+    name = (body.get("name") or "").strip()
+    if not name:
+        return {"ok": False, "error": "name required"}
+    conn = _conn()
+    existing = conn.execute(
+        text("SELECT id FROM bundles WHERE user_id = :uid AND LOWER(name) = LOWER(:name)"),
+        {"uid": user_id, "name": name},
+    ).fetchone()
+    if existing:
+        return {"ok": False, "error": "bundle with this name already exists"}
+    row = conn.execute(
+        text("INSERT INTO bundles (user_id, name) VALUES (:uid, :name) RETURNING id"),
+        {"uid": user_id, "name": name},
+    ).fetchone()
+    conn.commit()
+    return {"ok": True, "id": row["id"], "name": name, "items": []}
+
+
+@router.delete("/bundles/{bundle_id}")
+async def delete_bundle(bundle_id: int, request: Request):
+    user_id = request.state.user_id
+    conn = _conn()
+    conn.execute(
+        text("DELETE FROM bundles WHERE id = :bid AND user_id = :uid"),
+        {"bid": bundle_id, "uid": user_id},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
+@router.post("/bundles/{bundle_id}/items")
+async def add_bundle_item(bundle_id: int, body: dict, request: Request):
+    """Add an item to a bundle. Body: {name}."""
+    user_id = request.state.user_id
+    name = (body.get("name") or "").strip().lower()
+    if not name:
+        return {"ok": False, "error": "name required"}
+    conn = _conn()
+    owned = conn.execute(
+        text("SELECT id FROM bundles WHERE id = :bid AND user_id = :uid"),
+        {"bid": bundle_id, "uid": user_id},
+    ).fetchone()
+    if not owned:
+        return {"ok": False, "error": "not found"}
+    pos_row = conn.execute(
+        text("SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM bundle_items WHERE bundle_id = :bid"),
+        {"bid": bundle_id},
+    ).fetchone()
+    next_pos = pos_row["next_pos"]
+    row = conn.execute(
+        text("INSERT INTO bundle_items (bundle_id, name, position) VALUES (:bid, :name, :pos) RETURNING id"),
+        {"bid": bundle_id, "name": name, "pos": next_pos},
+    ).fetchone()
+    conn.commit()
+    return {"ok": True, "id": row["id"], "name": name}
+
+
+@router.delete("/bundles/{bundle_id}/items/{item_id}")
+async def delete_bundle_item(bundle_id: int, item_id: int, request: Request):
+    user_id = request.state.user_id
+    conn = _conn()
+    conn.execute(
+        text("""DELETE FROM bundle_items WHERE id = :iid AND bundle_id IN (
+                SELECT id FROM bundles WHERE id = :bid AND user_id = :uid)"""),
+        {"iid": item_id, "bid": bundle_id, "uid": user_id},
+    )
+    conn.commit()
+    return {"ok": True}
+
+
+@router.post("/grocery/add-bundle")
+async def add_bundle_to_grocery(body: dict, request: Request):
+    """Add a bundle's items to the active trip.
+
+    Body: {bundle_id}. Each item is deduped against existing active rows
+    by compare_key — if "rice" is already on the list (regardless of source),
+    we don't add a second "rice" row. Items are tagged source='bundle'.
+    """
+    from mealrunner.planner import load_rolling_week
+    from mealrunner.normalize import compare_key
+
+    user_id = request.state.user_id
+    bundle_id = body.get("bundle_id")
+    if not bundle_id:
+        return {"ok": False, "error": "bundle_id required"}
+
+    conn = _conn()
+    bundle = conn.execute(
+        text("SELECT id FROM bundles WHERE id = :bid AND user_id = :uid"),
+        {"bid": bundle_id, "uid": user_id},
+    ).fetchone()
+    if not bundle:
+        return {"ok": False, "error": "not found"}
+
+    items = conn.execute(
+        text("SELECT name FROM bundle_items WHERE bundle_id = :bid ORDER BY position, id"),
+        {"bid": bundle_id},
+    ).fetchall()
+
+    mw = load_rolling_week(conn, user_id)
+    _ensure_active_trip(conn, mw, user_id)
+
+    active_rows = conn.execute(
+        text("""SELECT name FROM grocery_items
+                WHERE user_id = :user_id
+                  AND have_it = 0 AND checked = 0 AND removed = 0"""),
+        {"user_id": user_id},
+    ).fetchall()
+    on_list = {compare_key(r["name"]) for r in active_rows}
+
+    added = 0
+    for it in items:
+        name = it["name"].lower().strip()
+        if not name:
+            continue
+        key = compare_key(name)
+        if key in on_list:
+            continue
+        group = _infer_item_group(conn, name, user_id)
+        conn.execute(
+            text("""INSERT INTO grocery_items
+                 (user_id, name, shopping_group, source, for_meals, meal_count)
+                 VALUES (:user_id, :name, :group, 'bundle', '', 0)"""),
+            {"user_id": user_id, "name": name, "group": group},
+        )
+        on_list.add(key)
+        added += 1
+    conn.commit()
+
+    request.state._skip_ensure_active = True
+    result = await get_grocery(request)
+    if isinstance(result, dict):
+        result["bundle_added"] = added
+    return result
+
+
 @router.post("/grocery/build")
 async def build_my_list(request: Request, body: dict = None):
     """Refresh grocery list from current meals."""

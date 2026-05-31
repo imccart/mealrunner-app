@@ -49,6 +49,15 @@ export default function MyKitchenSheet({ onClose }) {
   // History state (replaces Favorites)
   const [purchases, setPurchases] = useState(null)
 
+  // Bundles state
+  const [bundles, setBundles] = useState(null)
+  const [detailBundle, setDetailBundle] = useState(null)
+  const [addBundleText, setAddBundleText] = useState('')
+  const [addBundleItemText, setAddBundleItemText] = useState('')
+
+  const loadBundles = () =>
+    api.getBundles().then(data => setBundles(data.bundles)).catch(() => setBundles([]))
+
   // Detail view state
   const [detailIngredients, setDetailIngredients] = useState(null)
   const [detailAddText, setDetailAddText] = useState('')
@@ -64,7 +73,53 @@ export default function MyKitchenSheet({ onClose }) {
     loadStaples()
     api.getGrocerySuggestions().then(data => setAllIngredients(data.suggestions)).catch(() => {})
     api.getPurchases().then(data => setPurchases(data.purchases || [])).catch(() => setPurchases([]))
+    loadBundles()
   }, [])
+
+  const handleCreateBundle = async (e) => {
+    e.preventDefault()
+    const name = addBundleText.trim()
+    if (!name) return
+    const res = await api.createBundle(name)
+    if (res.ok) {
+      setAddBundleText('')
+      await loadBundles()
+      setDetailBundle({ id: res.id, name: res.name, items: [] })
+    }
+  }
+
+  const handleDeleteBundle = async (id) => {
+    await api.deleteBundle(id)
+    setDetailBundle(null)
+    await loadBundles()
+  }
+
+  const handleAddBundleItem = async (e) => {
+    if (e && e.preventDefault) e.preventDefault()
+    const name = addBundleItemText.trim()
+    if (!name || !detailBundle) return
+    await addBundleItemNamed(name)
+  }
+
+  const addBundleItemNamed = async (rawName) => {
+    const name = rawName.trim()
+    if (!name || !detailBundle) return
+    const res = await api.addBundleItem(detailBundle.id, name)
+    if (res.ok) {
+      const updated = { ...detailBundle, items: [...detailBundle.items, { id: res.id, name: res.name }] }
+      setDetailBundle(updated)
+      setAddBundleItemText('')
+      await loadBundles()
+    }
+  }
+
+  const handleDeleteBundleItem = async (itemId) => {
+    if (!detailBundle) return
+    await api.deleteBundleItem(detailBundle.id, itemId)
+    const updated = { ...detailBundle, items: detailBundle.items.filter(i => i.id !== itemId) }
+    setDetailBundle(updated)
+    await loadBundles()
+  }
 
   // Load ingredients when entering detail view
   useEffect(() => {
@@ -351,15 +406,28 @@ export default function MyKitchenSheet({ onClose }) {
       <div className="sheet-title">My Kitchen</div>
 
       <div className={styles.kitchenTabs}>
-        {['meals', 'sides', 'staples', 'ratings'].map(tab => (
-          <button
-            key={tab}
-            className={`${styles.kitchenTab}${activeTab === tab ? ` ${styles.active}` : ''}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
+        <div className={styles.kitchenTabRow}>
+          {['meals', 'sides', 'bundles'].map(tab => (
+            <button
+              key={tab}
+              className={`${styles.kitchenTab}${activeTab === tab ? ` ${styles.active}` : ''}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div className={`${styles.kitchenTabRow} ${styles.kitchenTabRowCentered}`}>
+          {['staples', 'ratings'].map(tab => (
+            <button
+              key={tab}
+              className={`${styles.kitchenTab}${activeTab === tab ? ` ${styles.active}` : ''}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
 
       {activeTab === 'meals' && (
@@ -425,6 +493,76 @@ export default function MyKitchenSheet({ onClose }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'bundles' && !detailBundle && (
+        <div className={styles.kitchenTabContent}>
+          <div className={ls.sectionHint}>Named sets of items you add to your grocery list as a unit. Tap one to edit, or create a new one.</div>
+          <form onSubmit={handleCreateBundle} className={ls.addRow} style={{ marginBottom: 12 }}>
+            <input
+              className={ls.addInput}
+              type="text"
+              placeholder="New bundle name..."
+              value={addBundleText}
+              onChange={(e) => setAddBundleText(e.target.value)}
+            />
+            <button className="btn primary" type="submit">+</button>
+          </form>
+          {bundles === null ? (
+            <div className={ls.sectionHint}>Loading...</div>
+          ) : bundles.length === 0 ? (
+            <div className={ls.sectionHint}>No bundles yet</div>
+          ) : (
+            <div className={ls.list}>
+              {bundles.map(b => (
+                <div key={b.id} className={ls.listItem} style={{ cursor: 'pointer' }} onClick={() => setDetailBundle(b)}>
+                  <span className={ls.listName}>{b.name}</span>
+                  <span className={ls.listMeta}>{b.items.length} {b.items.length === 1 ? 'item' : 'items'} {'›'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'bundles' && detailBundle && (
+        <div className={styles.kitchenTabContent}>
+          <div className={styles.kitchenDetailHeader}>
+            <button className="btn ghost" onClick={() => setDetailBundle(null)}>{'‹'} Back</button>
+            <span className={ls.listName} style={{ flex: 1, marginLeft: 8 }}>{detailBundle.name}</span>
+          </div>
+          <form onSubmit={handleAddBundleItem} className={ls.addRow} style={{ marginBottom: 12 }}>
+            <AutocompleteInput
+              value={addBundleItemText}
+              onChange={setAddBundleItemText}
+              onSubmit={(name) => addBundleItemNamed(name)}
+              candidates={allIngredients || []}
+              exclude={detailBundle.items.map(i => i.name)}
+              placeholder="Add an item..."
+              inputClassName={ls.addInput}
+            />
+            <button className="btn primary" type="submit">+</button>
+          </form>
+          {detailBundle.items.length === 0 ? (
+            <div className={ls.sectionHint}>No items yet</div>
+          ) : (
+            <div className={ls.list}>
+              {detailBundle.items.map(it => (
+                <div key={it.id} className={ls.listItem}>
+                  <span className={ls.listName}>{it.name}</span>
+                  <button className={ls.remove} onClick={() => handleDeleteBundleItem(it.id)}>{'×'}</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            className="btn ghost"
+            style={{ marginTop: 24, color: 'var(--rust)' }}
+            onClick={() => handleDeleteBundle(detailBundle.id)}
+          >
+            Delete bundle
+          </button>
         </div>
       )}
 

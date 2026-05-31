@@ -801,6 +801,36 @@ def _run_column_migrations(conn: DictConnection) -> None:
         except Exception:
             pass
 
+    # Create bundles + bundle_items tables if missing
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bundles (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_bundles_user_name UNIQUE (user_id, name)
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bundle_items (
+                id SERIAL PRIMARY KEY,
+                bundle_id INTEGER NOT NULL REFERENCES bundles(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_bundle_items_bundle ON bundle_items (bundle_id, position)"
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   bundles tables skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
     # Backfill product_key from upc where missing
     try:
         conn.execute(text(

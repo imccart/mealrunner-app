@@ -140,6 +140,25 @@ export const api = {
     body: JSON.stringify({ selected, mode }),
   }),
 
+  // Bundles
+  getBundles: () => request('/bundles'),
+  createBundle: (name) => request('/bundles', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  }),
+  deleteBundle: (id) => request(`/bundles/${id}`, { method: 'DELETE' }),
+  addBundleItem: (bundleId, name) => request(`/bundles/${bundleId}/items`, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  }),
+  deleteBundleItem: (bundleId, itemId) => request(`/bundles/${bundleId}/items/${itemId}`, {
+    method: 'DELETE',
+  }),
+  addBundleToGrocery: (bundleId) => request('/grocery/add-bundle', {
+    method: 'POST',
+    body: JSON.stringify({ bundle_id: bundleId }),
+  }),
+
   // Receipt
   getReceipt: () => request('/receipt'),
   uploadReceipt: (type, content) => request('/receipt/upload', {

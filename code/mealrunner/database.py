@@ -256,6 +256,29 @@ staples = Table(
     Column("updated_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
 )
 
+# Bundles — named sets of grocery items the user can add to a trip as a
+# unit (e.g. "Homemade dog food" → ground turkey, pumpkin puree, rice...).
+# Not a recipe: bundles don't appear in the meal picker or contribute to
+# meal planning. Pure grocery-list shortcut. Items are name-only — the
+# normalize/aisle resolution at insert time uses the same path as
+# /grocery/add and /grocery/add-staples.
+bundles = Table(
+    "bundles", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user_id", Text, nullable=False),
+    Column("name", Text, nullable=False),
+    Column("created_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    UniqueConstraint("user_id", "name", name="uq_bundles_user_name"),
+)
+
+bundle_items = Table(
+    "bundle_items", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("bundle_id", Integer, ForeignKey("bundles.id", ondelete="CASCADE"), nullable=False),
+    Column("name", Text, nullable=False),
+    Column("position", Integer, nullable=False, server_default=text("0")),
+)
+
 product_scores = Table(
     "product_scores", metadata,
     Column("upc", Text, primary_key=True),
