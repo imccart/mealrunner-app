@@ -110,6 +110,12 @@ Two distinct failure modes the gap can surface, with different recoveries:
 
 When `diff_order` matches by name (not UPC), the item is marked `substituted` instead of `matched`. Ratings apply to the **received** product (uses `receipt_upc` first).
 
+### `diff_order` Pass 2 token pool (session 83)
+
+Pass 2 (the fuzzy name fallback after UPC fail) pools both the Kroger `product_name` AND the simple grocery `item` name into one token bag before scoring. Old code did `sub.get("product", sub.get("item", ""))`, but `dict.get(k, default)` returns the default only when the key is MISSING — never when its value is `""`. So a row with `product_upc` set but `product_name=''` (e.g. after a not_fulfilled demotion that got re-submitted) dropped to an empty token set and scored 0 against every receipt line. Pool-merge closes that.
+
+Also: the grocery name's **joined-spaceless form** (≥5 chars) is added as a virtual token, with a short-circuit if it exactly matches any receipt token. Catches brand names that the receipt collapses spaces on — "la croix" → `"lacroix"` token in `"LaCroix® Lime Flavored Sparkling Water Cans"`. Short-circuit fires per submitted item, so it binds the brand line before the score loop sees it. The 5-char floor blocks "ham"/"tea"/"oil"/"pie" collisions; "salt"/"lacroix"/"icecream" are above the cap. Verified on the 2026-06-01 Kroger receipt — la croix bound on both empty-product and full-substitution variants; "pie"/"blue paint" FP guards hold; worcestershire normal-path unchanged.
+
 ## Confirmation flow
 
 - ☰ expand on each item.

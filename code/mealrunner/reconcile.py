@@ -570,18 +570,36 @@ def diff_order(submitted: list[dict], receipt_items: list[dict]) -> dict:
         else:
             removed.append(sub)
 
-    # Pass 2: fuzzy name match for remaining unmatched submitted items
+    # Pass 2: fuzzy name match for remaining unmatched submitted items.
+    # Pool both the Kroger product_name AND the simple grocery name into
+    # the token bag. dict.get(k, default) fires only on MISSING keys, not
+    # empty values — so a row submitted with product_upc set but
+    # product_name='' used to drop sub_words to {} and score 0 against
+    # every receipt line. Also add the grocery name's joined-spaceless
+    # form as a virtual token, with a short-circuit for an exact match
+    # against any receipt token. Catches brand-collapsed receipt names
+    # ("la croix" → "lacroix"). The 5-char floor blocks "ham"/"tea"/"oil"
+    # collisions.
     still_removed = []
     for sub in removed:
-        sub_norm = _norm(sub.get("product", sub.get("item", "")))
-        sub_words = set(sub_norm.split())
+        item_name = sub.get("item", "")
+        product_name = sub.get("product", "")
+        pool = " ".join(p for p in (product_name, item_name) if p)
+        sub_words = set(_norm(pool).split())
+        item_joined = re.sub(r"\s+", "", _norm(item_name))
+        if len(item_joined) >= 5:
+            sub_words.add(item_joined)
 
         best_match = None
         best_score = 0
+        short_circuit = None
 
         for r_item in receipt_remaining:
             r_norm = _norm(r_item["item"])
             r_words = set(r_norm.split())
+            if len(item_joined) >= 5 and item_joined in r_words:
+                short_circuit = r_item
+                break
             overlap = len(sub_words & r_words)
             total = max(len(sub_words), len(r_words), 1)
             score = overlap / total
@@ -589,9 +607,10 @@ def diff_order(submitted: list[dict], receipt_items: list[dict]) -> dict:
                 best_score = score
                 best_match = r_item
 
-        if best_match and best_score >= 0.4:
-            receipt_remaining.remove(best_match)
-            matched.append({"submitted": sub, "receipt": best_match, "match": "name"})
+        chosen = short_circuit or (best_match if best_score >= 0.4 else None)
+        if chosen:
+            receipt_remaining.remove(chosen)
+            matched.append({"submitted": sub, "receipt": chosen, "match": "name"})
         else:
             still_removed.append(sub)
 
