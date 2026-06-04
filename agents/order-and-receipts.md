@@ -114,6 +114,7 @@ When `diff_order` matches by name (not UPC), the item is marked `substituted` in
 
 - ☰ expand on each item.
 - **Matched:** Confirm / Not-this / Rate.
+- **Missing from receipt (`not_fulfilled`, `receipt_acknowledged=0`):** Got it / Didn't get it. "Got it" routes through `resolveReceiptItem(id, 'matched')` (checks off list, acks). "Didn't get it" routes through `resolveReceiptItem(id, 'not_fulfilled')` (re-stamps the same status with ack=1, leaving the row on the active list as a re-orderable item). Surfaces parser misses (item delivered but extraction/matching didn't bind it) and true no-shows in one queue, lets the user disambiguate. Counts roll into the header "N to confirm" subtitle alongside unacked matches.
 - **Unmatched extras:** "This is..." (manual match to grocery item) / Rate / Dismiss. Dismissed extras are flagged (not deleted) for learning.
 - **Previous purchases** toggle with collapsible weeks. Purchase history endpoint at `GET /purchases`.
 

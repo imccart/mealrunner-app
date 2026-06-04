@@ -165,6 +165,13 @@ export default function ReceiptPage() {
     } catch { /* ignore */ }
   }
 
+  const handleConfirmNotFulfilled = async (id) => {
+    try {
+      await api.resolveReceiptItem(id, 'not_fulfilled')
+      loadReceipt()
+    } catch { /* ignore */ }
+  }
+
   const handleDismissExtra = async (name) => {
     try {
       await api.dismissExtra(name)
@@ -222,6 +229,10 @@ export default function ReceiptPage() {
   // receipt_acknowledged=1 and the item leaves this queue.
   const unmatchedMatches = receipt.matched.filter(i => !i.receipt_acknowledged)
   const unackedSubstituted = receipt.substituted.filter(i => !i.receipt_acknowledged)
+  // Ordered items the parser couldn't find on the receipt. User confirms
+  // whether each one actually arrived ('matched') or was a true miss
+  // ('not_fulfilled' stays on the active list as a re-orderable item).
+  const unackedNotFulfilled = (receipt.not_fulfilled || []).filter(i => !i.receipt_acknowledged)
   const hasReconciled = receipt.matched.length > 0 || receipt.substituted.length > 0
 
   // Unreconciled grocery items (for "This is..." picker) — keep full
@@ -253,8 +264,8 @@ export default function ReceiptPage() {
       <div className="page-header">
         <h2 className="screen-heading">Receipt</h2>
         <div className="screen-sub">
-          {unmatchedMatches.length > 0
-            ? `${unmatchedMatches.length} to confirm`
+          {unmatchedMatches.length + unackedNotFulfilled.length > 0
+            ? `${unmatchedMatches.length + unackedNotFulfilled.length} to confirm`
             : (receipt.extras && receipt.extras.length > 0
                 ? `${receipt.extras.length} extra to review`
                 : 'Upload a receipt to reconcile')}
@@ -419,6 +430,35 @@ export default function ReceiptPage() {
                       className={`${styles.receiptActionBtn} ${styles.rate}${item.rating === -1 ? ` ${styles.activeDown}` : ''}`}
                       onClick={() => handleRate(item, item.rating === -1 ? 0 : -1)}
                     >{'\u{1F44E}'}</button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Ordered but not seen on receipt — parser miss or actual no-show */}
+      {unackedNotFulfilled.length > 0 && (
+        <div className={styles.receiptSection}>
+          <div className={styles.receiptSectionLabel}>Missing from receipt ({unackedNotFulfilled.length})</div>
+          <div className={styles.receiptHint}>We didn't see these on your receipt. Did you get them anyway?</div>
+          {unackedNotFulfilled.map(item => {
+            const key = `nf-${item.id}`
+            const isExpanded = !collapsedItems.has(key)
+            return (
+              <div key={item.id} className={styles.receiptItemRow}>
+                <div className={styles.receiptItemTop} onClick={() => toggleExpand(key)}>
+                  <div className={styles.receiptItemInfo}>
+                    <div className={styles.receiptItemName}>{item.name}</div>
+                    <ReceiptRowMeta item={item} receiptText="" />
+                  </div>
+                  <button className="grocery-expand-btn">{'☰'}</button>
+                </div>
+                {isExpanded && (
+                  <div className={styles.receiptActionBar}>
+                    <button className={`${styles.receiptActionBtn} ${styles.confirm}`} onClick={() => handleConfirmMatch(item.id)}>Got it</button>
+                    <button className={styles.receiptActionBtn} onClick={() => handleConfirmNotFulfilled(item.id)}>Didn't get it</button>
                   </div>
                 )}
               </div>
