@@ -2761,13 +2761,19 @@ async def submit_order(request: Request):
     )
     conn.commit()
     try:
-        add_to_cart(items, token=token)
+        # add_to_cart is a sync HTTP PUT with 15s timeout. Without offload it
+        # would block the uvicorn event loop, freezing the whole app for every
+        # other in-flight request. Release the DB conn while we're out, too.
+        import anyio
+        with release_db_during_io():
+            await anyio.to_thread.run_sync(lambda: add_to_cart(items, token=token))
         return {"ok": True, "count": len(items)}
     except Exception as e:
         # Roll back submitted_at so user can retry. Mirror the SELECT filter
         # above — only clear rows that match the same submit pool, otherwise
         # a Kroger error would NULL submitted_at on legitimately-finalized
         # receipt-reconciled rows.
+        conn = _conn()  # release_db_during_io swapped in a fresh request conn
         conn.execute(
             text("""UPDATE grocery_items SET submitted_at = NULL
                 WHERE user_id = :user_id AND product_upc != '' AND ordered = 1
