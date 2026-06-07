@@ -2332,13 +2332,19 @@ async def select_product(body: dict, request: Request):
              "quantity": quantity},
         )
     else:
-        # First product or same product re-selected — update in place
+        # First product or same product re-selected — update in place.
+        # Clear any stale receipt_status from a prior trip's reconciliation
+        # so this row passes the /order/submit chokepoint (which excludes
+        # rows with a non-empty receipt_status). Otherwise a re-selected
+        # not_fulfilled row stamps submitted_at but never reaches Kroger.
         conn.execute(
             text("""UPDATE grocery_items SET
                    product_upc = :upc, product_name = :name, product_brand = :brand,
                    product_size = :size, product_price = :price, product_image = :image,
                    quantity = :quantity,
-                   ordered = 1, ordered_at = CURRENT_TIMESTAMP, selected_at = CURRENT_TIMESTAMP
+                   ordered = 1, ordered_at = CURRENT_TIMESTAMP, selected_at = CURRENT_TIMESTAMP,
+                   receipt_status = '', receipt_acknowledged = 0,
+                   receipt_item = '', receipt_upc = '', receipt_price = NULL
                WHERE user_id = :user_id AND LOWER(name) = :item_name"""),
             {"upc": product["upc"], "name": product["name"], "brand": product.get("brand", ""),
              "size": product.get("size", ""), "price": product.get("price"),
@@ -2754,9 +2760,17 @@ async def submit_order(request: Request):
 
     items = [{"upc": r["product_upc"], "qty": r["quantity"]} for r in rows]
     # Mark submitted BEFORE calling Kroger — if the process dies mid-request,
-    # items won't re-appear on the order page for a duplicate submit
+    # items won't re-appear on the order page for a duplicate submit.
+    # WHERE clause MUST mirror the SELECT chokepoint above. Otherwise a row
+    # excluded from the Kroger payload (e.g. stale receipt_status from a
+    # prior trip) still gets stamped here — vanishing from the order page
+    # while Kroger never received it.
     conn.execute(
-        text("UPDATE grocery_items SET submitted_at = CURRENT_TIMESTAMP WHERE user_id = :user_id AND product_upc != '' AND ordered = 1 AND submitted_at IS NULL"),
+        text("""UPDATE grocery_items SET submitted_at = CURRENT_TIMESTAMP
+            WHERE user_id = :user_id
+              AND product_upc != '' AND ordered = 1 AND submitted_at IS NULL
+              AND checked = 0 AND have_it = 0 AND removed = 0
+              AND COALESCE(receipt_status, '') = ''"""),
         {"user_id": user_id},
     )
     conn.commit()
