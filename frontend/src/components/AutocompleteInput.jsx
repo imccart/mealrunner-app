@@ -49,11 +49,15 @@ export default function AutocompleteInput({
     setShowSuggestions(e.target.value.trim().length > 0)
   }
 
+  // Tapping a suggestion populates the text box but does NOT add the item —
+  // the user must explicitly tap the "+" (or hit Enter on desktop) to commit.
+  // Avoids accidental adds from a stray tap on a fuzzy match. Adding via the
+  // typed-text path (Enter or the + button on the parent) still works as
+  // before.
   const handleSelect = (name) => {
-    onSubmit(name)
+    onChange(name)
     setShowSuggestions(false)
     setSelectedIndex(-1)
-    inputRef.current?.blur()
     // Swallow the click event that follows pointerdown — it would land on
     // whatever element is now under the finger after the dropdown disappears.
     const swallow = (e) => { e.stopPropagation(); e.preventDefault() }
@@ -64,6 +68,10 @@ export default function AutocompleteInput({
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault()
+      // Enter always submits the current text value. If a dropdown row is
+      // arrow-selected, populate first so the typed value matches the user's
+      // visual intent, then submit on the next Enter (consistent with the
+      // tap-to-populate rule).
       if (selectedIndex >= 0 && selectedIndex < matches.length) {
         handleSelect(matches[selectedIndex])
       } else if (value.trim()) {
