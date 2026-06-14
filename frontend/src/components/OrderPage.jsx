@@ -117,6 +117,10 @@ export default function OrderPage() {
   const [mobileSection, setMobileSection] = useState(null) // 'ordered' | 'elsewhere' | null
   const [communityBrand, setCommunityBrand] = useState(null)
   const [communityValue, setCommunityValue] = useState('')
+  // Session-scoped skip list. Items added via the right-arrow / next gesture
+  // stay in `pending` but auto-advance won't land on them again. Cleared by
+  // a full page reload or by explicitly tapping the item in the queue.
+  const [skipped, setSkipped] = useState(() => new Set())
   const [communityConfirm, setCommunityConfirm] = useState(false)
   const [noStore, setNoStore] = useState(false)
   const [loadError, setLoadError] = useState(false)
@@ -232,26 +236,29 @@ export default function OrderPage() {
     if (currentStillPending) return
 
     // Advance to the next pending item AFTER the current position, wrapping around.
-    // Only show end state when no pending items remain (handled above).
+    // Skipped names are excluded so the right-arrow gesture sticks within
+    // the session. If every remaining pending item is skipped, drop to the
+    // end-state instead of forcing the user back through skipped items.
     const allNames = [...updatedOrder.pending.map(p => p.name), ...updatedOrder.selected.map(s => s.name)]
     const curIdx = allNames.indexOf(activeItem)
     const pendingSet = new Set(pending.map(p => p.name))
+    const eligible = (name) => pendingSet.has(name) && !skipped.has(name)
     // Look forward from current position
     for (let i = curIdx + 1; i < allNames.length; i++) {
-      if (pendingSet.has(allNames[i])) {
+      if (eligible(allNames[i])) {
         setActiveItem(allNames[i])
         return
       }
     }
     // Wrap around from the beginning
     for (let i = 0; i < curIdx; i++) {
-      if (pendingSet.has(allNames[i])) {
+      if (eligible(allNames[i])) {
         setActiveItem(allNames[i])
         return
       }
     }
-    // Shouldn't reach here (pending.length > 0), but safety fallback
-    setActiveItem(pending[0].name)
+    // Every remaining pending item is skipped — show end-state.
+    setActiveItem(null)
   }
 
   const handleSelect = (product) => {
@@ -338,20 +345,30 @@ export default function OrderPage() {
       setActiveItem(null)
       return
     }
+    // Right-arrow = "skip for now". Record the current item so neither this
+    // handler nor advanceToNext lands on it again this session.
+    const justSkipped = activeItem
+    const nextSkipped = new Set(skipped)
+    if (pendingNames.includes(justSkipped)) nextSkipped.add(justSkipped)
+    setSkipped(nextSkipped)
+
     const idx = pendingNames.indexOf(activeItem)
-    if (idx === -1) {
-      setActiveItem(pendingNames[0])
-      return
+    // Walk forward from idx looking for the next non-skipped pending item.
+    for (let i = idx + 1; i < pendingNames.length; i++) {
+      if (!nextSkipped.has(pendingNames[i])) {
+        setActiveItem(pendingNames[i])
+        return
+      }
     }
-    if (idx === pendingNames.length - 1) {
-      setActiveItem(null)
-      return
-    }
-    setActiveItem(pendingNames[idx + 1])
+    // No more eligible items after current — drop to end-state.
+    setActiveItem(null)
   }
 
   const handleKeepShopping = () => {
     if (!order) return
+    // Explicit "keep shopping" tap = the user wants to see what's left,
+    // including anything they skipped earlier. Clear the session skip list.
+    setSkipped(new Set())
     const pending = order.pending
     if (pending.length > 0) {
       setActiveItem(pending[0].name)
@@ -966,7 +983,17 @@ export default function OrderPage() {
                   <button
                     key={item.name}
                     className={`${styles.queueSheetItem}${item.name === activeItem ? ` ${styles.active}` : ''}`}
-                    onClick={() => { setActiveItem(item.name); setShowQueue(false); setMobileSection(null) }}
+                    onClick={() => {
+                      // Explicit re-engagement clears any prior skip for this name.
+                      if (skipped.has(item.name)) {
+                        const next = new Set(skipped)
+                        next.delete(item.name)
+                        setSkipped(next)
+                      }
+                      setActiveItem(item.name)
+                      setShowQueue(false)
+                      setMobileSection(null)
+                    }}
                   >
                     <span>{displayName(item)}</span>
                   </button>
