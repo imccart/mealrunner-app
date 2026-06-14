@@ -1111,7 +1111,13 @@ async def get_grocery(request: Request):
                 "added_at": added_at,
                 "notes": notes or "",
             })
-        if r["ordered"]:
+        # Only flag CURRENTLY-active ordered rows. Historical rows with
+        # ordered=1 (bought, matched on receipt, etc.) still carry the flag
+        # forever; without the is_active gate they push their name into
+        # ordered_names and the frontend's orderedSet then suppresses a
+        # genuinely new active row of the same name from the grocery view.
+        # Symptom: item appears on the Order page but not on Grocery.
+        if r["ordered"] and is_active:
             ordered_names.append(r["name"].lower())
         if r["checked"]:
             checked_names.append(r["name"].lower())
