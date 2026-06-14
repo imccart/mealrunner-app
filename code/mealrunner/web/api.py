@@ -2267,7 +2267,16 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
         else:
             del _search_cache[cache_key]
 
-    response = _build_search_response(conn, user_id, item_name, ff, start, user_location_id)
+    # _build_search_response is sync and makes 3 categories of blocking
+    # external HTTP calls (Kroger product search, Kroger price backfill,
+    # Open Food Facts NOVA/Nutri-Score lookups). Without the thread offload
+    # this whole pipeline (300ms-1.5s per call) sits on the single uvicorn
+    # event loop and freezes every other in-flight request — same shape as
+    # the session-83 /order/submit fix.
+    import anyio
+    response = await anyio.to_thread.run_sync(
+        lambda: _build_search_response(conn, user_id, item_name, ff, start, user_location_id)
+    )
     _cache_search_response(cache_key, response)
     return response
 
