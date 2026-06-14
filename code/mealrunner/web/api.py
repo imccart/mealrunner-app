@@ -3047,30 +3047,15 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         {"data": json.dumps(all_receipts), "user_id": user_id},
     )
 
-    # Skip already-extra'd receipt items so re-uploading doesn't pile up
-    # duplicate extras rows. We intentionally do NOT filter by past matched
-    # grocery rows — that was the old "already_matched_names" bug, which
-    # blocked repeat purchases of the same product (same Kroger description)
-    # from ever matching again.
-    try:
-        existing_extras = conn.execute(
-            text("SELECT LOWER(item_name) AS name FROM receipt_extra_items WHERE user_id = :user_id"),
-            {"user_id": user_id},
-        ).fetchall()
-        already_extra_names = {r["name"] for r in existing_extras}
-    except Exception:
-        already_extra_names = set()
-
-    new_receipt_items = []
+    # Pass every receipt item through the matching pipeline. The earlier
+    # behavior here filtered receipt items whose text was already in
+    # receipt_extra_items from a PRIOR trip's failed match — meant to dedupe
+    # extras-row inserts but actually blocked legitimate re-matching forever
+    # (e.g. LaCroix saved as an extra in May would silently prevent today's
+    # parse from matching it against today's "la croix" grocery row). Dedup
+    # at the extras-insert step instead, not at the pipeline entry.
+    new_receipt_items = list(receipt_items)
     previously_matched = 0
-    for ri in receipt_items:
-        ri_name = (ri.get("item") or "").lower().strip()
-        ri_raw = (ri.get("raw") or "").lower().strip()
-        if (ri_name and ri_name in already_extra_names) or \
-           (ri_raw and ri_raw in already_extra_names):
-            previously_matched += 1
-        else:
-            new_receipt_items.append(ri)
 
     # Get trip items the receipt processor is responsible for confirming.
     # Exclude have_it=1 / removed=1 — those are user-settled state that the
@@ -3100,21 +3085,25 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                 # Prefer raw (the actual line text from the receipt) over item
                 # (which is the grocery name for matched image-parser items).
                 receipt_text = ri.get("raw") or ri.get("item", "")
-                # Scope to a single row by id so a historical row that
-                # happens to share the same `name` (the active+history
-                # conflation in grocery_items) doesn't get re-stamped by
-                # today's parse. Pick the most recently added eligible row.
+                # Stamp every recent unacknowledged row sharing this name.
+                # The per-meal duplicate model means one canonical purchase
+                # ("hot dog buns") can have multiple sibling rows — one per
+                # planned meal. A single LIMIT 1 stamp leaves the others
+                # stuck in not_fulfilled limbo and creates the "21 things
+                # missing from receipt, mostly dupes" experience. The 21-day
+                # / ack=0 scope keeps historical rows from prior trips out.
                 conn.execute(
                     text("""UPDATE grocery_items SET
                            receipt_item = :receipt_item, receipt_price = :receipt_price,
                            receipt_upc = :receipt_upc, receipt_status = 'matched',
                            receipt_acknowledged = 0
-                       WHERE id = (
+                       WHERE id IN (
                            SELECT id FROM grocery_items
                            WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
                              AND COALESCE(receipt_status, '') IN ('', 'not_fulfilled')
                              AND have_it = 0 AND removed = 0
-                           ORDER BY added_at DESC NULLS LAST LIMIT 1
+                             AND receipt_acknowledged = 0
+                             AND added_at >= NOW() - INTERVAL '21 days'
                        )"""),
                     {"receipt_item": receipt_text,
                      "receipt_price": ri.get("price"),
@@ -3148,18 +3137,19 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
             r = m["receipt"]
             # UPC match = exact product; name match = different UPC = substitution
             status = "matched" if m.get("match") == "upc" else "substituted"
-            # Same id-scoped UPDATE as the pre-match path above — keeps
-            # one historical row per name from getting re-stamped.
+            # Multi-row stamp same as the pre-match path above. Recent /
+            # ack=0 / not-finished scoping keeps historical rows untouched.
             conn.execute(
                 text("""UPDATE grocery_items SET
                        receipt_item = :receipt_item, receipt_price = :receipt_price, receipt_upc = :receipt_upc,
                        receipt_status = :status, receipt_acknowledged = 0
-                   WHERE id = (
+                   WHERE id IN (
                        SELECT id FROM grocery_items
                        WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
                          AND COALESCE(receipt_status, '') IN ('', 'not_fulfilled')
                          AND have_it = 0 AND removed = 0
-                       ORDER BY added_at DESC NULLS LAST LIMIT 1
+                         AND receipt_acknowledged = 0
+                         AND added_at >= NOW() - INTERVAL '21 days'
                    )"""),
                 {"receipt_item": r.get("item", ""), "receipt_price": r.get("price"),
                  "receipt_upc": r.get("upc", ""),
@@ -3181,18 +3171,18 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
 
         for m in diff2["matched"]:
             r = m["receipt"]
-            # Id-scoped UPDATE — see pre-match path for context. Avoids
-            # the active+history collision in grocery_items.
+            # Multi-row stamp same as the pre-match / Pass 1 paths above.
             conn.execute(
                 text("""UPDATE grocery_items SET
                        receipt_item = :receipt_item, receipt_price = :receipt_price, receipt_upc = :receipt_upc,
                        receipt_status = 'matched', receipt_acknowledged = 0
-                   WHERE id = (
+                   WHERE id IN (
                        SELECT id FROM grocery_items
                        WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
                          AND COALESCE(receipt_status, '') IN ('', 'not_fulfilled')
                          AND have_it = 0 AND removed = 0
-                       ORDER BY added_at DESC NULLS LAST LIMIT 1
+                         AND receipt_acknowledged = 0
+                         AND added_at >= NOW() - INTERVAL '21 days'
                    )"""),
                 {"receipt_item": r.get("item", ""), "receipt_price": r.get("price"),
                  "receipt_upc": r.get("upc", ""),
@@ -3278,11 +3268,21 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
     if rcpt_prices:
         _log_prices(conn, rcpt_prices, rcpt_location, "receipt", user_id)
 
-    # Save unmatched receipt items as extras
+    # Save unmatched receipt items as extras. Dedupe at insert (was previously
+    # enforced by skipping receipt items whose text already appeared in extras,
+    # which silently blocked re-matching across trips). Skip if an extra with
+    # the same lowercase item_name already exists for this user.
     if receipt_remaining:
+        existing_extras = conn.execute(
+            text("SELECT LOWER(item_name) AS name FROM receipt_extra_items WHERE user_id = :uid"),
+            {"uid": user_id},
+        ).fetchall()
+        existing_extra_names = {r["name"] for r in existing_extras}
         for ri in receipt_remaining:
             display_name = ri.get("item") or ri.get("raw") or ""
             if not display_name:
+                continue
+            if display_name.lower().strip() in existing_extra_names:
                 continue
             try:
                 conn.execute(
@@ -3292,6 +3292,7 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                      "price": ri.get("price"), "upc": ri.get("upc", ""),
                      "brand": ri.get("brand", "")},
                 )
+                existing_extra_names.add(display_name.lower().strip())
             except Exception:
                 pass
 

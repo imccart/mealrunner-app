@@ -183,7 +183,7 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
         )
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=8192,
         messages=[{
             "role": "user",
@@ -314,7 +314,7 @@ def parse_receipt_text(text: str) -> list[dict]:
     """Parse receipt email text using Claude. Returns list of {item, qty, price}."""
     client = _get_client()
     message = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=4096,
         messages=[{
             "role": "user",
@@ -711,18 +711,23 @@ def diff_grocery_list(grocery_names: list[str], receipt_items: list[dict]) -> di
     # AI-assisted matching for remaining unmatched receipt items against remaining grocery names
     if unmatched and remaining_names:
         try:
-            print(f"[receipt] AI matching: {len(unmatched)} unmatched receipt items vs {len(remaining_names)} grocery names", flush=True)
+            logger.info("AI match attempt: %d unmatched receipt items vs %d grocery names",
+                        len(unmatched), len(remaining_names))
             ai_matches = _ai_match(list(remaining_names.values()), unmatched)
-            print(f"[receipt] AI returned {len(ai_matches)} matches", flush=True)
+            logger.info("AI match returned %d pairs", len(ai_matches))
             for grocery_name, r_item in ai_matches:
                 g_norm = _norm(grocery_name)
                 if g_norm in remaining_names:
                     remaining_names.pop(g_norm)
                     matched.append({"grocery_name": grocery_name, "receipt": r_item})
                     unmatched = [u for u in unmatched if u is not r_item]
-                    print(f"[receipt]   AI matched: {r_item.get('item', '?')!r} → {grocery_name!r}", flush=True)
-        except Exception as e:
-            print(f"[receipt] AI matching failed: {e}", flush=True)
+                    logger.info("AI matched %r -> %r", r_item.get('item', '?'), grocery_name)
+        except Exception:
+            # Don't swallow silently — a dead model ID, expired key, or rate
+            # limit here would otherwise look identical to "the fuzzy matcher
+            # just missed it" to the user. Log full traceback so Railway
+            # surfaces the real cause.
+            logger.exception("AI matching failed")
 
     return {
         "matched": matched,
@@ -740,7 +745,7 @@ def _ai_match(grocery_names: list[str], receipt_items: list[dict]) -> list[tuple
     receipt_descriptions = [r.get("raw") or r["item"] for r in receipt_items]
 
     message = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=1024,
         messages=[{
             "role": "user",
