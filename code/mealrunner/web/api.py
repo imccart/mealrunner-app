@@ -3504,8 +3504,13 @@ async def dismiss_extra(body: dict, request: Request):
     if not name:
         return {"ok": False}
 
+    # Hard-delete to match /receipt/match-extra's behavior. Soft-dismiss
+    # (dismissed=1) left a ghost row that the insert-dedup couldn't see
+    # past, silently blocking the same item from re-appearing on future
+    # receipts. The `dismissed` column is now unused — left in place
+    # rather than migrated to avoid disturbing other readers.
     conn.execute(
-        text("UPDATE receipt_extra_items SET dismissed = 1 WHERE user_id = :uid AND LOWER(item_name) = LOWER(:name)"),
+        text("DELETE FROM receipt_extra_items WHERE user_id = :uid AND LOWER(item_name) = LOWER(:name)"),
         {"uid": user_id, "name": name},
     )
     conn.commit()
