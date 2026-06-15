@@ -500,6 +500,21 @@ def _parse_kroger_structured(text: str) -> list[dict]:
                 if prev.startswith("Item Coupon/Sale:"):
                     continue
 
+                # Pure-punctuation line — defends against PyMuPDF glyph
+                # splits that emit a stray ")" or "(" on its own line when
+                # weighted-produce items render across a layout break.
+                # Without this skip, the walk-back captures the punctuation
+                # fragment as item_name and the real product name is lost.
+                if prev and not re.search(r"[A-Za-z0-9]", prev):
+                    continue
+
+                # Standalone "(approx.)" — same glyph-split class. The full
+                # weighted-qty line "2.63 lbs x $0.68 each (approx.)" is
+                # handled below, but on some PyMuPDF versions the trailing
+                # "(approx.)" wraps onto its own line.
+                if prev == "(approx.)":
+                    continue
+
                 # Qty line: "1 x $1.89 each" or "5 x $1.00 $1.50 each"
                 qty_match = re.match(r"(\d+)\s*x\s*\$[\d.]+", prev)
                 if qty_match:
