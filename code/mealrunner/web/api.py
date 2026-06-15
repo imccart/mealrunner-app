@@ -23,6 +23,22 @@ def _conn():
     return get_connection()
 
 
+def _extras_dedup_key(name: str) -> str:
+    """Normalization key for receipt_extra_items dedup.
+
+    Stronger than LOWER(item_name) because receipts arrive from multiple
+    parsers with different quirks: Kroger PDFs use unicode ligatures
+    (Cauliﬂower, ﬁ), image OCR may strip the ® / ™ glyphs that PDF
+    preserves, fancy quotes vs straight, slashes vs commas. All collapse
+    to the same canonical form here so the same physical product on two
+    receipts dedups instead of accumulating a sibling row per parser.
+    """
+    import re as _re
+    import unicodedata
+    s = unicodedata.normalize("NFKC", name or "").lower()
+    return " ".join(_re.sub(r"[^a-z0-9]+", " ", s).split())
+
+
 # ── Price logging ──────────────────────────────────────────
 
 
@@ -3300,19 +3316,20 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
 
     # Save unmatched receipt items as extras. Dedupe at insert (was previously
     # enforced by skipping receipt items whose text already appeared in extras,
-    # which silently blocked re-matching across trips). Skip if an extra with
-    # the same lowercase item_name already exists for this user.
+    # which silently blocked re-matching across trips). Use _extras_dedup_key
+    # so ligature / punctuation / unicode variants collapse to the same key.
     if receipt_remaining:
         existing_extras = conn.execute(
-            text("SELECT LOWER(item_name) AS name FROM receipt_extra_items WHERE user_id = :uid"),
+            text("SELECT item_name FROM receipt_extra_items WHERE user_id = :uid"),
             {"uid": user_id},
         ).fetchall()
-        existing_extra_names = {r["name"] for r in existing_extras}
+        existing_extra_keys = {_extras_dedup_key(r["item_name"]) for r in existing_extras}
         for ri in receipt_remaining:
             display_name = ri.get("item") or ri.get("raw") or ""
             if not display_name:
                 continue
-            if display_name.lower().strip() in existing_extra_names:
+            key = _extras_dedup_key(display_name)
+            if key in existing_extra_keys:
                 continue
             try:
                 conn.execute(
@@ -3322,7 +3339,7 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                      "price": ri.get("price"), "upc": ri.get("upc", ""),
                      "brand": ri.get("brand", "")},
                 )
-                existing_extra_names.add(display_name.lower().strip())
+                existing_extra_keys.add(key)
             except Exception:
                 pass
 
