@@ -3037,6 +3037,36 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                         "order_number": "", "total_price": None,
                         "footer_count": None, "items": entry,
                     }
+            # Dedup: if the same receipt was uploaded twice (user tapped
+            # upload twice, page refresh mid-parse, etc.), skip the whole
+            # pipeline. Strongest signal is order_number alone; for
+            # parsers that can't extract it (image/eml without an order#),
+            # fall back to (store, order_date, total_price). If none of
+            # these are present, treat as new and process normally.
+            def _entry_key(e):
+                onum = (e.get("order_number") or "").strip()
+                if onum:
+                    return ("by_order", onum)
+                store = (e.get("store") or "").strip().lower()
+                date = (e.get("order_date") or "").strip()
+                total = e.get("total_price")
+                if store and date and total is not None:
+                    return ("by_meta", store, date, round(float(total), 2))
+                return None
+            new_key = _entry_key(new_entry)
+            if new_key is not None:
+                for existing_entry in all_receipts:
+                    if _entry_key(existing_entry) == new_key:
+                        logger.info(
+                            "Duplicate receipt upload skipped (key=%r) user=%s",
+                            new_key, user_id,
+                        )
+                        return {
+                            "ok": True,
+                            "duplicate": True,
+                            "matched": 0,
+                            "not_fulfilled": 0,
+                        }
             all_receipts.append(new_entry)
         except (json.JSONDecodeError, TypeError):
             all_receipts = [new_entry]
