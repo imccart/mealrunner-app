@@ -256,10 +256,10 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
         raw = item.get("raw", "")
         price = item.get("price")
         if isinstance(price, (int, float)) and price < 0:
-            print(f"[receipt]   SKIP (negative): {raw!r}", flush=True)
+            logger.info("Receipt skip (negative price): %r", raw)
             continue
         if _skip_patterns.search(raw):
-            print(f"[receipt]   SKIP (pattern): {raw!r}", flush=True)
+            logger.info("Receipt skip (metadata pattern): %r", raw)
             continue
         filtered.append(item)
 
@@ -292,10 +292,10 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
                     "grocery_match": grocery,
                 })
                 matched_count += 1
-                print(f"[receipt]   matched: {raw!r} -> {grocery!r}", flush=True)
+                logger.info("Receipt matched: %r -> %r", raw, grocery)
                 continue
             else:
-                print(f"[receipt]   SKIP (hallucinated match): {raw!r} -> {grocery!r}", flush=True)
+                logger.info("Receipt skip (hallucinated match): %r -> %r", raw, grocery)
 
         # Unmatched item — keep as raw line (becomes a receipt extra)
         results.append({
@@ -305,8 +305,10 @@ def parse_receipt_image(image_path: str, grocery_names: list[str] | None = None)
             "qty": 1,
         })
 
-    print(f"[receipt] {matched_count} matched, {len(results) - matched_count} extras "
-          f"(out of {len(filtered)} extracted, footer_count={footer_count})", flush=True)
+    logger.info(
+        "Receipt summary: matched=%d extras=%d (out of %d extracted, footer_count=%s)",
+        matched_count, len(results) - matched_count, len(filtered), footer_count,
+    )
     return results, footer_count, metadata
 
 

@@ -3065,14 +3065,8 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
             all_receipts = json.loads(existing_data)
             if not isinstance(all_receipts, list):
                 all_receipts = []
-            # Migration: wrap legacy entries (bare list of items) as dict entries.
-            for i, entry in enumerate(all_receipts):
-                if isinstance(entry, list):
-                    all_receipts[i] = {
-                        "store": "", "store_location": "", "order_date": "",
-                        "order_number": "", "total_price": None,
-                        "footer_count": None, "items": entry,
-                    }
+            # (Removed legacy bare-list wrapping migration — prod has no
+            # legacy entries left; new entries are always dict-shaped.)
             # Dedup: if the same receipt was uploaded twice (user tapped
             # upload twice, page refresh mid-parse, etc.), skip the whole
             # pipeline. Strongest signal is order_number alone; for
@@ -3113,15 +3107,12 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         {"data": json.dumps(all_receipts), "user_id": user_id},
     )
 
-    # Pass every receipt item through the matching pipeline. The earlier
-    # behavior here filtered receipt items whose text was already in
-    # receipt_extra_items from a PRIOR trip's failed match — meant to dedupe
-    # extras-row inserts but actually blocked legitimate re-matching forever
-    # (e.g. LaCroix saved as an extra in May would silently prevent today's
-    # parse from matching it against today's "la croix" grocery row). Dedup
-    # at the extras-insert step instead, not at the pipeline entry.
+    # Every receipt item flows through matching. The earlier cross-trip
+    # extras-name filter was removed because it silently blocked legitimate
+    # re-matches (e.g. LaCroix saved as an extra in May would prevent
+    # today's parse from matching it). Dedup now happens at the
+    # extras-INSERT step instead.
     new_receipt_items = list(receipt_items)
-    previously_matched = 0
 
     # Get trip items the receipt processor is responsible for confirming.
     # Exclude have_it=1 / removed=1 — those are user-settled state that the
@@ -3386,8 +3377,6 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         "matched": total_matched,
         "not_fulfilled": total_not_fulfilled,
     }
-    if previously_matched > 0:
-        result["previously_matched"] = previously_matched
     if receipt_remaining:
         result["extras"] = len(receipt_remaining)
     if footer_count is not None:
@@ -3446,7 +3435,7 @@ async def upload_receipt_file(request: Request, file: UploadFile = File(...)):
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         content = await file.read()
         tmp.write(content)
-        print(f"[receipt] Upload: {file.filename}, {len(content)} bytes, suffix={suffix}", flush=True)
+        logger.info("Receipt upload: filename=%r bytes=%d suffix=%s", file.filename, len(content), suffix)
         tmp_path = tmp.name
 
     try:
