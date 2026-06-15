@@ -657,6 +657,15 @@ def diff_grocery_list(grocery_names: list[str], receipt_items: list[dict]) -> di
         return re.sub(r"[^a-z0-9]", "", name.lower())
 
     remaining_names = {_norm(n): n for n in grocery_names}
+    # Pre-compute every grocery name's derived forms ONCE. The inner loop
+    # used to recompute set(g_norm.split()) and _compact(g_original) for
+    # every (receipt_item, grocery_name) pair — O(N*M) regex work that
+    # only depends on M. Index keyed by g_norm so the dict pop below stays
+    # consistent with the post-match removal.
+    derived: dict[str, tuple[set[str], str]] = {
+        g_norm: (set(g_norm.split()), _compact(g_original))
+        for g_norm, g_original in remaining_names.items()
+    }
     matched = []
     unmatched = []
 
@@ -671,8 +680,7 @@ def diff_grocery_list(grocery_names: list[str], receipt_items: list[dict]) -> di
         best_score = 0
 
         for g_norm, g_original in remaining_names.items():
-            g_words = set(g_norm.split())
-            g_compact = _compact(g_original)
+            g_words, g_compact = derived[g_norm]
 
             # Take the max across independent strategies — earlier code used
             # if/elif, which let a low-coverage substring hit silently block
