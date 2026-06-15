@@ -3344,6 +3344,9 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
             {"uid": user_id},
         ).fetchall()
         existing_extra_keys = {_extras_dedup_key(r["item_name"]) for r in existing_extras}
+        # Collect rows to insert in one batch — was N round-trips for a
+        # receipt with N unmatched items.
+        to_insert = []
         for ri in receipt_remaining:
             display_name = ri.get("item") or ri.get("raw") or ""
             if not display_name:
@@ -3351,17 +3354,30 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
             key = _extras_dedup_key(display_name)
             if key in existing_extra_keys:
                 continue
+            to_insert.append({
+                "user_id": user_id, "item_name": display_name,
+                "price": ri.get("price"), "upc": ri.get("upc", ""),
+                "brand": ri.get("brand", ""),
+            })
+            existing_extra_keys.add(key)
+        if to_insert:
             try:
                 conn.execute(
                     text("""INSERT INTO receipt_extra_items (user_id, item_name, price, upc, brand)
                        VALUES (:user_id, :item_name, :price, :upc, :brand)"""),
-                    {"user_id": user_id, "item_name": display_name,
-                     "price": ri.get("price"), "upc": ri.get("upc", ""),
-                     "brand": ri.get("brand", "")},
+                    to_insert,
                 )
-                existing_extra_keys.add(key)
             except Exception:
-                pass
+                logger.exception("Batch extras insert failed; falling back to per-row")
+                for params in to_insert:
+                    try:
+                        conn.execute(
+                            text("""INSERT INTO receipt_extra_items (user_id, item_name, price, upc, brand)
+                               VALUES (:user_id, :item_name, :price, :upc, :brand)"""),
+                            params,
+                        )
+                    except Exception:
+                        pass
 
     conn.commit()
 
