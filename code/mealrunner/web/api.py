@@ -2846,22 +2846,9 @@ async def get_receipt(request: Request):
     order_source = trip["order_source"] if "order_source" in trip.keys() else "none"
     has_receipt = bool(trip["receipt_data"]) if "receipt_data" in trip.keys() and trip["receipt_data"] else False
 
-    # Auto-acknowledge matched/substituted rows older than 10 days so the
-    # receipt page is a queue ("stuff needing attention"), not an unbounded
-    # log of every past purchase. Purchase history lives in /purchases.
-    # submitted_at is the proxy: most matched rows came through a Kroger
-    # order; rows without submitted_at stay unacknowledged until manually
-    # dismissed (rare edge case, no regression).
-    conn.execute(
-        text("""UPDATE grocery_items SET receipt_acknowledged = 1
-           WHERE user_id = :user_id
-             AND receipt_status IN ('matched', 'substituted')
-             AND receipt_acknowledged = 0
-             AND submitted_at IS NOT NULL
-             AND submitted_at < NOW() - INTERVAL '10 days'"""),
-        {"user_id": user_id},
-    )
-    conn.commit()
+    # Note: the auto-acknowledge sweep that used to run here on every
+    # receipt-page GET now lives in _process_receipt — it fires when a new
+    # receipt is uploaded instead of mutating state on a read endpoint.
 
     # Get trip items, excluding acknowledged matched/substituted/dismissed
     # rows (purchase log, not queue).
@@ -3001,6 +2988,20 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
     trip = _get_active_trip(conn, user_id)
     if not trip:
         return {"ok": False, "error": "No active trip"}
+
+    # Auto-acknowledge matched/substituted rows older than 10 days. Used to
+    # run on every receipt-page GET; moved here so the read endpoint stays
+    # read-only. Fires on every upload (including the duplicate-receipt
+    # short-circuit below — sweep happens before we return).
+    conn.execute(
+        text("""UPDATE grocery_items SET receipt_acknowledged = 1
+           WHERE user_id = :user_id
+             AND receipt_status IN ('matched', 'substituted')
+             AND receipt_acknowledged = 0
+             AND submitted_at IS NOT NULL
+             AND submitted_at < NOW() - INTERVAL '10 days'"""),
+        {"user_id": user_id},
+    )
 
     # Gather grocery names for image receipts (enables single-call matching)
     # Scope to unchecked items: submitted (sent to store) + active (might have grabbed in-store)
