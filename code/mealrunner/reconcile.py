@@ -624,7 +624,13 @@ def diff_order(submitted: list[dict], receipt_items: list[dict]) -> dict:
                 best_score = score
                 best_match = r_item
 
-        chosen = short_circuit or (best_match if best_score >= 0.4 else None)
+        # Threshold mirrors diff_grocery_list's 0.6. Pass 1's fuzzy fallback
+        # used to be 0.4, which let a weak Pass 1 hit claim a receipt line
+        # that Pass 2 would have matched cleanly to a different grocery
+        # row at a higher score. Anything Pass 1 caught at 0.4–0.6 still
+        # gets a second shot via Pass 2 (with the same 0.6 bar) because the
+        # row's grocery name flows into upc_unmatched_names.
+        chosen = short_circuit or (best_match if best_score >= 0.6 else None)
         if chosen:
             receipt_remaining.remove(chosen)
             matched.append({"submitted": sub, "receipt": chosen, "match": "name"})
