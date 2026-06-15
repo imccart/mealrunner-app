@@ -2917,16 +2917,35 @@ async def get_receipt(request: Request):
     not_fulfilled = [i for i in items if i["receipt_status"] == "not_fulfilled"]
     unresolved = [i for i in items if not i["receipt_status"]]
 
-    # Fetch ratings for reconciled items (matched + substituted)
-    from mealrunner.kroger import get_product_ratings, _make_product_key
-    for item in matched + substituted:
+    # Fetch your_rating for reconciled items (matched + substituted) in one
+    # round-trip. Per-item product_ratings lookup used to fire N queries here
+    # — visible delay on receipts with many matched items.
+    from mealrunner.kroger import _make_product_key
+    reconciled = matched + substituted
+    keys_by_item = {}
+    for item in reconciled:
         upc = item.get("receipt_upc") or item.get("product_upc") or ""
         brand = item.get("product_brand") or ""
         desc = item.get("receipt_item") or item.get("product_name") or ""
         pk = _make_product_key(upc, brand, desc)
         item["product_key"] = pk
-        ratings = get_product_ratings(conn, upc, user_id, product_key=pk)
-        item["rating"] = ratings["your_rating"]
+        keys_by_item[id(item)] = pk
+
+    rating_by_key: dict[str, int] = {}
+    distinct_keys = {pk for pk in keys_by_item.values() if pk}
+    if distinct_keys:
+        placeholders = ", ".join(f":k{i}" for i in range(len(distinct_keys)))
+        params = {f"k{i}": k for i, k in enumerate(distinct_keys)}
+        params["user_id"] = user_id
+        rating_rows = conn.execute(
+            text(f"SELECT product_key, rating FROM product_ratings "
+                 f"WHERE user_id = :user_id AND product_key IN ({placeholders})"),
+            params,
+        ).fetchall()
+        rating_by_key = {r["product_key"]: r["rating"] for r in rating_rows}
+
+    for item in reconciled:
+        item["rating"] = rating_by_key.get(keys_by_item[id(item)], 0)
 
     # Fetch extra items (unmatched receipt items)
     try:
