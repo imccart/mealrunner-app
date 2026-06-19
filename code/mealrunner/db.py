@@ -1648,9 +1648,13 @@ def ensure_db_initialized() -> None:
     global _db_initialized
     if _db_initialized:
         return
+    import time as _time
+    _t_total = _time.perf_counter()
     conn = get_connection()
     try:
+        _t = _time.perf_counter()
         _kill_stale_connections(conn)
+        print(f"[startup-timing] step1 kill_stale_conns: {_time.perf_counter() - _t:.2f}s", flush=True)
 
         # Set statement_timeout so migrations fail fast if old instance holds locks.
         try:
@@ -1660,21 +1664,32 @@ def ensure_db_initialized() -> None:
             pass
 
         try:
+            _t = _time.perf_counter()
             init_db(conn)
+            print(f"[startup-timing] step2 init_db: {_time.perf_counter() - _t:.2f}s", flush=True)
+            _t = _time.perf_counter()
             row = conn.execute(text("SELECT COUNT(*) AS n FROM recipes")).fetchone()
             if row["n"] == 0:
                 seed_from_yaml(conn)
+                print(f"[startup-timing] step3 seed_from_yaml (cold seed): {_time.perf_counter() - _t:.2f}s", flush=True)
             else:
                 data_dir = str(Path(__file__).resolve().parents[2] / "data")
+                _t3a = _time.perf_counter()
                 ing_db = Path(data_dir) / "seed_ingredient_database.yaml"
                 if ing_db.exists():
                     _seed_ingredient_database(conn, ing_db)
                     conn.commit()
+                print(f"[startup-timing] step3a seed_ingredient_database: {_time.perf_counter() - _t3a:.2f}s", flush=True)
+                _t3b = _time.perf_counter()
                 brand_file = Path(data_dir) / "brand_ownership.yaml"
                 if brand_file.exists():
                     _seed_brand_ownership(conn, brand_file)
                     conn.commit()
+                print(f"[startup-timing] step3b seed_brand_ownership: {_time.perf_counter() - _t3b:.2f}s", flush=True)
+                _t3c = _time.perf_counter()
                 _seed_library_if_missing(conn)
+                print(f"[startup-timing] step3c seed_library_if_missing: {_time.perf_counter() - _t3c:.2f}s", flush=True)
+                print(f"[startup-timing] step3 reseed_checks total: {_time.perf_counter() - _t:.2f}s", flush=True)
         except Exception as e:
             print(f"[db] ensure_db error (non-fatal): {e}", flush=True)
             try:
@@ -1691,6 +1706,7 @@ def ensure_db_initialized() -> None:
             except Exception:
                 pass
         # Encrypt any plaintext Kroger tokens (one-time migration)
+        _t = _time.perf_counter()
         try:
             import os
             if os.environ.get("ENCRYPTION_KEY"):
@@ -1714,6 +1730,7 @@ def ensure_db_initialized() -> None:
                 conn.raw.rollback()
             except Exception:
                 pass
+        print(f"[startup-timing] step4 kroger_token_migration: {_time.perf_counter() - _t:.2f}s", flush=True)
 
         # Refresh FDA violation data in background thread (non-blocking startup)
         import threading
@@ -1750,6 +1767,7 @@ def ensure_db_initialized() -> None:
         threading.Thread(target=_background_price_polling, daemon=True).start()
 
         _db_initialized = True
+        print(f"[startup-timing] TOTAL ensure_db_initialized: {_time.perf_counter() - _t_total:.2f}s", flush=True)
     finally:
         conn.close()
 
