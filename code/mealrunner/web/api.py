@@ -4656,7 +4656,9 @@ async def invite_to_household(body: dict, request: Request):
     # Create user + send magic link
     user_id = find_or_create_user(conn, email)
     token = create_magic_link(conn, user_id)
-    send_magic_link_email(email, token)
+    # Offload Resend HTTP so a slow email provider doesn't block other requests.
+    import anyio
+    await anyio.to_thread.run_sync(send_magic_link_email, email, token)
 
     conn.commit()
     return {"ok": True}
@@ -4688,7 +4690,9 @@ async def invite_to_beta(body: dict, request: Request):
     # Create user + send magic link
     user_id = find_or_create_user(conn, email)
     token = create_magic_link(conn, user_id)
-    send_magic_link_email(email, token)
+    # Offload Resend HTTP so a slow email provider doesn't block other requests.
+    import anyio
+    await anyio.to_thread.run_sync(send_magic_link_email, email, token)
 
     conn.commit()
     return {"ok": True}
@@ -5344,8 +5348,10 @@ async def admin_waitlist_approve(body: dict, request: Request):
     user_id = find_or_create_user(conn, email)
     token = create_magic_link(conn, user_id)
     conn.commit()
+    # Offload Resend HTTP so a slow email provider doesn't block other requests.
+    import anyio
     try:
-        send_magic_link_email(email, token)
+        await anyio.to_thread.run_sync(send_magic_link_email, email, token)
     except Exception:
         pass  # approval already persisted; a send hiccup shouldn't roll it back
     return {"ok": True}

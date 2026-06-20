@@ -300,7 +300,10 @@ async def auth_login(body: dict):
 
     user_id = find_or_create_user(conn, email)
     token = create_magic_link(conn, user_id)
-    send_magic_link_email(email, token)
+    # Offload the Resend HTTP call so a slow email provider doesn't freeze
+    # the event loop for every other in-flight request.
+    import anyio
+    await anyio.to_thread.run_sync(send_magic_link_email, email, token)
 
     return {"ok": True, "sent": True}
 
