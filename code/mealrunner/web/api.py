@@ -1806,14 +1806,12 @@ async def get_order(request: Request):
         if r["product_upc"] and r["product_price"] and not r["buy_elsewhere"]
     )
 
-    # Kick off background pre-warm for pending items so searches load fast
-    if pending:
-        import threading
-        pending_names = [p["name"] for p in pending]
-        threading.Thread(
-            target=_bg_prewarm_order, args=(user_id, pending_names),
-            daemon=True,
-        ).start()
+    # Background prewarm disabled: _build_search_response does `conn = _conn()`
+    # after its release_db_during_io block, which relies on the request
+    # contextvar. In a daemon thread there's no contextvar, so _conn() checks
+    # out a fresh pool connection that's never returned. ~30 pending items =
+    # pool exhausted = every subsequent request waits 30s and times out.
+    # First-search latency is the trade-off until this can be reworked.
 
     return {
         "pending": pending,
