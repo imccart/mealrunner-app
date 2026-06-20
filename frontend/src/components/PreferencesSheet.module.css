@@ -349,6 +349,25 @@
   color: white;
 }
 
+.prefsAdminBtn {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  margin-top: 16px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.prefsAdminBtn:hover {
+  filter: brightness(0.92);
+}
+
 .prefsSignOut {
   display: block;
   width: 100%;

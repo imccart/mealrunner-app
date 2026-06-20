@@ -627,13 +627,6 @@ export default function PreferencesSheet({ onClose, onStartTour, isAdmin }) {
           </button>
         )}
 
-        {/* Admin dashboard (only rendered for the admin account) */}
-        {isAdmin && (
-          <button className={styles.prefsTourBtn} onClick={() => { onClose?.(); window.location.hash = 'admin' }}>
-            Admin dashboard
-          </button>
-        )}
-
         {/* Delete account (self-serve) */}
         <button className={styles.prefsDeleteAccount} onClick={async () => {
           if (!window.confirm("Delete your account and all your data permanently? This cannot be undone. If you share a household, members will lose the shared data too.")) return
@@ -658,6 +651,13 @@ export default function PreferencesSheet({ onClose, onStartTour, isAdmin }) {
         }}>
           Sign out
         </button>
+
+        {/* Admin dashboard (only rendered for the admin account) */}
+        {isAdmin && (
+          <button className={styles.prefsAdminBtn} onClick={() => { onClose?.(); window.location.hash = 'admin' }}>
+            Admin dashboard
+          </button>
+        )}
 
         {/* Terms */}
         <div className={styles.prefsTermsLinks}>
