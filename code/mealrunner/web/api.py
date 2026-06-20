@@ -2241,7 +2241,15 @@ def _build_search_response(conn, user_id: str, item_name: str, ff: str, start: i
 
 
 def _cache_search_response(cache_key: str, response: dict) -> None:
-    """Stash a search response in the in-memory cache with LRU eviction."""
+    """Stash a search response in the in-memory cache with LRU eviction.
+
+    Empty results are not cached: a transient Kroger failure inside
+    _build_search_response is caught silently as products=[], and the
+    20-min cache would otherwise lock the user into "no products found"
+    on a perfectly valid search term. Re-querying is cheap; let it.
+    """
+    if not response.get("products"):
+        return
     import time as _time
     now = _time.time()
     expired = [k for k, (ts, _) in _search_cache.items() if now - ts >= _SEARCH_CACHE_TTL]
