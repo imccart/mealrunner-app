@@ -66,8 +66,10 @@ def poll_user_prices(conn: DictConnection, user_id: str) -> dict:
     if not upcs:
         return {"polled": 0, "errors": 0}
 
-    # Cap at 50 products per poll cycle
-    upcs = upcs[:50]
+    # Cap at 50 products per poll cycle. Sort so this thread acquires
+    # product_scores row locks in the same order as the search-request
+    # writers — prevents cross-process deadlock on the upsert below.
+    upcs = sorted(upcs[:50])
 
     polled = 0
     errors = 0
@@ -215,8 +217,10 @@ def prewarm_grocery_prices(conn: DictConnection) -> None:
                 if need_price:
                     fill_prices(need_price, location_id=location_id)
 
-                # Save to product_scores cache
-                for p in products:
+                # Save to product_scores cache. Sort by upc so this writer
+                # acquires row locks in the same order as every other
+                # product_scores writer — prevents cross-process deadlock.
+                for p in sorted(products, key=lambda x: x.upc):
                     if p.upc in cached_upcs:
                         continue
                     conn.execute(

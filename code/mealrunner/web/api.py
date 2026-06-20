@@ -1967,7 +1967,10 @@ def _build_search_response(conn, user_id: str, item_name: str, ff: str, start: i
         conn = _conn()
 
     # --- Save everything to cache ---
-    for p in products:
+    # Sort by upc so concurrent writers (this loop + the 6h polling thread +
+    # another tab's search) all acquire row locks in the same order. Prevents
+    # the cross-process deadlock that 503'd searches in the prod log.
+    for p in sorted(products, key=lambda x: x.upc):
         conn.execute(
             text("""INSERT INTO product_scores
                (upc, nova_group, nutriscore, score_fetched_at, price, promo_price, in_stock, curbside, delivery, price_fetched_at)
@@ -2061,7 +2064,9 @@ def _build_search_response(conn, user_id: str, item_name: str, ff: str, start: i
 
             # Refresh product_scores for confirmed-available prefs so next time
             # they come back through the normal cache path without a lookup.
-            for _upc, m in pref_direct_results.items():
+            # Sorted by upc to match the lock-acquire order of every other
+            # product_scores writer — prevents cross-process deadlocks.
+            for _upc, m in sorted(pref_direct_results.items()):
                 try:
                     conn.execute(
                         text("""INSERT INTO product_scores
