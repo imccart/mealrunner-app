@@ -644,7 +644,7 @@ def add_to_cart(items: list[dict], token: str | None = None) -> bool:
         f"{BASE_URL}/cart/add",
         json={"items": cart_items},
         headers=headers,
-        timeout=15,
+        timeout=(3, 8),
     )
     resp.raise_for_status()
     return True
@@ -684,7 +684,12 @@ def exchange_code_for_token(code: str, redirect_uri: str) -> dict:
 
 
 def refresh_kroger_token(refresh_token: str) -> dict:
-    """Refresh a Kroger OAuth token. Returns new token data dict."""
+    """Refresh a Kroger OAuth token. Returns new token data dict.
+
+    Tight timeout (connect=3s, read=5s) — a slow Kroger OAuth endpoint
+    should fail fast, not stack into 15s+ hangs when the caller has
+    fallback attempts queued behind it.
+    """
     creds = _load_credentials()
     resp = requests.post(
         f"{BASE_URL}/connect/oauth2/token",
@@ -693,7 +698,7 @@ def refresh_kroger_token(refresh_token: str) -> dict:
             "refresh_token": refresh_token,
         },
         auth=(creds["client_id"], creds["client_secret"]),
-        timeout=15,
+        timeout=(3, 5),
     )
     resp.raise_for_status()
     return resp.json()
