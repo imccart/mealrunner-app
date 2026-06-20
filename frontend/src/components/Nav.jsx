@@ -28,13 +28,6 @@ export default function Nav({ page, setPage, kitchenOpen, onToggleKitchen, tipJa
           {link('receipt', 'Receipt')}
         </div>
         <div className="nav-icons">
-          <span data-tour="kitchen">
-            <BentSpoonIcon
-              size={22}
-              active={kitchenOpen}
-              onClick={onToggleKitchen}
-            />
-          </span>
           {tipJarEnabled && (
             <span data-tour="tipjar" aria-label="Tip jar" title="Tip jar">
               <TipJarIcon
@@ -44,7 +37,14 @@ export default function Nav({ page, setPage, kitchenOpen, onToggleKitchen, tipJa
               />
             </span>
           )}
-          <span data-tour="account">
+          <span data-tour="kitchen" aria-label="My Kitchen" title="My Kitchen">
+            <BentSpoonIcon
+              size={22}
+              active={kitchenOpen}
+              onClick={onToggleKitchen}
+            />
+          </span>
+          <span data-tour="account" aria-label="Preferences" title="Preferences">
             <ApronIcon
               size={22}
               active={prefsOpen}
