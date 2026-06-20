@@ -620,12 +620,22 @@ async def kroger_location_get(request: Request):
     if not row:
         return {"location_id": "", "name": "", "address": ""}
     loc_id = row["location_id"]
-    # Try to look up store details from Kroger API
-    try:
-        from mealrunner.kroger import _headers, BASE_URL
-        import requests as _requests
-        resp = _requests.get(f"{BASE_URL}/locations/{loc_id}", headers=_headers(), timeout=10)
-        if resp.ok:
+    # Try to look up store details from Kroger API. Offloaded to a worker
+    # thread so a slow Kroger /locations response (up to 10s) doesn't freeze
+    # the event loop for every other in-flight request.
+    import anyio
+    from mealrunner.kroger import _headers, BASE_URL
+    import requests as _requests
+
+    def _fetch_location():
+        try:
+            return _requests.get(f"{BASE_URL}/locations/{loc_id}", headers=_headers(), timeout=(3, 7))
+        except Exception:
+            return None
+
+    resp = await anyio.to_thread.run_sync(_fetch_location)
+    if resp is not None and resp.ok:
+        try:
             data = resp.json().get("data", {})
             addr = data.get("address", {})
             return {
@@ -633,8 +643,8 @@ async def kroger_location_get(request: Request):
                 "name": data.get("name", "Kroger"),
                 "address": f"{addr.get('addressLine1', '')}, {addr.get('city', '')} {addr.get('state', '')} {addr.get('zipCode', '')}",
             }
-    except Exception:
-        pass
+        except Exception:
+            pass
     return {"location_id": loc_id, "name": "Kroger", "address": ""}
 
 
