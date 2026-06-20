@@ -2752,10 +2752,16 @@ async def submit_order(request: Request):
     kroger_user_id = body.get("kroger_user_id")
     token = None
 
+    # Token fetch may trigger a sync OAuth refresh POST to Kroger when
+    # the access token has expired (30-min lifetime). Run each call off
+    # the event loop so a slow refresh doesn't freeze every other in-flight
+    # request — same shape as the add_to_cart offload below.
+    import anyio
+
     if kroger_user_id:
         if kroger_user_id == real_user_id:
             # Using own account — no access check needed
-            token = get_user_token_from_db(conn, real_user_id)
+            token = await anyio.to_thread.run_sync(get_user_token_from_db, conn, real_user_id)
         else:
             # Using another member's account — verify household + allow_household
             hh_row = conn.execute(
@@ -2771,12 +2777,12 @@ async def submit_order(request: Request):
                     {"hh_id": hh_row["household_id"], "target_uid": kroger_user_id},
                 ).fetchone()
                 if member:
-                    token = get_user_token_from_db(conn, kroger_user_id)
+                    token = await anyio.to_thread.run_sync(get_user_token_from_db, conn, kroger_user_id)
         if not token:
             return {"ok": False, "error": "Selected account is not available."}
     else:
         # Try current user first
-        token = get_user_token_from_db(conn, real_user_id)
+        token = await anyio.to_thread.run_sync(get_user_token_from_db, conn, real_user_id)
         if not token:
             # Fall back to any household member's token that has opted in
             hh_row = conn.execute(
@@ -2792,7 +2798,7 @@ async def submit_order(request: Request):
                     {"hh_id": hh_row["household_id"]},
                 ).fetchone()
                 if hh_tokens:
-                    token = get_user_token_from_db(conn, hh_tokens["user_id"])
+                    token = await anyio.to_thread.run_sync(get_user_token_from_db, conn, hh_tokens["user_id"])
 
         if not token:
             return {"ok": False, "error": "No linked store account. Connect in Preferences."}
