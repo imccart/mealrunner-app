@@ -213,7 +213,6 @@ def _process_household_invite(conn, user_id: str, email: str) -> None:
     # Reassign all of this user's data to the household owner
     tables = [
         "meals", "grocery_state", "grocery_items", "receipt_extra_items",
-        "regulars", "pantry",
         "product_preferences", "learning_dismissed",
         "meal_item_overrides", "settings", "recipes",
     ]
@@ -258,7 +257,6 @@ def _claim_default_data(conn, user_id: str) -> None:
 
     tables = [
         "meals", "grocery_state", "grocery_items", "receipt_extra_items",
-        "regulars", "pantry",
         "product_preferences", "learning_dismissed",
         "meal_item_overrides", "settings", "recipes",
     ]

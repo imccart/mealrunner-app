@@ -1,4 +1,4 @@
-"""Grocery list builder: dedup, pantry subtraction, store split."""
+"""Grocery list builder: dedup and store split."""
 
 from __future__ import annotations
 

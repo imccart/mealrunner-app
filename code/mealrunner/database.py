@@ -139,16 +139,6 @@ recipe_ingredients = Table(
     Column("component", Text, nullable=False, server_default=text("''")),
 )
 
-pantry = Table(
-    "pantry", metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("user_id", Text, nullable=False, server_default=text("'default'")),
-    Column("ingredient_id", Integer, ForeignKey("ingredients.id"), nullable=False),
-    Column("quantity", Float, nullable=False),
-    Column("unit", Text, nullable=False),
-    Column("updated_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
-)
-
 meals = Table(
     "meals", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -220,17 +210,6 @@ product_ratings = Table(
     Column("brand", Text, nullable=False, server_default=text("''")),
     Column("product_key", Text, nullable=False, server_default=text("''")),
     UniqueConstraint("user_id", "product_key"),
-)
-
-regulars = Table(
-    "regulars", metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("user_id", Text, nullable=False, server_default=text("'default'")),
-    Column("name", Text, nullable=False),
-    Column("ingredient_id", Integer, ForeignKey("ingredients.id")),
-    Column("shopping_group", Text, nullable=False, server_default=text("''")),
-    Column("store_pref", Text, nullable=False, server_default=text("'either'")),
-    Column("active", Integer, nullable=False, server_default=text("0")),
 )
 
 # Unified staples table. Replaces the legacy regulars + pantry split: from

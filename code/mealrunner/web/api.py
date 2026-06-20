@@ -5295,10 +5295,8 @@ _USER_DELETE_SQL = [
     "DELETE FROM community_data WHERE user_id = :uid",
     "DELETE FROM receipt_extra_items WHERE user_id = :uid",
     "DELETE FROM tips WHERE user_id = :uid",
-    "DELETE FROM pantry WHERE user_id = :uid",
     "DELETE FROM product_preferences WHERE user_id = :uid",
     "DELETE FROM product_ratings WHERE user_id = :uid",
-    "DELETE FROM regulars WHERE user_id = :uid",
     "DELETE FROM staples WHERE user_id = :uid",
     "DELETE FROM learning_dismissed WHERE user_id = :uid",
     "DELETE FROM meal_item_overrides WHERE user_id = :uid",
@@ -5507,8 +5505,8 @@ async def e2e_cleanup(body: dict):
         return {"ok": True, "deleted": 0}
 
     user_scoped = [
-        "magic_links", "sessions", "recipes", "pantry", "meals",
-        "product_preferences", "product_ratings", "regulars",
+        "magic_links", "sessions", "recipes", "meals",
+        "product_preferences", "product_ratings",
         "grocery_state", "grocery_items", "receipt_extra_items",
         "rate_limits", "learning_dismissed",
         "meal_item_overrides", "household_members", "user_feedback",

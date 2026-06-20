@@ -50,10 +50,8 @@ def init_db(conn: DictConnection) -> None:
         for name, fn in [
             ("accepted_to_on_grocery", _migrate_accepted_to_on_grocery),
             ("ratings_to_table", _migrate_ratings_to_table),
-            ("to_regulars", _migrate_to_regulars),
             ("slots_to_meals", _migrate_slots_to_meals),
             ("shopping_groups", _migrate_shopping_groups),
-            ("regulars_default_inactive", _migrate_regulars_default_inactive),
             ("onboarding_marker", _migrate_onboarding_marker),
             ("create_default_user", _migrate_create_default_user),
             ("create_households", _migrate_create_households),
@@ -85,6 +83,10 @@ def init_db(conn: DictConnection) -> None:
     _migrate_drop_legacy_single_user_uniques(conn)
     print("[db] legacy uniques migration done", flush=True)
 
+    print("[db] Running drop-legacy-tables migration...", flush=True)
+    _migrate_drop_legacy_tables(conn)
+    print("[db] legacy tables drop done", flush=True)
+
     print("[db] Running consolidate-staples migration...", flush=True)
     _migrate_consolidate_staples(conn)
     print("[db] consolidate-staples migration done", flush=True)
@@ -115,8 +117,6 @@ _TIMESTAMP_COLUMNS = [
     ("meal_plans", "created_at"),
     ("meals", "created_at"),
     ("nearby_stores", "created_at"),
-    ("pantry", "last_bought_at"),
-    ("pantry", "updated_at"),
     ("product_preferences", "last_picked"),
     ("product_prices", "fetched_at"),
     ("product_ratings", "created_at"),
@@ -125,8 +125,6 @@ _TIMESTAMP_COLUMNS = [
     ("product_scores", "score_fetched_at"),
     ("rate_limits", "window_start"),
     ("receipt_extra_items", "created_at"),
-    ("regulars", "created_at"),
-    ("regulars", "last_bought_at"),
     ("sessions", "created_at"),
     ("sessions", "expires_at"),
     ("settings", "updated_at"),
@@ -334,30 +332,10 @@ def _migrate_grocery_trips_to_state(conn: DictConnection) -> None:
 
 
 def _migrate_drop_legacy_single_user_uniques(conn: DictConnection) -> None:
-    """Drop UNIQUE-on-name leftovers from the single-user era of the schema.
+    """Drop UNIQUE-on-name leftover on learning_dismissed from the single-user
+    era of the schema. PK on `name` alone collided across users.
 
-    Symptom we hit on 2026-05-03: an e2e test for the regulars+meal overlap
-    case 500'd because `regulars.name` had a global UNIQUE constraint
-    (`regulars_name_key`). Once any user added a regular for "chicken thighs",
-    no other user could — INSERT failed with a unique violation. Same shape
-    for `learning_dismissed`: PRIMARY KEY on `name` alone, so cross-user
-    dismissals collided.
-
-    These constraints predate the move to multi-user / household-shared data.
-    Application-level dedup at `regulars.add_regular` is keyed on
-    `(user_id, name)`, so dropping the global unique is safe — the app
-    already protects against per-user duplicates.
-
-    For `learning_dismissed`: the `INSERT ... ON CONFLICT DO NOTHING` in
-    `/regulars` POST relies on a constraint to suppress dupes. With the PK
-    on `name` removed there's no constraint to potentially conflict; the
-    ON CONFLICT clause becomes a no-op (which is the intended semantics —
-    duplicate dismissals are harmless). A proper composite uniqueness
-    over `(user_id, name, kind)` could be added later if dedup is wanted,
-    but it's not required for correctness.
-
-    Idempotent: each statement is wrapped in try/except so a missing
-    constraint or a previously-applied migration is a no-op.
+    Idempotent: wrapped in try/except so a previously-applied migration is a no-op.
     """
     # Short lock timeout so ALTER TABLE doesn't block deploys.
     try:
@@ -365,48 +343,7 @@ def _migrate_drop_legacy_single_user_uniques(conn: DictConnection) -> None:
     except Exception:
         pass
 
-    # 1. regulars.name global unique → drop. App-level dedup is per-user.
-    try:
-        rows = conn.execute(text("""
-            SELECT con.conname
-            FROM pg_constraint con
-            JOIN pg_class rel ON rel.oid = con.conrelid
-            JOIN pg_attribute att ON att.attrelid = con.conrelid
-            JOIN unnest(con.conkey) AS cols(colnum) ON att.attnum = cols.colnum
-            WHERE rel.relname = 'regulars'
-              AND con.contype = 'u'
-              AND att.attname = 'name'
-            GROUP BY con.conname
-            HAVING COUNT(*) = 1
-        """)).fetchall()
-        for row in rows:
-            try:
-                conn.execute(text(f'ALTER TABLE regulars DROP CONSTRAINT IF EXISTS "{row[0]}"'))
-                print(f"[db] dropped legacy regulars.name unique: {row[0]}", flush=True)
-            except Exception as e:
-                print(f"[db] skip drop {row[0]}: {e}", flush=True)
-    except Exception as e:
-        print(f"[db] regulars unique probe skipped: {e}", flush=True)
-    # Also drop a bare unique INDEX on regulars.name (covers the case where
-    # the index isn't backed by a constraint).
-    try:
-        rows = conn.execute(text("""
-            SELECT indexname FROM pg_indexes
-            WHERE tablename = 'regulars'
-              AND indexdef LIKE '%UNIQUE%'
-              AND indexdef LIKE '%(name)%'
-              AND indexdef NOT LIKE '%user_id%'
-        """)).fetchall()
-        for row in rows:
-            try:
-                conn.execute(text(f'DROP INDEX IF EXISTS "{row[0]}"'))
-                print(f"[db] dropped legacy regulars.name unique index: {row[0]}", flush=True)
-            except Exception as e:
-                print(f"[db] skip drop index {row[0]}: {e}", flush=True)
-    except Exception as e:
-        print(f"[db] regulars index probe skipped: {e}", flush=True)
-
-    # 2. learning_dismissed: PK on `name` alone is the same single-user
+    # learning_dismissed: PK on `name` alone is the single-user
     # leftover. Drop the PK; the table doesn't need a primary key for the
     # current use (INSERT ... ON CONFLICT DO NOTHING degrades to plain
     # INSERT, which is fine).
@@ -431,6 +368,24 @@ def _migrate_drop_legacy_single_user_uniques(conn: DictConnection) -> None:
                 print(f"[db] skip drop {row[0]}: {e}", flush=True)
     except Exception as e:
         print(f"[db] learning_dismissed PK probe skipped: {e}", flush=True)
+
+
+def _migrate_drop_legacy_tables(conn: DictConnection) -> None:
+    """Drop the legacy `regulars` and `pantry` tables. Their data has been
+    consolidated into `staples` and nothing in the live app reads them.
+    Idempotent via IF EXISTS.
+    """
+    for table in ("regulars", "pantry"):
+        try:
+            conn.execute(text(f"DROP TABLE IF EXISTS {table}"))
+            conn.commit()
+            print(f"[db] dropped legacy table {table}", flush=True)
+        except Exception as e:
+            print(f"[db] drop {table} skipped: {e}", flush=True)
+            try:
+                conn.raw.rollback()
+            except Exception:
+                pass
 
 
 def _migrate_consolidate_staples(conn: DictConnection) -> None:
@@ -527,9 +482,6 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("trip_items", "buy_elsewhere_at", "TEXT"),
         ("receipt_extra_items", "dismissed", "INTEGER NOT NULL DEFAULT 0"),
         ("trip_items", "checked_at", "TEXT"),
-        ("regulars", "last_bought_at", "TEXT"),
-        ("regulars", "created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
-        ("pantry", "last_bought_at", "TEXT"),
         ("recipes", "notes", "TEXT"),
         ("brand_ownership", "category", "TEXT NOT NULL DEFAULT ''"),
         ("users", "first_name", "TEXT NOT NULL DEFAULT ''"),
@@ -564,9 +516,6 @@ def _run_column_migrations(conn: DictConnection) -> None:
         # WHERE recipe_id IN (...) queries; FK alone doesn't get an
         # auto-index on the source side.
         ("idx_recipe_ingredients_recipe", "recipe_ingredients", "recipe_id"),
-        # pantry lookup is keyed by (user_id, ingredient_id) on every
-        # grocery list build.
-        ("idx_pantry_user_ingredient", "pantry", "user_id, ingredient_id"),
     ]
     for idx_name, table_name, columns in indexes:
         try:
@@ -867,51 +816,6 @@ def _migrate_ratings_to_table(conn: DictConnection) -> None:
         pass
 
 
-def _migrate_to_regulars(conn: DictConnection) -> None:
-    """One-time: merge essentials + pantry staples into regulars."""
-    count = conn.execute(text("SELECT COUNT(*) AS n FROM regulars")).fetchone()
-    if count["n"] > 0:
-        return
-
-    try:
-        essentials_rows = conn.execute(text("SELECT * FROM essentials")).fetchall()
-        for e in essentials_rows:
-            ing = conn.execute(text(
-                "SELECT id FROM ingredients WHERE LOWER(name) = LOWER(:name)"
-            ), {"name": e["name"]}).fetchone()
-            conn.execute(text(
-                """INSERT INTO regulars (name, ingredient_id, shopping_group, store_pref, active)
-                   VALUES (:name, :ing_id, :group, :store, :active)
-                   ON CONFLICT (name) DO NOTHING"""
-            ), {
-                "name": e["name"],
-                "ing_id": ing["id"] if ing else None,
-                "group": e["shopping_group"],
-                "store": e["store_pref"],
-                "active": e["active"],
-            })
-    except Exception:
-        pass
-
-    try:
-        staples = conn.execute(text(
-            "SELECT id, name, aisle, store_pref FROM ingredients WHERE is_pantry_staple = 1"
-        )).fetchall()
-        for s in staples:
-            conn.execute(text(
-                """INSERT INTO regulars (name, ingredient_id, shopping_group, store_pref, active)
-                   VALUES (:name, :ing_id, :group, :store, 1)
-                   ON CONFLICT (name) DO NOTHING"""
-            ), {
-                "name": s["name"],
-                "ing_id": s["id"],
-                "group": s["aisle"] or "Other",
-                "store": s["store_pref"],
-            })
-    except Exception:
-        pass
-
-
 def _migrate_slots_to_meals(conn: DictConnection) -> None:
     """One-time: convert meal_plan_slots to flat meals table."""
     from datetime import date, timedelta
@@ -1033,43 +937,6 @@ def _migrate_shopping_groups(conn: DictConnection) -> None:
             "UPDATE ingredients SET aisle = 'Spices & Baking' WHERE LOWER(name) = :name AND aisle IN ('Condiments & Sauces', 'Pasta & Grains', 'Other')"
         ), {"name": item})
 
-    for old_group, new_group in _GROUP_REMAP.items():
-        conn.execute(text(
-            "UPDATE regulars SET shopping_group = :new WHERE shopping_group = :old"
-        ), {"new": new_group, "old": old_group})
-
-    for item in _BREAD_ITEMS:
-        conn.execute(text(
-            "UPDATE regulars SET shopping_group = 'Bread & Bakery' WHERE LOWER(name) = :name AND shopping_group = 'Pasta & Grains'"
-        ), {"name": item})
-
-    for item in _SPICE_ITEMS:
-        conn.execute(text(
-            "UPDATE regulars SET shopping_group = 'Spices & Baking' WHERE LOWER(name) = :name AND shopping_group IN ('Condiments & Sauces', 'Pasta & Grains', 'Other')"
-        ), {"name": item})
-
-    try:
-        for old_group, new_group in _GROUP_REMAP.items():
-            conn.execute(text(
-                "UPDATE essentials SET shopping_group = :new WHERE shopping_group = :old"
-            ), {"new": new_group, "old": old_group})
-    except Exception:
-        pass
-
-
-def _migrate_regulars_default_inactive(conn: DictConnection) -> None:
-    """One-time: flip all regulars to inactive."""
-    row = conn.execute(text(
-        "SELECT COUNT(*) AS n FROM regulars WHERE active = 0"
-    )).fetchone()
-    if row["n"] > 0:
-        return
-    row = conn.execute(text(
-        "SELECT COUNT(*) AS n FROM regulars WHERE active = 1"
-    )).fetchone()
-    if row["n"] > 0:
-        conn.execute(text("UPDATE regulars SET active = 0"))
-
 
 def _migrate_onboarding_marker(conn: DictConnection) -> None:
     """One-time: move filesystem onboarding marker to settings table."""
@@ -1171,7 +1038,7 @@ def _migrate_default_user_id_rows(conn: DictConnection) -> None:
         return
 
     real_uid = user["id"]
-    for table in ("recipes", "meals", "regulars", "pantry",
+    for table in ("recipes", "meals",
                   "grocery_state", "grocery_items", "receipt_extra_items",
                   "product_preferences", "learning_dismissed", "meal_item_overrides", "stores"):
         try:
