@@ -488,43 +488,8 @@ def _migrate_consolidate_staples(conn: DictConnection) -> None:
         print(f"[db] staples table create skipped: {e}", flush=True)
         return
 
-    try:
-        result = conn.execute(text("""
-            INSERT INTO staples (user_id, name, ingredient_id, shopping_group, store_pref, mode)
-            SELECT r.user_id, r.name, r.ingredient_id, r.shopping_group, r.store_pref, 'every_trip'
-            FROM regulars r
-            WHERE NOT EXISTS (
-                SELECT 1 FROM staples s
-                WHERE s.user_id = r.user_id
-                  AND (
-                    (s.ingredient_id IS NOT NULL AND s.ingredient_id = r.ingredient_id)
-                    OR (s.ingredient_id IS NULL AND r.ingredient_id IS NULL
-                        AND LOWER(s.name) = LOWER(r.name))
-                  )
-            )
-        """))
-        if result.rowcount:
-            print(f"[db] copied {result.rowcount} regulars rows into staples", flush=True)
-    except Exception as e:
-        print(f"[db] regulars → staples copy skipped: {e}", flush=True)
-
-    try:
-        result = conn.execute(text("""
-            INSERT INTO staples (user_id, name, ingredient_id, shopping_group, mode, last_bought_at, updated_at)
-            SELECT p.user_id, i.name, p.ingredient_id,
-                   COALESCE(i.aisle, '') AS shopping_group,
-                   'keep_on_hand', p.last_bought_at, p.updated_at
-            FROM pantry p
-            JOIN ingredients i ON i.id = p.ingredient_id
-            WHERE NOT EXISTS (
-                SELECT 1 FROM staples s
-                WHERE s.user_id = p.user_id AND s.ingredient_id = p.ingredient_id
-            )
-        """))
-        if result.rowcount:
-            print(f"[db] copied {result.rowcount} pantry rows into staples", flush=True)
-    except Exception as e:
-        print(f"[db] pantry → staples copy skipped: {e}", flush=True)
+    # Legacy regulars→staples and pantry→staples copies removed: they ran on
+    # every cold start and silently re-added staples the user had just deleted.
 
 
 def _run_column_migrations(conn: DictConnection) -> None:
