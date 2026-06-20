@@ -2567,18 +2567,31 @@ async def price_comparison(request: Request):
         if home_zip_row:
             zip_code = home_zip_row["value"]
         if not zip_code:
-            try:
-                from mealrunner.kroger import _headers, BASE_URL
-                import requests as _requests
-                resp = _requests.get(f"{BASE_URL}/locations/{home_loc}", headers=_headers(), timeout=10)
-                if resp.ok:
+            # Offload the Kroger /locations call so a slow Kroger response
+            # doesn't freeze the event loop for every other in-flight request.
+            from mealrunner.kroger import _headers, BASE_URL
+            import requests as _requests
+            import anyio
+
+            def _fetch_home_location():
+                try:
+                    return _requests.get(f"{BASE_URL}/locations/{home_loc}", headers=_headers(), timeout=(3, 7))
+                except Exception:
+                    return None
+
+            resp = await anyio.to_thread.run_sync(_fetch_home_location)
+            if resp is not None and resp.ok:
+                try:
                     zip_code = resp.json().get("data", {}).get("address", {}).get("zipCode", "")
-            except Exception:
-                pass
+                except Exception:
+                    pass
         if zip_code:
             from mealrunner.stores import refresh_nearby_stores
+            import anyio
             try:
-                refresh_nearby_stores(conn, user_id, home_loc, zip_code)
+                # refresh_nearby_stores does its own Kroger /locations search
+                # + DB writes. Offload the whole thing so it doesn't block.
+                await anyio.to_thread.run_sync(refresh_nearby_stores, conn, user_id, home_loc, zip_code)
                 nearby = get_nearby_stores(conn, user_id)
             except Exception:
                 pass
