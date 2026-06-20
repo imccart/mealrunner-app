@@ -27,14 +27,14 @@ function getStops() {
       desc: 'Upload your receipt to track what you bought.',
     },
     {
-      selectors: ['[data-tour="kitchen"]'],
-      label: 'Kitchen',
-      desc: 'Your meals, sides, staples, and product ratings.',
-    },
-    {
       selectors: ['[data-tour="tipjar"]'],
       label: 'Tip jar',
       desc: 'Be sure to tip your app maker.',
+    },
+    {
+      selectors: ['[data-tour="kitchen"]'],
+      label: 'Kitchen',
+      desc: 'Your meals, sides, staples, and product ratings.',
     },
     {
       selectors: ['[data-tour="account"]'],

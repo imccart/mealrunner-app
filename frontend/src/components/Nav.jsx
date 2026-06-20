@@ -44,7 +44,7 @@ export default function Nav({ page, setPage, kitchenOpen, onToggleKitchen, tipJa
               onClick={onToggleKitchen}
             />
           </span>
-          <span data-tour="account" aria-label="Preferences" title="Preferences">
+          <span data-tour="account" aria-label="Settings" title="Settings">
             <ApronIcon
               size={22}
               active={prefsOpen}
