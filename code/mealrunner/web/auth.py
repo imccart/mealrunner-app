@@ -51,6 +51,10 @@ PUBLIC_PATHS = {
     "/api/auth/me",
     "/api/auth/e2e-login",
     "/api/admin/e2e-cleanup",
+    # E2E auth bypass: callers haven't logged in yet (the whole point is to
+    # fetch the token so they CAN log in). The endpoint validates the
+    # PLAYWRIGHT_TEST_SECRET itself, same as e2e-login.
+    "/api/admin/e2e-magic-link-token",
     "/api/kroger/callback",
     # Stripe sends webhooks server-to-server with no session cookie. Auth
     # is handled by the Stripe-Signature HMAC verified inside the handler.
