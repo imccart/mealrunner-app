@@ -14,22 +14,6 @@ import { test, expect, makeTestEmail } from "./fixtures.js";
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET || "";
 
-// Retry helper mirroring the loginAs fixture — transient 5xx on staging
-// (cold-start pool warmup, DB hiccups) shouldn't fail the run when the
-// real auth path is fine.
-async function postWithRetry(page, url, body, attempts = 4) {
-  let last;
-  let lastBody = "";
-  for (let i = 1; i <= attempts; i++) {
-    last = await page.request.post(url, { data: body });
-    if (last.ok()) return last;
-    lastBody = await last.text();
-    if (last.status() < 500) break;
-    await new Promise((r) => setTimeout(r, i * 1500));
-  }
-  throw new Error(`${url} failed (${last.status()}): ${lastBody}`);
-}
-
 test.describe("Magic-link auth flow", () => {
   test("login → verify token → session cookie authenticates", async ({
     browser,
@@ -49,12 +33,15 @@ test.describe("Magic-link auth flow", () => {
         true,
       );
 
-      // ── Step 2: fetch the issued token (retry on transient 5xx) ──
-      const tokenResp = await postWithRetry(
-        page,
+      // ── Step 2: fetch the issued token ──
+      const tokenResp = await page.request.post(
         "/api/admin/e2e-magic-link-token",
-        { secret: TEST_SECRET, email },
+        { data: { secret: TEST_SECRET, email } },
       );
+      expect(
+        tokenResp.ok(),
+        `token fetch returned ${tokenResp.status()}: ${await tokenResp.text().catch(() => "")}`,
+      ).toBeTruthy();
       const { token } = await tokenResp.json();
       expect(token, "magic-link token was issued").toBeTruthy();
 
@@ -85,10 +72,9 @@ test.describe("Magic-link auth flow", () => {
       //    window must not produce a new session. We can't time-travel for
       //    the 60s grace, but we can confirm the same token doesn't issue
       //    fresh tokens from the admin endpoint (used_at is set).
-      const tokenResp2 = await postWithRetry(
-        page,
+      const tokenResp2 = await page.request.post(
         "/api/admin/e2e-magic-link-token",
-        { secret: TEST_SECRET, email },
+        { data: { secret: TEST_SECRET, email } },
       );
       const { token: token2 } = await tokenResp2.json();
       expect(
