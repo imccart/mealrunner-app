@@ -2881,11 +2881,14 @@ async def get_receipt(request: Request):
     # receipt is uploaded instead of mutating state on a read endpoint.
 
     # Get trip items, excluding acknowledged matched/substituted/dismissed
-    # rows (purchase log, not queue).
+    # rows (purchase log, not queue). Scope to the last 5 days — groceries
+    # are bought for meals 1-5 days out, so anything older is stale state
+    # from a prior trip's reconciliation that never got cleaned up.
     rows = conn.execute(
         text("""SELECT * FROM grocery_items WHERE user_id = :user_id
            AND NOT (receipt_status IN ('matched', 'substituted', 'dismissed')
                     AND receipt_acknowledged = 1)
+           AND added_at >= NOW() - INTERVAL '5 days'
            ORDER BY shopping_group, name"""),
         {"user_id": user_id},
     ).fetchall()
@@ -3153,6 +3156,7 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         text("""SELECT * FROM grocery_items WHERE user_id = :user_id
            AND receipt_status IN ('', 'not_fulfilled')
            AND have_it = 0 AND removed = 0
+           AND added_at >= NOW() - INTERVAL '5 days'
            ORDER BY name"""),
         {"user_id": user_id},
     ).fetchall()
