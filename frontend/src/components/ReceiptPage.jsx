@@ -187,6 +187,16 @@ export default function ReceiptPage() {
     } catch { /* ignore */ }
   }
 
+  // Same as handleMatchExtra but from the not_fulfilled side — user taps a
+  // candidate chip beneath a missing grocery item. Backend ships candidates
+  // as part of get_receipt; we just relay to the existing matchExtra endpoint.
+  const handleMatchCandidate = async (groceryItem, candidate) => {
+    try {
+      await api.matchExtra(candidate.item_name, groceryItem.id, candidate.price, candidate.upc)
+      loadReceipt()
+    } catch { /* ignore */ }
+  }
+
   const handleRate = async (item, rating) => {
     const upc = item.receipt_upc || item.product_upc || item.upc || ''
     const desc = item.receipt_item || item.product_name || item.name || item.item_name
@@ -455,6 +465,22 @@ export default function ReceiptPage() {
                   </div>
                   <button className="grocery-expand-btn">{'☰'}</button>
                 </div>
+                {item.candidate_matches && item.candidate_matches.length > 0 && (
+                  <div className={styles.receiptCandidates}>
+                    <div className={styles.receiptCandidatesLabel}>Maybe one of these?</div>
+                    <div className={styles.receiptCandidatesChips}>
+                      {item.candidate_matches.map(c => (
+                        <button
+                          key={c.item_name}
+                          className={styles.receiptCandidateChip}
+                          onClick={(e) => { e.stopPropagation(); handleMatchCandidate(item, c) }}
+                        >
+                          {c.display_name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {isExpanded && (
                   <div className={styles.receiptActionBar}>
                     <button className={`${styles.receiptActionBtn} ${styles.confirm}`} onClick={() => handleConfirmMatch(item.id)}>Got it</button>

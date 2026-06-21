@@ -2864,6 +2864,59 @@ async def submit_order(request: Request):
 # ── Receipt ───────────────────────────────────────────────
 
 
+def _friendly_receipt_name(raw: str) -> str:
+    """Clean a receipt item description for display as a candidate chip.
+    Drops trademark glyphs and the size suffix after the last comma so
+    'Mezzetta Family Recipes Marinara Sauce, 24.5 oz' becomes
+    'Mezzetta Family Recipes Marinara Sauce'."""
+    if not raw:
+        return ""
+    s = raw
+    for ch in ("®", "™", "©"):  # ®, ™, ©
+        s = s.replace(ch, "")
+    if "," in s:
+        s = s.rsplit(",", 1)[0]
+    return s.strip()
+
+
+def _candidate_extras_for_grocery(grocery_name: str, extras: list[dict], top_n: int = 3) -> list[dict]:
+    """Return up to top_n receipt extras that share any meaningful token
+    with the grocery item name. Loose inclusion predicate (any 3+ char
+    stem-aware overlap) so the UI can surface plausible matches the
+    strict auto-matcher's 0.6 threshold rejected. User picks which (if
+    any) is the real match — no threshold tuning chase."""
+    import re
+
+    def _toks(s: str) -> set[str]:
+        return {w for w in re.sub(r"[^a-z0-9 ]", " ", (s or "").lower()).split() if len(w) >= 3}
+
+    g_words = _toks(grocery_name)
+    if not g_words:
+        return []
+    scored: list[tuple[int, dict]] = []
+    for e in extras:
+        e_words = _toks(e.get("item_name", ""))
+        overlap = 0
+        for gw in g_words:
+            for ew in e_words:
+                # Stem-aware: "beans" matches "bean", "blend" matches "blended"
+                if gw.startswith(ew) or ew.startswith(gw):
+                    overlap += 1
+                    break
+        if overlap > 0:
+            scored.append((overlap, e))
+    scored.sort(key=lambda x: -x[0])
+    return [
+        {
+            "item_name": e["item_name"],
+            "display_name": _friendly_receipt_name(e["item_name"]),
+            "price": e.get("price"),
+            "upc": e.get("upc", ""),
+        }
+        for _, e in scored[:top_n]
+    ]
+
+
 @router.get("/receipt")
 async def get_receipt(request: Request):
     """Get receipt/reconciliation state for the active trip."""
@@ -2989,6 +3042,14 @@ async def get_receipt(request: Request):
         extras = [{"item_name": r["item_name"], "price": r["price"], "upc": r["upc"], "brand": r["brand"]} for r in extras_rows]
     except Exception:
         extras = []
+
+    # Attach candidate matches to each not_fulfilled item so the receipt
+    # page can render "Possible matches?" chips. Loose inclusion lets the
+    # user rescue cases the strict matcher missed (hyphen-collapse on
+    # tri-blend/tri-bean, frozen pizza vs Pepperoni Pizza, etc.) without
+    # us chasing every normalizer edge case in the auto-matcher itself.
+    for item in not_fulfilled:
+        item["candidate_matches"] = _candidate_extras_for_grocery(item["name"], extras)
 
     return {
         "has_trip": True,
