@@ -15,15 +15,23 @@ function makeTestEmail() {
 }
 
 async function loginAs(page, email) {
-  const resp = await page.request.post("/api/auth/e2e-login", {
-    data: { email, secret: TEST_SECRET },
-  });
-  if (!resp.ok()) {
-    throw new Error(
-      `e2e-login failed (${resp.status()}): ${await resp.text()}`,
-    );
+  // Retry on 5xx with a short backoff. The first request of a CI run can
+  // hit a still-warming Railway container, the DB pool's first slot can
+  // take a moment to handshake, and either path can surface as a transient
+  // 500. Retries here are cheap and turn cold-start noise into a non-event.
+  let lastResp;
+  let lastBody = "";
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    lastResp = await page.request.post("/api/auth/e2e-login", {
+      data: { email, secret: TEST_SECRET },
+    });
+    if (lastResp.ok()) return await lastResp.json();
+    lastBody = await lastResp.text();
+    // Only retry transient server failures, not auth/validation errors
+    if (lastResp.status() < 500) break;
+    await new Promise((r) => setTimeout(r, attempt * 1500));
   }
-  return await resp.json();
+  throw new Error(`e2e-login failed (${lastResp.status()}): ${lastBody}`);
 }
 
 async function deleteAllTestUsers(baseURL) {

@@ -14,21 +14,10 @@ import { test, expect, makeTestEmail } from "./fixtures.js";
 
 const TEST_SECRET = process.env.PLAYWRIGHT_TEST_SECRET || "";
 
-// Known failure documented in e2e/README.md "Known failures": the
-// /api/admin/e2e-magic-link-token helper is flaky on staging (suspected
-// staging DB perf / OOM restarts), causing intermittent failures of the
-// happy-path login flow. The real production auth path is fine; the
-// companion bad-token test below still runs and validates the failure
-// path. Skip the happy-path test on staging so CI failures stop being
-// drowned in environmental noise. Re-enable once staging stabilises.
-const IS_STAGING = (process.env.PLAYWRIGHT_BASE_URL || "").includes("staging");
-
 test.describe("Magic-link auth flow", () => {
   test("login → verify token → session cookie authenticates", async ({
     browser,
   }) => {
-    test.skip(IS_STAGING, "Happy-path login flow is flaky on staging (see e2e/README.md Known failures)");
-
     const context = await browser.newContext();
     const page = await context.newPage();
     const email = makeTestEmail();
