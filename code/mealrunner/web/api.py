@@ -1869,6 +1869,97 @@ _search_cache: dict[str, tuple[float, dict]] = {}  # {term: (timestamp, response
 _SEARCH_CACHE_TTL = 1200  # 20 minutes — matches a typical shopping session
 _SEARCH_CACHE_MAX = 200
 
+
+def _baseline_prices_for_upcs(conn, upcs: list[str], location_id: str, days: int = 90) -> dict[str, float]:
+    """Median observed price per UPC at this location over the last N days.
+
+    Used as the "your usual" reference on each product row so the user can
+    see whether today's price is below or above their typical experience.
+    product_prices has no fulfillment column today, so this is across modes
+    — practical compromise; can tighten later if a fulfillment column lands.
+    Returns {upc: median_price} for UPCs that have at least one observation.
+    """
+    if not upcs:
+        return {}
+    ph = ", ".join(f":u{i}" for i in range(len(upcs)))
+    params = {f"u{i}": u for i, u in enumerate(upcs)}
+    params["loc"] = location_id
+    params["interval"] = f"{days} days"
+    rows = conn.execute(
+        text(f"""SELECT upc,
+                        percentile_cont(0.5) WITHIN GROUP (ORDER BY price) AS median_price
+                 FROM product_prices
+                 WHERE upc IN ({ph})
+                   AND location_id = :loc
+                   AND price IS NOT NULL AND price > 0
+                   AND fetched_at >= NOW() - (:interval)::interval
+                 GROUP BY upc"""),
+        params,
+    ).fetchall()
+    return {r["upc"]: float(r["median_price"]) for r in rows if r["median_price"] is not None}
+
+
+def _parse_unit_price(size_str: str, price: float | None) -> tuple[float | None, str | None]:
+    """Parse Kroger's size string and return (unit_price, unit_label) or
+    (None, None) when the format isn't one we handle. Frontend renders "—"
+    for the None case so the row doesn't break on unparseable inputs.
+
+    Supported patterns (Kroger's most common ~90%):
+      - "16 oz", "32 fl oz", "1 lb", "16 ct" — simple weight/volume/count
+      - "16 ct / 22.5 oz" — multipack, treats the second number as the total
+      - "8 pk / 12 fl oz" — pack of N at Y each, total = N*Y
+      - "1/2 gal" — fractional volume
+    """
+    if not size_str or price is None or price <= 0:
+        return None, None
+    import re
+
+    s = size_str.lower().strip()
+    s = re.sub(r"\([^)]*\)", "", s).strip()  # strip "(approx.)" etc
+
+    def _label(unit: str) -> str:
+        u = unit.replace(".", "")
+        if u in ("fl oz", "floz"):
+            return "/fl oz"
+        if u in ("lbs", "lb"):
+            return "/lb"
+        return f"/{u}"
+
+    # Multipack: "X pk / Y <unit>" → total = X * Y
+    m = re.match(r"(\d+(?:\.\d+)?)\s*pk\s*/\s*(\d+(?:\.\d+)?)\s*(fl\.?\s*oz|oz|ml|l|lb|lbs)\b", s)
+    if m:
+        x, y, unit = float(m.group(1)), float(m.group(2)), m.group(3)
+        total = x * y
+        if total > 0:
+            return round(price / total, 3), _label(unit)
+
+    # Multipack: "X ct / Y <unit>" → total = Y (Y is reported as the aggregate)
+    m = re.match(r"(\d+(?:\.\d+)?)\s*ct\s*/\s*(\d+(?:\.\d+)?)\s*(fl\.?\s*oz|oz|ml|l|lb|lbs)\b", s)
+    if m:
+        y, unit = float(m.group(2)), m.group(3)
+        if y > 0:
+            return round(price / y, 3), _label(unit)
+
+    # Fractional volume: "1/2 gal", "1/4 gal"
+    m = re.match(r"(\d+)\s*/\s*(\d+)\s*(gal|gallon)", s)
+    if m:
+        num, denom = float(m.group(1)), float(m.group(2))
+        if denom > 0:
+            gallons = num / denom
+            fl_oz = gallons * 128
+            if fl_oz > 0:
+                return round(price / fl_oz, 3), "/fl oz"
+
+    # Simple: "X <unit>" — weight, volume, count
+    m = re.match(r"(\d+(?:\.\d+)?)\s*(fl\.?\s*oz|oz|lb|lbs|g|kg|ml|l|ct|each|gal)\b", s)
+    if m:
+        x, unit = float(m.group(1)), m.group(2)
+        if x > 0:
+            return round(price / x, 3), _label(unit) if unit not in ("each",) else "/each"
+
+    return None, None
+
+
 def _build_search_response(conn, user_id: str, item_name: str, ff: str, start: int, user_location_id: str) -> dict:
     """Build the full /order/search response for a single item.
 
@@ -2192,11 +2283,21 @@ def _build_search_response(conn, user_id: str, item_name: str, ff: str, start: i
         if parent and parent not in violation_cache:
             violation_cache[parent] = get_company_violations(conn, parent)
 
+    # Batch the "your usual" baseline lookup for every product UPC at this
+    # store, last 90 days. One SELECT median()-per-upc instead of N lookups.
+    baseline_by_upc = _baseline_prices_for_upcs(
+        conn, [p.upc for p in products if p.upc], user_location_id, days=90,
+    )
+
     result = []
     for p in products:
         rating = product_ratings.get(p.upc, 0)
         parent = product_parents[p.upc or p.product_id]
         violations = violation_cache.get(parent) if parent not in ("We're not sure",) else None
+        # Use promo when available for unit-price math — that's the price
+        # the user actually pays. Falls back to regular price.
+        effective_price = p.promo_price if p.promo_price else p.price
+        unit_price, unit_label = _parse_unit_price(p.size, effective_price)
         item = {
             "upc": p.upc,
             "product_id": p.product_id,
@@ -2205,6 +2306,9 @@ def _build_search_response(conn, user_id: str, item_name: str, ff: str, start: i
             "size": p.size,
             "price": p.price,
             "promo_price": p.promo_price,
+            "baseline_price": baseline_by_upc.get(p.upc),
+            "unit_price": unit_price,
+            "unit_label": unit_label,
             "in_stock": p.in_stock,
             "curbside": p.curbside,
             "nova": p.nova_group,
