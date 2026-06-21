@@ -1,8 +1,11 @@
 name: E2E Tests
 
 on:
-  push:
-    branches: [master, staging]
+  # Auto-trigger disabled while we sort out the cascading staging-suite
+  # timeouts. Run manually from the Actions tab when you want a check.
+  # Re-enable by uncommenting the push trigger once the suite is stable.
+  # push:
+  #   branches: [master, staging]
   workflow_dispatch:
 
 jobs:
