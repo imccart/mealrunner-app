@@ -392,6 +392,87 @@
   align-items: center;
 }
 
+/* ── Transparency block: 3 labeled rows + info dot ── */
+.productTransparency {
+  position: relative;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--tan, #ece6df);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+.transparencyInfoDot {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+.transparencyInfoDot:hover { color: var(--accent); }
+.transparencyRow {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding-right: 18px;
+}
+.transparencyLabel {
+  flex: 0 0 78px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.transparencyValue {
+  color: var(--dark);
+  font-weight: 500;
+}
+.transparencyUnknown {
+  color: var(--text-muted);
+  font-style: italic;
+  font-weight: 400;
+}
+.transparencyValueTappable {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.transparencyChevron {
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.transparencyLegend {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-light);
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--dark);
+  line-height: 1.5;
+}
+
+/* NOVA severity colors on the value text (1=good → 4=bad) */
+.nova1 { color: #1e7e34; }
+.nova2 { color: #6c9a3a; }
+.nova3 { color: #c87b00; }
+.nova4 { color: #b02a2a; }
+
+/* Nutri-Score colors A→E */
+.nutriA { color: #1e7e34; }
+.nutriB { color: #6c9a3a; }
+.nutriC { color: #c87b00; }
+.nutriD { color: #c44a1c; }
+.nutriE { color: #b02a2a; }
+
 .loadMoreBtn {
   display: block;
   width: 100%;

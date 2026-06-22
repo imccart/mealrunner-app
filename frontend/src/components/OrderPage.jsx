@@ -12,62 +12,76 @@ import styles from './OrderPage.module.css'
 const displayName = (item) =>
   item && item.quantity > 1 ? `${item.name} x ${item.quantity}` : item?.name || ''
 
-function NovaBadge({ nova }) {
-  if (!nova) return null
-  const labels = { 1: 'Minimal processing', 2: 'Processed ingredient', 3: 'Processed', 4: 'Ultra-processed' }
-  const cls = `${styles.novaBadge} ${styles[`nova${nova}`]}`
-  return <span className={cls}>NOVA {nova} {'\u00B7'} {labels[nova]}</span>
+const NOVA_LABELS = {
+  1: 'Minimally processed',
+  2: 'Processed ingredient',
+  3: 'Processed',
+  4: 'Ultra-processed',
 }
 
-function NutriBadge({ grade }) {
-  if (!grade) return null
-  const cls = `${styles.nutriBadge} ${styles[`nutri${grade.toUpperCase()}`]}`
-  return <span className={cls}>Nutri-Score {grade.toUpperCase()}</span>
-}
-
-function ProductInsights({ nova, nutriscore }) {
-  const [showInfo, setShowInfo] = useState(false)
-  if (!nova && !nutriscore) return null
-  return (
-    <div className={styles.productInsights}>
-      <NovaBadge nova={nova} />
-      <NutriBadge grade={nutriscore} />
-      <button className={styles.infoDot} onClick={(e) => { e.stopPropagation(); setShowInfo(!showInfo) }} title="What is this?">{'\u24D8'}</button>
-      {showInfo && (
-        <div className={styles.infoTooltip} onClick={(e) => e.stopPropagation()}>
-          {nova && <>NOVA classifies foods by processing level. </>}
-          {nutriscore && <>Nutri-Score rates nutritional quality (A=best). </>}
-          Data from Open Food Facts.
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ParentCoBadge({ brand, parentCompany, violations, onTapUnknown }) {
+function ProductTransparency({ nova, nutriscore, brand, parentCompany, violations, onTapUnknown }) {
   const [showInfo, setShowInfo] = useState(false)
   const [expanded, setExpanded] = useState(false)
-  if (!parentCompany) return null
-  const unknown = parentCompany === "We're not sure"
+
+  const novaText = nova ? `${nova}, ${NOVA_LABELS[nova]}` : 'Unknown'
+  const nutriText = nutriscore ? nutriscore.toUpperCase() : 'Unknown'
+  const parentUnknown = !parentCompany || parentCompany === "We're not sure"
+  const parentText = parentUnknown ? 'Unknown' : parentCompany
+
   const v = violations || {}
   const hasViolations = v.fda_total_recalls > 0
-  const hasDetails = !unknown && hasViolations
+  const parentExpandable = !parentUnknown && hasViolations
+
   return (
-    <div className={styles.parentCoWrap}>
-      <div
-        className={`${styles.parentCo}${unknown ? ` ${styles.unknown}` : ''}${hasDetails ? ` ${styles.expandable}` : ''}`}
-        onClick={unknown ? (e) => { e.stopPropagation(); e.preventDefault(); onTapUnknown(brand) } : hasDetails ? (e) => { e.stopPropagation(); e.preventDefault(); setExpanded(!expanded) } : undefined}
-      >
-        Parent Co.: {parentCompany}{unknown && ' \u00B7 ?'}
-        {hasDetails && <span className={styles.parentCoChevron}>{expanded ? '\u25B4' : '\u25BE'}</span>}
-        {!unknown && !hasDetails && <button className={styles.infoDot} onClick={(e) => { e.stopPropagation(); setShowInfo(!showInfo) }} title="What is this?">{'\u24D8'}</button>}
+    <div className={styles.productTransparency}>
+      <button
+        className={styles.transparencyInfoDot}
+        onClick={(e) => { e.stopPropagation(); setShowInfo(!showInfo) }}
+        title="What are these?"
+      >{'\u24D8'}</button>
+
+      <div className={styles.transparencyRow}>
+        <span className={styles.transparencyLabel}>NOVA</span>
+        <span className={`${styles.transparencyValue} ${nova ? styles[`nova${nova}`] : styles.transparencyUnknown}`}>
+          {novaText}
+        </span>
       </div>
+
+      <div className={styles.transparencyRow}>
+        <span className={styles.transparencyLabel}>Nutri-Score</span>
+        <span className={`${styles.transparencyValue} ${nutriscore ? styles[`nutri${nutriscore.toUpperCase()}`] : styles.transparencyUnknown}`}>
+          {nutriText}
+        </span>
+      </div>
+
+      <div className={styles.transparencyRow}>
+        <span className={styles.transparencyLabel}>Parent</span>
+        <span
+          className={`${styles.transparencyValue} ${parentUnknown ? styles.transparencyUnknown : ''} ${parentUnknown || parentExpandable ? styles.transparencyValueTappable : ''}`}
+          onClick={
+            parentUnknown
+              ? (e) => { e.stopPropagation(); e.preventDefault(); onTapUnknown(brand) }
+              : parentExpandable
+              ? (e) => { e.stopPropagation(); e.preventDefault(); setExpanded(!expanded) }
+              : undefined
+          }
+        >
+          {parentText}
+          {parentExpandable && (
+            <span className={styles.transparencyChevron}>{expanded ? '\u25B4' : '\u25BE'}</span>
+          )}
+        </span>
+      </div>
+
       {showInfo && (
-        <div className={styles.infoTooltip} onClick={(e) => e.stopPropagation()}>
-          Shows the parent company behind this brand, so you know who you're buying from.
+        <div className={styles.transparencyLegend} onClick={(e) => e.stopPropagation()}>
+          <strong>NOVA</strong> rates how processed a food is on a 1\u20134 scale.{' '}
+          <strong>Nutri-Score</strong> grades nutritional quality A (best) through E.{' '}
+          <strong>Parent</strong> shows the company that owns this brand. NOVA + Nutri-Score from Open Food Facts.
         </div>
       )}
-      {expanded && hasDetails && (
+
+      {expanded && parentExpandable && (
         <div className={styles.companyDetails} onClick={(e) => e.stopPropagation()}>
           <div className={styles.companyDetailsRow}>
             <span className={styles.companyDetailsLabel}>FDA food recalls</span>
@@ -752,8 +766,14 @@ export default function OrderPage() {
                         )}
                       </div>
                       {pref.in_stock === false && <div className={styles.outOfStockLabel}>{pref.unavailable_reason || 'Unavailable'}</div>}
-                      <ProductInsights nova={pref.nova} nutriscore={pref.nutriscore} />
-                      <ParentCoBadge brand={pref.brand} parentCompany={pref.parent_company} violations={pref.violations} onTapUnknown={(b) => setCommunityBrand(b || 'Unknown')} />
+                      <ProductTransparency
+                        nova={pref.nova}
+                        nutriscore={pref.nutriscore}
+                        brand={pref.brand}
+                        parentCompany={pref.parent_company}
+                        violations={pref.violations}
+                        onTapUnknown={(b) => setCommunityBrand(b || 'Unknown')}
+                      />
                     </div>
                   </button>
                 </div>
@@ -820,10 +840,14 @@ export default function OrderPage() {
                           <span className={styles.productRowSize}>{p.size}</span>
                         )}
                       </div>
-                      <div className={styles.productRowBadges}>
-                        <ProductInsights nova={p.nova} nutriscore={p.nutriscore} />
-                        <ParentCoBadge brand={p.brand} parentCompany={p.parent_company} violations={p.violations} onTapUnknown={(b) => setCommunityBrand(b || 'Unknown')} />
-                      </div>
+                      <ProductTransparency
+                        nova={p.nova}
+                        nutriscore={p.nutriscore}
+                        brand={p.brand}
+                        parentCompany={p.parent_company}
+                        violations={p.violations}
+                        onTapUnknown={(b) => setCommunityBrand(b || 'Unknown')}
+                      />
                       {!p.in_stock && <div className={styles.outOfStockLabel}>Unavailable</div>}
                     </div>
                   </button>
