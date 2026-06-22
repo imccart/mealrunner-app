@@ -449,6 +449,25 @@
   font-size: 10px;
   color: var(--text-muted);
 }
+.transparencyValueCol {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.transparencyRecallSummary {
+  font-size: 11px;
+  font-weight: 400;
+}
+.transparencyRecallClean {
+  color: #1e7e34;
+}
+.transparencyRecallSome {
+  color: #8a6d3b;
+}
+.transparencyRecallSerious {
+  color: #b02a2a;
+  font-weight: 500;
+}
 .transparencyLegend {
   margin-top: 6px;
   padding: 10px 12px;

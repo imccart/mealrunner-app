@@ -28,9 +28,19 @@ function ProductTransparency({ nova, nutriscore, brand, parentCompany, violation
   const parentUnknown = !parentCompany || parentCompany === "We're not sure"
   const parentText = parentUnknown ? 'Unknown' : parentCompany
 
-  const v = violations || {}
-  const hasViolations = v.fda_total_recalls > 0
-  const parentExpandable = !parentUnknown && hasViolations
+  const v = violations || null
+  const haveRecallData = v !== null && typeof v.fda_total_recalls === 'number'
+  const totalRecalls = haveRecallData ? v.fda_total_recalls : null
+  const seriousRecalls = haveRecallData ? (v.fda_class_i || 0) : 0
+  // Inline summary on the Parent sub-line. 0 IS data — surface it as a positive signal.
+  let recallSummary = null
+  if (haveRecallData) {
+    if (totalRecalls === 0) recallSummary = '0 FDA recalls'
+    else if (seriousRecalls > 0) recallSummary = `${totalRecalls} FDA recalls (${seriousRecalls} serious)`
+    else recallSummary = `${totalRecalls} FDA recall${totalRecalls === 1 ? '' : 's'}`
+  }
+  // Expandable details only when there's more to show (recent date, breakdown).
+  const parentExpandable = !parentUnknown && totalRecalls > 0
 
   return (
     <div className={styles.productTransparency}>
@@ -56,21 +66,28 @@ function ProductTransparency({ nova, nutriscore, brand, parentCompany, violation
 
       <div className={styles.transparencyRow}>
         <span className={styles.transparencyLabel}>Parent</span>
-        <span
-          className={`${styles.transparencyValue} ${parentUnknown ? styles.transparencyUnknown : ''} ${parentUnknown || parentExpandable ? styles.transparencyValueTappable : ''}`}
-          onClick={
-            parentUnknown
-              ? (e) => { e.stopPropagation(); e.preventDefault(); onTapUnknown(brand) }
-              : parentExpandable
-              ? (e) => { e.stopPropagation(); e.preventDefault(); setExpanded(!expanded) }
-              : undefined
-          }
-        >
-          {parentText}
-          {parentExpandable && (
-            <span className={styles.transparencyChevron}>{expanded ? '\u25B4' : '\u25BE'}</span>
+        <div className={styles.transparencyValueCol}>
+          <span
+            className={`${styles.transparencyValue} ${parentUnknown ? styles.transparencyUnknown : ''} ${parentUnknown || parentExpandable ? styles.transparencyValueTappable : ''}`}
+            onClick={
+              parentUnknown
+                ? (e) => { e.stopPropagation(); e.preventDefault(); onTapUnknown(brand) }
+                : parentExpandable
+                ? (e) => { e.stopPropagation(); e.preventDefault(); setExpanded(!expanded) }
+                : undefined
+            }
+          >
+            {parentText}
+            {parentExpandable && (
+              <span className={styles.transparencyChevron}>{expanded ? '\u25B4' : '\u25BE'}</span>
+            )}
+          </span>
+          {recallSummary && (
+            <span className={`${styles.transparencyRecallSummary} ${totalRecalls === 0 ? styles.transparencyRecallClean : (seriousRecalls > 0 ? styles.transparencyRecallSerious : styles.transparencyRecallSome)}`}>
+              {recallSummary}
+            </span>
           )}
-        </span>
+        </div>
       </div>
 
       {showInfo && (
