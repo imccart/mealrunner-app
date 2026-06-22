@@ -773,48 +773,61 @@ export default function OrderPage() {
                 <p>No products found.</p>
               </div>
             ) : (
-              <div className={styles.productGrid}>
-                {products.products.map(p => (
+              <div className={styles.productList}>
+                {products.products.map(p => {
+                  const effectivePrice = p.promo_price || p.price
+                  // 5% threshold so cents-of-noise don't flip the badge on/off
+                  const belowUsual = p.baseline_price && effectivePrice && effectivePrice < p.baseline_price * 0.95
+                  return (
                   <button
                     key={p.upc}
-                    className={`${styles.productCard}${!p.in_stock ? ` ${styles.outOfStock}` : ''}`}
+                    className={`${styles.productRow}${!p.in_stock ? ` ${styles.outOfStock}` : ''}`}
                     onClick={() => p.in_stock && handleSelect({
                       upc: p.upc, name: p.name,
                       brand: p.brand, size: p.size,
-                      price: p.promo_price || p.price,
+                      price: effectivePrice,
                       image: p.image,
                     })}
                     disabled={!p.in_stock}
                   >
-                    {p.image && (
-                      <div className={styles.productImage}>
-                        <img src={p.image} alt="" loading="lazy" />
-                      </div>
-                    )}
-                    <div className={styles.productInfo}>
-                      <div className={styles.productName}>{p.name}</div>
-                      <div className={styles.productMeta}>
-                        {p.brand && <span>{p.brand}</span>}
-                        {p.size && <span> {'\u00B7'} {p.size}</span>}
-                      </div>
-                      <div className={styles.productPriceRow}>
-                        {p.promo_price ? (
-                          <>
-                            <span className={styles.pricePromo}>{formatPrice(p.promo_price)}</span>
-                            <span className={styles.priceOriginal}>{formatPrice(p.price)}</span>
-                          </>
-                        ) : (
-                          <span className={styles.price}>{formatPrice(p.price)}</span>
+                    <div className={styles.productRowThumb}>
+                      {p.image
+                        ? <img src={p.image} alt="" loading="lazy" />
+                        : <div className={styles.productRowThumbBlank}></div>}
+                    </div>
+                    <div className={styles.productRowMain}>
+                      {p.brand && <div className={styles.productRowBrand}>{p.brand}</div>}
+                      <div className={styles.productRowName}>{p.name}</div>
+                      <div className={styles.productRowPrices}>
+                        <span className={styles.priceCurrent}>{formatPrice(effectivePrice)}</span>
+                        {p.promo_price && (
+                          <span className={styles.priceStruck}>{formatPrice(p.price)}</span>
                         )}
+                        {belowUsual && (
+                          <span className={styles.priceDealBadge}>Below usual</span>
+                        )}
+                        {p.rating === 1 && <span className={styles.prefStar}>{'\u{1F44D}'}</span>}
+                        {p.rating === -1 && <span className={styles.prefDown}>{'\u{1F44E}'}</span>}
+                      </div>
+                      <div className={styles.productRowRefs}>
+                        {p.baseline_price && (
+                          <span className={styles.priceRef}>Usually {formatPrice(p.baseline_price)}</span>
+                        )}
+                        {p.unit_price && p.unit_label && (
+                          <span className={styles.priceUnit}>{formatPrice(p.unit_price)}{p.unit_label}</span>
+                        )}
+                        {p.size && (
+                          <span className={styles.productRowSize}>{p.size}</span>
+                        )}
+                      </div>
+                      <div className={styles.productRowBadges}>
+                        <ProductInsights nova={p.nova} nutriscore={p.nutriscore} />
+                        <ParentCoBadge brand={p.brand} parentCompany={p.parent_company} violations={p.violations} onTapUnknown={(b) => setCommunityBrand(b || 'Unknown')} />
                       </div>
                       {!p.in_stock && <div className={styles.outOfStockLabel}>Unavailable</div>}
                     </div>
-                    <ProductInsights nova={p.nova} nutriscore={p.nutriscore} />
-                    <ParentCoBadge brand={p.brand} parentCompany={p.parent_company} violations={p.violations} onTapUnknown={(b) => setCommunityBrand(b || 'Unknown')} />
-                    {p.rating === 1 && <span className={styles.prefStar}>{'\u{1F44D}'}</span>}
-                    {p.rating === -1 && <span className={styles.prefDown}>{'\u{1F44E}'}</span>}
                   </button>
-                ))}
+                )})}
               </div>
             )}
             {products.has_more && (
