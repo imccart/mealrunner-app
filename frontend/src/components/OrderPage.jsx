@@ -75,9 +75,18 @@ function ProductTransparency({ nova, nutriscore, brand, parentCompany, violation
 
       {showInfo && (
         <div className={styles.transparencyLegend} onClick={(e) => e.stopPropagation()}>
-          <strong>NOVA</strong> rates how processed a food is on a 1\u20134 scale.{' '}
-          <strong>Nutri-Score</strong> grades nutritional quality A (best) through E.{' '}
-          <strong>Parent</strong> shows the company that owns this brand. NOVA + Nutri-Score from Open Food Facts.
+          <div className={styles.transparencyLegendItem}>
+            <strong>NOVA:</strong> how processed the food is (1 = minimal, 4 = ultra-processed)
+          </div>
+          <div className={styles.transparencyLegendItem}>
+            <strong>Nutri-Score:</strong> nutritional grade, A (best) through E
+          </div>
+          <div className={styles.transparencyLegendItem}>
+            <strong>Parent:</strong> the company that owns this brand
+          </div>
+          <div className={styles.transparencyLegendSource}>
+            NOVA + Nutri-Score from Open Food Facts
+          </div>
         </div>
       )}
 

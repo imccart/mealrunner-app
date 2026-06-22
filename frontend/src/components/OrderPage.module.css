@@ -451,13 +451,28 @@
 }
 .transparencyLegend {
   margin-top: 6px;
-  padding: 8px 10px;
-  background: var(--accent-bg);
-  border: 1px solid var(--accent-light);
+  padding: 10px 12px;
+  background: #f7f3ef;
+  border: 1px solid var(--tan, #ece6df);
   border-radius: 8px;
   font-size: 11px;
   color: var(--dark);
   line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.transparencyLegendItem strong {
+  color: var(--dark);
+  font-weight: 600;
+}
+.transparencyLegendSource {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--tan, #ece6df);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-style: italic;
 }
 
 /* NOVA severity colors on the value text (1=good → 4=bad) */
