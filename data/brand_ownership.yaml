@@ -712,6 +712,136 @@ brands:
     parent: "SC Johnson"
   - brand: "Planet Oat"
     parent: "HP Hood"
+
+  # ── Added 2026-06-22: verified expansion ────────────
+  # Each entry below verified via corporate "about" pages, SEC filings,
+  # or M&A press releases (parallel research agents). See session 88
+  # changelog for the audit trail and per-brand sources.
+
+  # ── Andros Group ──
+  - brand: "Bonne Maman"
+    parent: "Andros Group"
+
+  # ── B&G Foods (extension) ──
+  - brand: "Crisco"
+    parent: "B&G Foods"
+
+  # ── Bush's ──
+  - brand: "Bush's Best"
+    parent: "Bush's"
+
+  # ── Butterball (joint venture: Seaboard + Maxwell Farms) ──
+  - brand: "Butterball"
+    parent: "Seaboard Corporation"
+
+  # ── Chomps ──
+  - brand: "Chomps"
+    parent: ~
+
+  # ── Church & Dwight ──
+  - brand: "Arm & Hammer"
+    parent: "Church & Dwight"
+
+  # ── Clorox (extension) ──
+  - brand: "Glad"
+    parent: "Clorox"
+  - brand: "Hidden Valley"
+    parent: "Clorox"
+
+  # ── Colgate-Palmolive ──
+  - brand: "Colgate"
+    parent: "Colgate-Palmolive"
+  - brand: "Softsoap"
+    parent: "Colgate-Palmolive"
+
+  # ── Conagra Brands (extension) ──
+  - brand: "Odom's Tennessee Pride"
+    parent: "Conagra Brands"
+
+  # ── Death Wish Coffee Company ──
+  # Founder-led; TA Associates is a PE backer (stake size not public).
+  - brand: "Death Wish Coffee"
+    parent: ~
+
+  # ── Georgia-Pacific ──
+  - brand: "Dixie"
+    parent: "Georgia-Pacific"
+
+  # ── Hershey (extension) ──
+  - brand: "Pirate's Booty"
+    parent: "Hershey"
+
+  # ── Johnsonville ──
+  - brand: "Johnsonville"
+    parent: ~
+
+  # ── Kaulig Capital ──
+  - brand: "Kinder's"
+    parent: "Kaulig Capital"
+
+  # ── Kimberly-Clark ──
+  # Acquired Kenvue (Neutrogena's prior parent) Jan 2026, close expected H2 2026.
+  - brand: "Neutrogena"
+    parent: "Kimberly-Clark"
+
+  # ── Kraft Heinz (extension) ──
+  - brand: "Lea & Perrins"
+    parent: "Kraft Heinz"
+
+  # ── Kroger (extension) ──
+  - brand: "Simple Truth Organic"
+    parent: "Kroger"
+
+  # ── L Catterton ──
+  # Acquired majority of Good Culture Jan 2026 ($500M+).
+  - brand: "Good Culture"
+    parent: "L Catterton"
+
+  # ── Mars (via KIND, acquired Nature's Bakery Dec 2020) ──
+  - brand: "Nature's Bakery"
+    parent: "Mars"
+
+  # ── Mezzetta ──
+  - brand: "Mezzetta"
+    parent: ~
+
+  # ── Procter & Gamble (extension) ──
+  - brand: "Bounty"
+    parent: "Procter & Gamble"
+  - brand: "Cascade"
+    parent: "Procter & Gamble"
+
+  # ── Red Gold ──
+  - brand: "Red Gold"
+    parent: ~
+
+  # ── Reynolds Consumer Products ──
+  - brand: "Reynolds Wrap"
+    parent: ~
+
+  # ── Riverside Natural Foods ──
+  - brand: "MadeGood"
+    parent: "Riverside Natural Foods"
+
+  # ── S. C. Johnson & Son (extension) ──
+  - brand: "Windex"
+    parent: "S. C. Johnson & Son"
+
+  # ── Sauer Brands (ultimate PE owner: Advent International, Feb 2025) ──
+  - brand: "Mateo's"
+    parent: "Sauer Brands"
+
+  # ── Saputo ──
+  - brand: "Frigo"
+    parent: "Saputo"
+
+  # ── Unilever (Wellbeing Collective) ──
+  - brand: "OLLY"
+    parent: "Unilever"
+
+  # ── The Wonderful Company ──
+  - brand: "Wonderful"
+    parent: ~
   - brand: "Peet's"
     parent: "JDE Peet's"
   - brand: "JDE Peet's"
