@@ -2,7 +2,11 @@ name: E2E Tests
 
 on:
   push:
-    branches: [master, staging]
+    # Only master — pushing the same commit to both master and staging
+    # was firing two concurrent runs against the same STAGING_URL, which
+    # caused them to contend for users/pool/cleanup and one would fail
+    # spuriously. One trigger, one run.
+    branches: [master]
   workflow_dispatch:
 
 jobs:
