@@ -1070,18 +1070,6 @@ async def get_grocery(request: Request):
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=24)
 
-    # Canonical names the user has already handled (bought / checked / have-it)
-    # on SOME row. Used to suppress 'not_fulfilled' leftovers of the same item
-    # below — a reconciliation mismatch (variant name, per-meal duplicate row)
-    # otherwise resurfaces an already-handled item as an active "grab elsewhere"
-    # row. See feedback #110.
-    from mealrunner.normalize import compare_key
-    handled_keys: set[str] = set()
-    for r in rows:
-        rs0 = (r["receipt_status"] or "") if "receipt_status" in r.keys() else ""
-        if r["checked"] or r.get("have_it") or rs0 in ("matched", "substituted"):
-            handled_keys.add(compare_key(r["name"]))
-
     for r in rows:
         group = r["shopping_group"] or "Other"
         for_meals_str = r["for_meals"]
@@ -1095,43 +1083,10 @@ async def get_grocery(request: Request):
         except (KeyError, Exception):
             notes = ""
 
-        # Only include active rows in items_by_group. Completed-state rows
-        # (have_it / checked / removed) can share a name with an active row
-        # post-Phase A, so name-based filtering on the frontend would hide
-        # the fresh active row alongside the stale completed one. The
-        # checked / have_it / removed name lists below are kept for any
-        # downstream consumers, but items_by_group is the source of truth
-        # for what's on the active list.
-        # Receipt-acknowledged statuses (matched/substituted/dismissed) also
-        # don't belong on the active list — those are post-buy or
-        # user-dismissed rows. not_fulfilled DOES stay visible: Kroger
-        # didn't deliver it, the user probably wants to grab it elsewhere.
-        try:
-            rs = r["receipt_status"] or ""
-        except (KeyError, Exception):
-            rs = ""
-        is_active = (
-            not r["checked"] and not r.get("have_it") and not r.get("removed")
-            and rs not in ("matched", "substituted", "dismissed")
-        )
-        # Suppress a 'not_fulfilled' leftover when the same item was already
-        # handled under a sibling row. Reconciliation can't always bind a
-        # receipt line to the exact planned row (variant names like "flour"
-        # vs "large" tortillas, or per-meal duplicate rows), so it demotes the
-        # planned row to 'not_fulfilled' and it pops back onto the list even
-        # though the user bought/checked it elsewhere. A genuinely undelivered
-        # item (no handled sibling) still shows. (feedback #110)
-        # Gate on receipt_acknowledged=0: once the user explicitly clicks
-        # "Didn't get it" on the receipt page (ack=1), they've confirmed the
-        # demote and the row should reappear on the grocery list regardless
-        # of any matched sibling. Without this gate, "Didn't get it" rows
-        # came back to the order page but never to the grocery list.
-        try:
-            ack = bool(r["receipt_acknowledged"])
-        except (KeyError, Exception):
-            ack = False
-        if is_active and rs == "not_fulfilled" and not ack and compare_key(r["name"]) in handled_keys:
-            is_active = False
+        # Single source of truth: the status column. See database.py for the
+        # value set. All the old multi-column gates (checked + have_it +
+        # removed + receipt_status combinations) collapsed into this one read.
+        is_active = (r["status"] == "active")
         if is_active:
             items_by_group.setdefault(group, []).append({
                 "id": r["id"],
@@ -1771,8 +1726,7 @@ async def get_order(request: Request):
 
     rows = conn.execute(
         text("""SELECT * FROM grocery_items WHERE user_id = :user_id
-           AND checked = 0 AND skipped = 0 AND have_it = 0 AND removed = 0
-           AND submitted_at IS NULL
+           AND status = 'active'
            ORDER BY shopping_group, name"""),
         {"user_id": user_id},
     ).fetchall()
