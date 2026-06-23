@@ -696,6 +696,20 @@ def _ensure_active_trip(conn, mw, user_id: str):
         {"user_id": user_id},
     )
 
+    # Auto-settle bought rows older than 3 days. Bought is the transient
+    # post-buy state; after the window passes the row is closed out
+    # permanently and drops off both the matcher's candidate scope and the
+    # receipt-page confirm/rate queue. Covers manual check-off, receipt
+    # match, and the 3-day ordered timeout — all three land on 'bought'
+    # with checked_at or submitted_at set.
+    conn.execute(
+        text("""UPDATE grocery_items SET status = 'settled', receipt_acknowledged = 1
+           WHERE user_id = :user_id
+             AND status = 'bought'
+             AND COALESCE(checked_at, submitted_at)::timestamptz < NOW() - INTERVAL '3 days'"""),
+        {"user_id": user_id},
+    )
+
     # Prune checked/removed items older than 3 days.
     # Only prune non-meal items (extras, regulars). Meal-sourced items are
     # managed by _refresh_trip_meal_items which preserves checked state and
@@ -3246,20 +3260,9 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
     if not trip:
         return {"ok": False, "error": "No active trip"}
 
-    # Auto-acknowledge matched/substituted rows older than 10 days. Used to
-    # run on every receipt-page GET; moved here so the read endpoint stays
-    # read-only. Fires on every upload (including the duplicate-receipt
-    # short-circuit below — sweep happens before we return).
-    conn.execute(
-        text("""UPDATE grocery_items SET receipt_acknowledged = 1,
-                status = 'settled'
-           WHERE user_id = :user_id
-             AND receipt_status IN ('matched', 'substituted')
-             AND receipt_acknowledged = 0
-             AND submitted_at IS NOT NULL
-             AND submitted_at < NOW() - INTERVAL '10 days'"""),
-        {"user_id": user_id},
-    )
+    # Bought→settled auto-promotion lives in _ensure_active_trip now (3-day
+    # uniform timeout). Removed the duplicate 10-day matched/substituted
+    # sweep that used to run here.
 
     # Gather grocery names for image receipts (enables single-call matching)
     # Scope to unchecked items: submitted (sent to store) + active (might have grabbed in-store)
@@ -3353,16 +3356,15 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
     # extras-INSERT step instead.
     new_receipt_items = list(receipt_items)
 
-    # Get trip items the receipt processor is responsible for confirming.
-    # Exclude have_it=1 / removed=1 — those are user-settled state that the
-    # receipt should never touch. checked=1 stays in the pool so a
-    # swipe-bought row can be confirmed by the receipt; the auto-prune still
-    # handles stale ones.
+    # Matcher candidate scope. Active, ordered, and bought rows are eligible.
+    # Settled / removed / have_it / dismissed are permanently terminal and
+    # never re-enter reconciliation. No age cutoff — bought rows auto-settle
+    # after 3 days via _ensure_active_trip, so the status filter alone bounds
+    # the window. Manual-bought items (swipe-checked as you unpack) are in
+    # scope so a later receipt upload still reconciles against them.
     rows = conn.execute(
         text("""SELECT * FROM grocery_items WHERE user_id = :user_id
-           AND receipt_status IN ('', 'not_fulfilled')
-           AND have_it = 0 AND removed = 0
-           AND added_at >= NOW() - INTERVAL '5 days'
+           AND status IN ('active', 'ordered', 'bought')
            ORDER BY name"""),
         {"user_id": user_id},
     ).fetchall()
