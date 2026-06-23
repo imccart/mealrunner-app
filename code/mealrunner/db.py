@@ -71,6 +71,10 @@ def init_db(conn: DictConnection) -> None:
     _run_column_migrations(conn)
     print("[db] Column migrations done", flush=True)
 
+    print("[db] Backfilling grocery_items.status from legacy flags...", flush=True)
+    _backfill_grocery_status(conn)
+    print("[db] grocery status backfill done", flush=True)
+
     print("[db] Running timestamp type migrations...", flush=True)
     _migrate_text_to_timestamptz(conn)
     print("[db] Timestamp type migrations done", flush=True)
@@ -447,6 +451,43 @@ def _migrate_consolidate_staples(conn: DictConnection) -> None:
     # every cold start and silently re-added staples the user had just deleted.
 
 
+def _backfill_grocery_status(conn: DictConnection) -> None:
+    """Set grocery_items.status from the legacy flag columns.
+
+    Only touches rows whose status is still the default ('active'). Once a row
+    has a non-default status (written by an endpoint that already migrated to
+    the new column), this never clobbers it. Safe to rerun every cold start.
+
+    Precedence is most-specific first: terminal states (removed, have_it,
+    dismissed) win over receipt states, which win over checked, which wins
+    over ordered.
+    """
+    try:
+        conn.execute(text("""
+            UPDATE grocery_items SET status = CASE
+                WHEN removed = 1 THEN 'removed'
+                WHEN have_it = 1 THEN 'have_it'
+                WHEN receipt_status = 'dismissed' THEN 'dismissed'
+                WHEN receipt_status IN ('matched','substituted') AND receipt_acknowledged = 1 THEN 'settled'
+                WHEN receipt_status IN ('matched','substituted') AND receipt_acknowledged = 0 THEN 'bought'
+                WHEN receipt_status = 'not_fulfilled' AND receipt_acknowledged = 1 THEN 'active'
+                WHEN receipt_status = 'not_fulfilled' AND receipt_acknowledged = 0 THEN 'ordered'
+                WHEN checked = 1 AND checked_at IS NOT NULL AND checked_at >= NOW() - INTERVAL '3 days' THEN 'bought'
+                WHEN checked = 1 THEN 'settled'
+                WHEN ordered = 1 AND submitted_at IS NOT NULL THEN 'ordered'
+                ELSE 'active'
+            END
+            WHERE status = 'active'
+        """))
+        conn.commit()
+    except Exception as e:
+        print(f"[db] grocery status backfill skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
+
 def _run_column_migrations(conn: DictConnection) -> None:
     """Add columns that may be missing on older databases.
 
@@ -495,6 +536,10 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("trip_items", "meal_ids", "TEXT NOT NULL DEFAULT ''"),
         ("trip_items", "receipt_acknowledged", "INTEGER NOT NULL DEFAULT 0"),
         ("users", "active_tip_subscription_id", "TEXT"),
+        # Single source of truth for grocery row lifecycle. See database.py
+        # column comment for the value set. Backfill happens in
+        # _backfill_grocery_status below, idempotent per row.
+        ("grocery_items", "status", "TEXT NOT NULL DEFAULT 'active'"),
     ]
 
     for table_name, col_name, col_def in migrations:

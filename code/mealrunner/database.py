@@ -355,6 +355,20 @@ grocery_items = Table(
     Column("removed_at", TS),
     Column("buy_elsewhere", Integer, nullable=False, server_default=text("0")),
     Column("buy_elsewhere_at", TS),
+    # Single source of truth for the row's lifecycle. Values:
+    #   active   — on the grocery list
+    #   ordered  — submitted to Kroger, awaiting reconciliation
+    #   bought   — recently acquired (manual check-off, receipt match, or
+    #              3-day order timeout); still in receipt-page window for
+    #              confirmation / rating; still a matcher candidate
+    #   settled  — reconciled, off all flows forever
+    #   removed  — user deleted
+    #   have_it  — user said "I have it at home, don't plan it"
+    #   dismissed — receipt extra dismissed (terminal)
+    # Legacy flag columns (checked, have_it, removed, ordered, receipt_status,
+    # receipt_acknowledged) stay populated for purchase-history / receipt-page
+    # / ratings reads. status is what the active-list and matcher filters use.
+    Column("status", Text, nullable=False, server_default=text("'active'")),
 )
 
 rate_limits = Table(
