@@ -132,6 +132,114 @@ function ProductTransparency({ nova, nutriscore, brand, parentCompany, violation
   )
 }
 
+// ── Sort logic for search results ───────────────────────────────────
+// Backend already filters out off-topic matches with a proximity check; we
+// just re-order what's left here. Sort is purely client-side so toggling
+// between pills doesn't re-query Kroger.
+
+const MR_WEIGHTS = {
+  price: 0.25,
+  unitPrice: 0.15,
+  deal: 0.15,
+  nova: 0.20,
+  nutri: 0.10,
+  rep: 0.15,
+}
+const NUTRI_VALUES = { A: 1.0, B: 0.75, C: 0.5, D: 0.25, E: 0.0 }
+const NOVA_VALUES = { 1: 1.0, 2: 0.67, 3: 0.33, 4: 0.0 }
+
+function effectivePrice(p) {
+  return p.promo_price != null ? p.promo_price : p.price
+}
+
+function computeMrRank(products) {
+  // Normalize each axis 0-1 within the result set (relative scoring) so a
+  // search with an expensive ceiling doesn't punish "best within this set".
+  const prices = products.map(effectivePrice).filter(v => v != null && v > 0)
+  const unitPrices = products.map(p => p.unit_price).filter(v => v != null && v > 0)
+  const minPrice = prices.length ? Math.min(...prices) : null
+  const maxPrice = prices.length ? Math.max(...prices) : null
+  const minUnit = unitPrices.length ? Math.min(...unitPrices) : null
+  const maxUnit = unitPrices.length ? Math.max(...unitPrices) : null
+
+  return products.map(p => {
+    const axes = {}
+    const ep = effectivePrice(p)
+    if (ep != null && maxPrice != null && maxPrice > minPrice) {
+      axes.price = 1 - (ep - minPrice) / (maxPrice - minPrice)
+    } else if (ep != null && maxPrice === minPrice) {
+      axes.price = 1
+    }
+    if (p.unit_price != null && maxUnit != null && maxUnit > minUnit) {
+      axes.unitPrice = 1 - (p.unit_price - minUnit) / (maxUnit - minUnit)
+    } else if (p.unit_price != null && maxUnit === minUnit) {
+      axes.unitPrice = 1
+    }
+    if (p.baseline_price && ep != null && p.baseline_price > 0) {
+      const ratio = (p.baseline_price - ep) / p.baseline_price
+      axes.deal = Math.max(0, Math.min(1, ratio))
+    }
+    if (p.nova && NOVA_VALUES[p.nova] != null) {
+      axes.nova = NOVA_VALUES[p.nova]
+    }
+    if (p.nutriscore && NUTRI_VALUES[p.nutriscore.toUpperCase()] != null) {
+      axes.nutri = NUTRI_VALUES[p.nutriscore.toUpperCase()]
+    }
+    if (p.violations && typeof p.violations.fda_total_recalls === 'number') {
+      const total = p.violations.fda_total_recalls
+      const serious = p.violations.fda_class_i || 0
+      const penalty = Math.min(1, (total / 30) * 0.7 + (serious / 5) * 0.3)
+      axes.rep = 1 - penalty
+    }
+    // Reallocate weights of missing axes proportionally across present ones
+    // so a product with missing NOVA isn't penalised vs one with NOVA = 1.
+    const present = Object.keys(axes)
+    if (present.length === 0) return { ...p, _mrRank: 0 }
+    const totalPresentWeight = present.reduce((s, k) => s + MR_WEIGHTS[k], 0)
+    const score = present.reduce(
+      (s, k) => s + (MR_WEIGHTS[k] / totalPresentWeight) * axes[k],
+      0,
+    )
+    return { ...p, _mrRank: score }
+  })
+}
+
+function sortProducts(products, mode) {
+  if (!products || products.length === 0) return products
+  const arr = [...products]
+  if (mode === 'price') {
+    return arr.sort((a, b) => {
+      const ea = effectivePrice(a), eb = effectivePrice(b)
+      if (ea == null && eb == null) return 0
+      if (ea == null) return 1
+      if (eb == null) return -1
+      return ea - eb
+    })
+  }
+  if (mode === 'unit') {
+    return arr.sort((a, b) => {
+      if (a.unit_price == null && b.unit_price == null) return 0
+      if (a.unit_price == null) return 1
+      if (b.unit_price == null) return -1
+      return a.unit_price - b.unit_price
+    })
+  }
+  if (mode === 'deal') {
+    return arr.sort((a, b) => {
+      const da = a.baseline_price && effectivePrice(a) != null ? a.baseline_price - effectivePrice(a) : null
+      const db = b.baseline_price && effectivePrice(b) != null ? b.baseline_price - effectivePrice(b) : null
+      if (da == null && db == null) return 0
+      if (da == null) return 1
+      if (db == null) return -1
+      return db - da  // largest deal first
+    })
+  }
+  if (mode === 'mr') {
+    return computeMrRank(arr).sort((a, b) => b._mrRank - a._mrRank)
+  }
+  return arr  // mode null/unknown → preserve Kroger's order
+}
+
 function formatPrice(price) {
   if (price == null) return ''
   return `$${price.toFixed(2)}`
@@ -142,6 +250,7 @@ export default function OrderPage() {
   const [activeItem, setActiveItem] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [products, setProducts] = useState(null)
+  const [sortMode, setSortMode] = useState(null) // null = Kroger default order
   const [searching, setSearching] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [pendingProduct, setPendingProduct] = useState(null) // product awaiting quantity confirmation
@@ -814,13 +923,31 @@ export default function OrderPage() {
                 <span className={styles.searchTermNote}> for "{products.search_term}"</span>
               )}
             </div>
+            {products.products.length > 0 && (
+              <div className={styles.sortPills}>
+                {[
+                  { key: 'price', label: 'Price' },
+                  { key: 'unit', label: 'Per Unit' },
+                  { key: 'deal', label: 'Deal' },
+                  { key: 'mr', label: 'MR Rank' },
+                ].map(opt => (
+                  <button
+                    key={opt.key}
+                    className={`${styles.sortPill}${sortMode === opt.key ? ` ${styles.sortPillActive}` : ''}`}
+                    onClick={() => setSortMode(sortMode === opt.key ? null : opt.key)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
             {products.products.length === 0 ? (
               <div className="empty-state">
                 <p>No products found.</p>
               </div>
             ) : (
               <div className={styles.productList}>
-                {products.products.map(p => {
+                {sortProducts(products.products, sortMode).map(p => {
                   const effectivePrice = p.promo_price || p.price
                   // 5% threshold so cents-of-noise don't flip the badge on/off
                   const belowUsual = p.baseline_price && effectivePrice && effectivePrice < p.baseline_price * 0.95

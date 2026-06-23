@@ -42,8 +42,13 @@ def _extras_dedup_key(name: str) -> str:
 # ── Price logging ──────────────────────────────────────────
 
 
-def _log_prices(conn, products: list[dict], location_id: str, source: str, user_id: str | None = None):
-    """Log product prices to product_prices table for price tracking."""
+def _log_prices(conn, products: list[dict], location_id: str, source: str, user_id: str | None = None, fulfillment: str | None = None):
+    """Log product prices to product_prices table for price tracking.
+
+    fulfillment scopes the observation to 'curbside' or 'delivery' so the
+    baseline median read can return mode-correct usual prices. Optional
+    so legacy callers that don't have the mode handy still work.
+    """
     for p in products:
         upc = p.get("upc", "")
         price = p.get("price")
@@ -51,11 +56,11 @@ def _log_prices(conn, products: list[dict], location_id: str, source: str, user_
             continue
         try:
             conn.execute(
-                text("""INSERT INTO product_prices (upc, location_id, store_chain, price, promo_price, in_stock, source, user_id)
-                   VALUES (:upc, :loc, 'kroger', :price, :promo, :stock, :source, :uid)"""),
+                text("""INSERT INTO product_prices (upc, location_id, store_chain, price, promo_price, in_stock, source, user_id, fulfillment)
+                   VALUES (:upc, :loc, 'kroger', :price, :promo, :stock, :source, :uid, :ff)"""),
                 {"upc": upc, "loc": location_id, "price": price,
                  "promo": p.get("promo_price"), "stock": p.get("in_stock"),
-                 "source": source, "uid": user_id},
+                 "source": source, "uid": user_id, "ff": fulfillment},
             )
         except Exception:
             pass
@@ -1868,15 +1873,65 @@ def _bg_prewarm_order(user_id: str, item_names: list[str]):
 _search_cache: dict[str, tuple[float, dict]] = {}  # {term: (timestamp, response)}
 _SEARCH_CACHE_TTL = 1200  # 20 minutes — matches a typical shopping session
 _SEARCH_CACHE_MAX = 200
+_SEARCH_PAGE_SIZE = 20  # bumped from 12: gives the proximity filter + sort UI a bigger candidate pool
 
 
-def _baseline_prices_for_upcs(conn, upcs: list[str], location_id: str, days: int = 90) -> dict[str, float]:
-    """Median observed price per UPC at this location over the last N days.
+def _proximity_filter(search_term: str, products: list, max_gap: int = 2) -> list:
+    """Drop products that don't have the search-term tokens appearing as a
+    near-contiguous subsequence in the product name. Catches things like
+    "Mr. Peanut's stick butter" leaking into a "peanut butter" search.
+
+    Returns a list of (kroger_position, product) tuples so the frontend
+    can use Kroger's original ranking as a tiebreaker in MR Rank.
+    """
+    import re
+
+    def _toks(s: str) -> list[str]:
+        return [w for w in re.sub(r"[^a-z0-9 ]", " ", (s or "").lower()).split() if w]
+
+    s_tokens = _toks(search_term)
+    if not s_tokens:
+        return [(i, p) for i, p in enumerate(products)]
+
+    kept: list[tuple[int, object]] = []
+    for idx, p in enumerate(products):
+        haystack = _toks(f"{p.brand or ''} {p.description or ''}")
+        if not haystack:
+            continue
+        # Locate each search token in haystack and check the spread
+        positions = []
+        ok = True
+        for st in s_tokens:
+            found = -1
+            for i, w in enumerate(haystack):
+                if w == st or w.startswith(st) or st.startswith(w):
+                    found = i
+                    break
+            if found < 0:
+                ok = False
+                break
+            positions.append(found)
+        if not ok:
+            continue
+        # Tokens must appear in order with a small max gap between adjacent
+        if any(positions[i + 1] - positions[i] < 1 or positions[i + 1] - positions[i] > max_gap + 1
+               for i in range(len(positions) - 1)):
+            continue
+        kept.append((idx, p))
+    return kept
+
+
+def _baseline_prices_for_upcs(conn, upcs: list[str], location_id: str, fulfillment: str | None = None, days: int = 90) -> dict[str, float]:
+    """Median observed price per UPC at this location over the last N days,
+    scoped to a fulfillment mode (curbside vs delivery) when given.
 
     Used as the "your usual" reference on each product row so the user can
     see whether today's price is below or above their typical experience.
-    product_prices has no fulfillment column today, so this is across modes
-    — practical compromise; can tighten later if a fulfillment column lands.
+
+    Mode filter: rows tagged with the same fulfillment OR rows tagged NULL
+    (historical / receipt-source data that pre-dates the fulfillment column).
+    Better to mix in untagged-but-recent than to return nothing.
+
     Returns {upc: median_price} for UPCs that have at least one observation.
     """
     if not upcs:
@@ -1885,6 +1940,10 @@ def _baseline_prices_for_upcs(conn, upcs: list[str], location_id: str, days: int
     params = {f"u{i}": u for i, u in enumerate(upcs)}
     params["loc"] = location_id
     params["interval"] = f"{days} days"
+    ff_clause = ""
+    if fulfillment:
+        params["ff"] = fulfillment
+        ff_clause = "AND (fulfillment = :ff OR fulfillment IS NULL)"
     rows = conn.execute(
         text(f"""SELECT upc,
                         percentile_cont(0.5) WITHIN GROUP (ORDER BY price) AS median_price
@@ -1893,6 +1952,7 @@ def _baseline_prices_for_upcs(conn, upcs: list[str], location_id: str, days: int
                    AND location_id = :loc
                    AND price IS NOT NULL AND price > 0
                    AND fetched_at >= NOW() - (:interval)::interval
+                   {ff_clause}
                  GROUP BY upc"""),
         params,
     ).fetchall()
@@ -1982,7 +2042,13 @@ def _build_search_response(conn, user_id: str, item_name: str, ff: str, start: i
 
     # Search Kroger
     try:
-        products = search_products_fast(search_term, limit=12, start=start, fulfillment=ff, location_id=user_location_id)
+        products = search_products_fast(search_term, limit=_SEARCH_PAGE_SIZE, start=start, fulfillment=ff, location_id=user_location_id)
+        # Drop products whose name doesn't contain the search-term tokens as
+        # a near-contiguous subsequence ("Mr. Peanut's stick butter" leaks
+        # into a "peanut butter" search via Kroger's loose match — kill it
+        # before we enrich/score, so we don't waste API calls on noise).
+        kept = _proximity_filter(search_term, products, max_gap=2)
+        products = [p for _, p in kept]
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -2080,7 +2146,7 @@ def _build_search_response(conn, user_id: str, item_name: str, ff: str, start: i
     conn.commit()
 
     # Log prices for tracking
-    _log_prices(conn, [{"upc": p.upc, "price": p.price, "promo_price": p.promo_price, "in_stock": int(p.in_stock)} for p in products if p.price], user_location_id, "search", user_id)
+    _log_prices(conn, [{"upc": p.upc, "price": p.price, "promo_price": p.promo_price, "in_stock": int(p.in_stock)} for p in products if p.price], user_location_id, "search", user_id, fulfillment=ff)
 
     from mealrunner.brands import get_parent_company
     from mealrunner.violations import get_company_violations
@@ -2284,9 +2350,11 @@ def _build_search_response(conn, user_id: str, item_name: str, ff: str, start: i
             violation_cache[parent] = get_company_violations(conn, parent)
 
     # Batch the "your usual" baseline lookup for every product UPC at this
-    # store, last 90 days. One SELECT median()-per-upc instead of N lookups.
+    # store, scoped to the current fulfillment mode, last 90 days. Pickup
+    # and delivery prices for the same UPC routinely differ, so we keep
+    # them separate when surfacing the user's "usual."
     baseline_by_upc = _baseline_prices_for_upcs(
-        conn, [p.upc for p in products if p.upc], user_location_id, days=90,
+        conn, [p.upc for p in products if p.upc], user_location_id, fulfillment=ff, days=90,
     )
 
     result = []
@@ -2343,7 +2411,7 @@ def _build_search_response(conn, user_id: str, item_name: str, ff: str, start: i
         "preferences": pref_list if start == 1 else [],  # only show prefs on first page
         "products": result,
         "start": start,
-        "has_more": len(products) == 12,  # if we got a full page, there's probably more
+        "has_more": len(products) >= _SEARCH_PAGE_SIZE - 4,  # filter may drop a few; if we got most of a page, more likely exists
     }
 
 
@@ -2540,8 +2608,8 @@ async def select_product(body: dict, request: Request):
                             if price_data:
                                 bg_conn.execute(
                                     text("""INSERT INTO product_prices
-                                        (upc, location_id, store_chain, price, promo_price, in_stock, source, user_id)
-                                        VALUES (:upc, :loc, 'kroger', :price, :promo, :stock, 'nearby', :uid)"""),
+                                        (upc, location_id, store_chain, price, promo_price, in_stock, source, user_id, fulfillment)
+                                        VALUES (:upc, :loc, 'kroger', :price, :promo, :stock, 'nearby', :uid, 'curbside')"""),
                                     {"upc": bg_upc, "loc": store["location_id"],
                                      "price": price_data["price"],
                                      "promo": price_data.get("promo_price"),
@@ -2807,8 +2875,8 @@ async def price_comparison(request: Request):
                                 if price_data:
                                     bg_conn.execute(
                                         text("""INSERT INTO product_prices
-                                            (upc, location_id, store_chain, price, promo_price, in_stock, source, user_id)
-                                            VALUES (:upc, :loc, 'kroger', :price, :promo, :stock, 'nearby', :uid)"""),
+                                            (upc, location_id, store_chain, price, promo_price, in_stock, source, user_id, fulfillment)
+                                            VALUES (:upc, :loc, 'kroger', :price, :promo, :stock, 'nearby', :uid, 'curbside')"""),
                                         {"upc": upc, "loc": store["location_id"],
                                          "price": price_data["price"],
                                          "promo": price_data.get("promo_price"),

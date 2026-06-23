@@ -284,6 +284,10 @@ product_prices = Table(
     Column("source", Text, nullable=False),
     Column("user_id", Text),
     Column("fetched_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    # 'curbside' / 'delivery' — pickup and delivery prices for the same UPC
+    # routinely differ, so the baseline median has to be scoped per-mode.
+    # Nullable so historical rows (where mode wasn't tracked) still read.
+    Column("fulfillment", Text),
 )
 
 community_prices = Table(

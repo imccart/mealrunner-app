@@ -77,10 +77,12 @@ def poll_user_prices(conn: DictConnection, user_id: str) -> dict:
         try:
             price_data = _poll_single_product(upc, location_id)
             if price_data:
+                # The poll uses Kroger's default fulfillment (curbside) — tag
+                # the row so the baseline read can scope per-mode.
                 conn.execute(
                     text("""INSERT INTO product_prices
-                       (upc, location_id, store_chain, price, promo_price, in_stock, source, user_id)
-                       VALUES (:upc, :loc, 'kroger', :price, :promo, :stock, 'poll', :uid)"""),
+                       (upc, location_id, store_chain, price, promo_price, in_stock, source, user_id, fulfillment)
+                       VALUES (:upc, :loc, 'kroger', :price, :promo, :stock, 'poll', :uid, 'curbside')"""),
                     {"upc": upc, "loc": location_id,
                      "price": price_data["price"],
                      "promo": price_data.get("promo_price"),

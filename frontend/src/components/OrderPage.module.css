@@ -270,6 +270,40 @@
   gap: 10px;
 }
 
+/* ── Sort pills above results ────────────────────── */
+.sortPills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  margin: 6px 0 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.sortPill {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  white-space: nowrap;
+  background: white;
+  border: 1px solid var(--tan, #ece6df);
+  border-radius: 999px;
+  color: var(--dark);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.sortPill:hover {
+  border-color: var(--accent);
+}
+.sortPillActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.sortPillActive:hover {
+  border-color: var(--accent);
+}
+
 /* ── Product rows (new layout) ─────────────────────── */
 .productList {
   display: flex;

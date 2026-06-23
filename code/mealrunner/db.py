@@ -484,6 +484,9 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("trip_items", "checked_at", "TEXT"),
         ("recipes", "notes", "TEXT"),
         ("brand_ownership", "category", "TEXT NOT NULL DEFAULT ''"),
+        # Per-fulfillment baseline pricing — pickup vs delivery prices for
+        # the same UPC routinely differ. Nullable so historical rows still read.
+        ("product_prices", "fulfillment", "TEXT"),
         ("users", "first_name", "TEXT NOT NULL DEFAULT ''"),
         ("users", "last_name", "TEXT NOT NULL DEFAULT ''"),
         ("users", "tos_accepted_at", "TEXT"),
