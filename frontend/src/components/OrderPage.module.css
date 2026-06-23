@@ -1287,13 +1287,16 @@
     padding: 20px 16px 12px;
   }
 
-  /* Show desktop 3-column layout — breaks out of main container */
+  /* Show desktop 3-column layout — breaks out of main container, capped
+   * so it doesn't sprawl on wide monitors. Other pages live in main's
+   * 1100px column; the Order page is wider to fit 3 panels but stops
+   * short of edge-to-edge. */
   .orderDesktopLayout {
     display: grid;
     grid-template-columns: 280px 1fr 340px;
     overflow: hidden;
-    /* Break out of main's max-width and padding */
     width: 100vw;
+    max-width: 1400px;
     position: relative;
     left: 50%;
     transform: translateX(-50%);
