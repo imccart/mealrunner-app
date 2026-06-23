@@ -251,6 +251,7 @@ export default function OrderPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [products, setProducts] = useState(null)
   const [sortMode, setSortMode] = useState(null) // null = Kroger default order
+  const [sortInfoOpen, setSortInfoOpen] = useState(false)
   const [searching, setSearching] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [pendingProduct, setPendingProduct] = useState(null) // product awaiting quantity confirmation
@@ -924,22 +925,48 @@ export default function OrderPage() {
               )}
             </div>
             {products.products.length > 0 && (
-              <div className={styles.sortPills}>
-                {[
-                  { key: 'price', label: 'Price' },
-                  { key: 'unit', label: 'Per Unit' },
-                  { key: 'deal', label: 'Deal' },
-                  { key: 'mr', label: 'MR Rank' },
-                ].map(opt => (
+              <>
+                <div className={styles.sortRow}>
+                  <span className={styles.sortRowLabel}>Sort:</span>
+                  <div className={styles.sortPills}>
+                    {[
+                      { key: 'price', label: 'Price' },
+                      { key: 'unit', label: 'Per Unit' },
+                      { key: 'deal', label: 'Deal' },
+                      { key: 'mr', label: 'MR Rank' },
+                    ].map(opt => (
+                      <button
+                        key={opt.key}
+                        className={`${styles.sortPill}${sortMode === opt.key ? ` ${styles.sortPillActive}` : ''}`}
+                        onClick={() => setSortMode(sortMode === opt.key ? null : opt.key)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                   <button
-                    key={opt.key}
-                    className={`${styles.sortPill}${sortMode === opt.key ? ` ${styles.sortPillActive}` : ''}`}
-                    onClick={() => setSortMode(sortMode === opt.key ? null : opt.key)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+                    className={styles.sortInfoDot}
+                    onClick={() => setSortInfoOpen(!sortInfoOpen)}
+                    title="What do these mean?"
+                  >{'ⓘ'}</button>
+                </div>
+                {sortInfoOpen && (
+                  <div className={styles.sortLegend}>
+                    <div className={styles.sortLegendItem}>
+                      <strong>Price:</strong> cheapest current price first.
+                    </div>
+                    <div className={styles.sortLegendItem}>
+                      <strong>Per Unit:</strong> best $/oz or $/ct first; falls back to plain price when the size doesn't parse.
+                    </div>
+                    <div className={styles.sortLegendItem}>
+                      <strong>Deal:</strong> biggest savings vs your usual price first.
+                    </div>
+                    <div className={styles.sortLegendItem}>
+                      <strong>MR Rank:</strong> MealRunner's balanced pick — combines price, per-unit cost, current deal, processing level, nutrition grade, and parent-company recall history.
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             {products.products.length === 0 ? (
               <div className="empty-state">
