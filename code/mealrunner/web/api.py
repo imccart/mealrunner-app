@@ -675,7 +675,8 @@ def _ensure_active_trip(conn, mw, user_id: str):
                   selected_at = NULL, ordered_at = NULL,
                   product_upc = '', product_name = '',
                   product_brand = '', product_size = '',
-                  product_price = NULL, product_image = ''
+                  product_price = NULL, product_image = '',
+                  status = 'bought'
            WHERE user_id = :user_id
              AND source = 'meal'
              AND ordered = 1
@@ -980,7 +981,8 @@ def _apply_meal_sync(
                            product_upc = '', product_name = '',
                            product_brand = '', product_size = '',
                            product_price = NULL, product_image = '',
-                           selected_at = NULL, ordered_at = NULL,"""
+                           selected_at = NULL, ordered_at = NULL,
+                           status = 'active',"""
         conn.execute(
             text(f"""UPDATE grocery_items SET
                    {reset_sql}
@@ -1333,7 +1335,7 @@ async def toggle_grocery_item(id: int, request: Request):
         if real_uid != user_id:
             print(f"[grocery] toggle '{item_name}' by household member {real_uid} → owner {user_id}", flush=True)
         conn.execute(
-            text("UPDATE grocery_items SET checked = 1, checked_at = CURRENT_TIMESTAMP WHERE id = :id"),
+            text("UPDATE grocery_items SET checked = 1, checked_at = CURRENT_TIMESTAMP, status = 'bought' WHERE id = :id"),
             {"id": row["id"]},
         )
         # If checking off an item not ordered via Kroger, it's in-store
@@ -1382,7 +1384,7 @@ async def remove_grocery_item(id: int, request: Request):
             print(f"[grocery] remove '{row['name']}' by household member {real_uid} → owner {user_id}", flush=True)
         if row["source"] == "meal":
             conn.execute(
-                text("UPDATE grocery_items SET removed = 1, removed_at = CURRENT_TIMESTAMP WHERE id = :id"),
+                text("UPDATE grocery_items SET removed = 1, removed_at = CURRENT_TIMESTAMP, status = 'removed' WHERE id = :id"),
                 {"id": row["id"]},
             )
         else:
@@ -1414,7 +1416,8 @@ async def undo_grocery_item(item_id: int, request: Request):
                product_brand = '', product_size = '', product_price = NULL,
                product_image = '',
                receipt_status = '', receipt_acknowledged = 0,
-               receipt_item = '', receipt_upc = '', receipt_price = NULL
+               receipt_item = '', receipt_upc = '', receipt_price = NULL,
+               status = 'active'
            WHERE id = :id AND user_id = :user_id"""),
         {"id": item_id, "user_id": user_id},
     )
@@ -1475,7 +1478,7 @@ async def have_it_grocery_item(id: int, request: Request):
         if real_uid != user_id:
             print(f"[grocery] have-it '{item_name}' by household member {real_uid} → owner {user_id}", flush=True)
         conn.execute(
-            text("UPDATE grocery_items SET have_it = 1, have_it_at = CURRENT_TIMESTAMP WHERE id = :id"),
+            text("UPDATE grocery_items SET have_it = 1, have_it_at = CURRENT_TIMESTAMP, status = 'have_it' WHERE id = :id"),
             {"id": row["id"]},
         )
         # Check if this item has been marked "have it" 3+ times — suggest as staple
@@ -2569,7 +2572,8 @@ async def select_product(body: dict, request: Request):
                    quantity = :quantity,
                    ordered = 1, ordered_at = CURRENT_TIMESTAMP, selected_at = CURRENT_TIMESTAMP,
                    receipt_status = '', receipt_acknowledged = 0,
-                   receipt_item = '', receipt_upc = '', receipt_price = NULL
+                   receipt_item = '', receipt_upc = '', receipt_price = NULL,
+                   status = 'active'
                WHERE user_id = :user_id AND LOWER(name) = :item_name"""),
             {"upc": product["upc"], "name": product["name"], "brand": product.get("brand", ""),
              "size": product.get("size", ""), "price": product.get("price"),
@@ -2703,7 +2707,8 @@ async def deselect_product(item_name: str, request: Request):
         text("""UPDATE grocery_items SET
                product_upc = '', product_name = '', product_brand = '',
                product_size = '', product_price = NULL, product_image = '',
-               ordered = 0, ordered_at = NULL, selected_at = NULL
+               ordered = 0, ordered_at = NULL, selected_at = NULL,
+               status = 'active'
            WHERE user_id = :user_id AND LOWER(name) = :name"""),
         {"user_id": user_id, "name": item_name.lower()},
     )
@@ -3010,7 +3015,8 @@ async def submit_order(request: Request):
     # prior trip) still gets stamped here — vanishing from the order page
     # while Kroger never received it.
     conn.execute(
-        text("""UPDATE grocery_items SET submitted_at = CURRENT_TIMESTAMP
+        text("""UPDATE grocery_items SET submitted_at = CURRENT_TIMESTAMP,
+                status = 'ordered'
             WHERE user_id = :user_id
               AND product_upc != '' AND ordered = 1 AND submitted_at IS NULL
               AND checked = 0 AND have_it = 0 AND removed = 0
@@ -3033,7 +3039,8 @@ async def submit_order(request: Request):
         # receipt-reconciled rows.
         conn = _conn()  # release_db_during_io swapped in a fresh request conn
         conn.execute(
-            text("""UPDATE grocery_items SET submitted_at = NULL
+            text("""UPDATE grocery_items SET submitted_at = NULL,
+                    status = 'active'
                 WHERE user_id = :user_id AND product_upc != '' AND ordered = 1
                   AND checked = 0 AND have_it = 0 AND removed = 0
                   AND COALESCE(receipt_status, '') = ''"""),
@@ -3290,7 +3297,8 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
     # read-only. Fires on every upload (including the duplicate-receipt
     # short-circuit below — sweep happens before we return).
     conn.execute(
-        text("""UPDATE grocery_items SET receipt_acknowledged = 1
+        text("""UPDATE grocery_items SET receipt_acknowledged = 1,
+                status = 'settled'
            WHERE user_id = :user_id
              AND receipt_status IN ('matched', 'substituted')
              AND receipt_acknowledged = 0
@@ -3431,7 +3439,7 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                     text("""UPDATE grocery_items SET
                            receipt_item = :receipt_item, receipt_price = :receipt_price,
                            receipt_upc = :receipt_upc, receipt_status = 'matched',
-                           receipt_acknowledged = 0
+                           receipt_acknowledged = 0, status = 'bought'
                        WHERE id IN (
                            SELECT id FROM grocery_items
                            WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
@@ -3477,7 +3485,7 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
             conn.execute(
                 text("""UPDATE grocery_items SET
                        receipt_item = :receipt_item, receipt_price = :receipt_price, receipt_upc = :receipt_upc,
-                       receipt_status = :status, receipt_acknowledged = 0
+                       receipt_status = :rs, receipt_acknowledged = 0, status = 'bought'
                    WHERE id IN (
                        SELECT id FROM grocery_items
                        WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
@@ -3488,7 +3496,7 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                    )"""),
                 {"receipt_item": r.get("item", ""), "receipt_price": r.get("price"),
                  "receipt_upc": r.get("upc", ""),
-                 "status": status,
+                 "rs": status,
                  "user_id": user_id, "name": m["submitted"]["item"]},
             )
         total_matched += len(diff["matched"])
@@ -3510,7 +3518,7 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
             conn.execute(
                 text("""UPDATE grocery_items SET
                        receipt_item = :receipt_item, receipt_price = :receipt_price, receipt_upc = :receipt_upc,
-                       receipt_status = 'matched', receipt_acknowledged = 0
+                       receipt_status = 'matched', receipt_acknowledged = 0, status = 'bought'
                    WHERE id IN (
                        SELECT id FROM grocery_items
                        WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)
@@ -3540,7 +3548,8 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                ordered = 0, submitted_at = NULL,
                product_upc = '', product_name = '', product_brand = '',
                product_size = '', product_price = NULL, product_image = '',
-               receipt_item = '', receipt_upc = '', receipt_price = NULL"""
+               receipt_item = '', receipt_upc = '', receipt_price = NULL,
+               status = 'ordered'"""
         for uname in upc_unmatched_names:
             if uname.lower() not in matched_grocery_names:
                 conn.execute(
@@ -3556,7 +3565,8 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
                ordered = 0, submitted_at = NULL,
                product_upc = '', product_name = '', product_brand = '',
                product_size = '', product_price = NULL, product_image = '',
-               receipt_item = '', receipt_upc = '', receipt_price = NULL"""
+               receipt_item = '', receipt_upc = '', receipt_price = NULL,
+               status = 'ordered'"""
         for uname in upc_unmatched_names:
             conn.execute(
                 text(_not_fulfilled_sql + " WHERE user_id = :user_id AND LOWER(name) = LOWER(:name)"),
@@ -3760,23 +3770,26 @@ async def resolve_receipt_item(body: dict, request: Request):
                    receipt_acknowledged = 1,
                    checked = 0, checked_at = NULL,
                    product_upc = '', product_name = '', product_brand = '', product_size = '',
-                   product_price = NULL, product_image = ''
+                   product_price = NULL, product_image = '',
+                   status = 'active'
                WHERE id = :id AND user_id = :user_id"""),
             {"id": item_id, "user_id": user_id},
         )
     elif status == "dismissed":
         # Acknowledged as not needed — mark so it doesn't keep prompting
         conn.execute(
-            text("""UPDATE grocery_items SET receipt_status = 'dismissed', receipt_acknowledged = 1
+            text("""UPDATE grocery_items SET receipt_status = 'dismissed', receipt_acknowledged = 1,
+                   status = 'dismissed'
                WHERE id = :id AND user_id = :user_id"""),
             {"id": item_id, "user_id": user_id},
         )
     elif status == "matched":
-        # Confirming a match checks it off the grocery list and clears ordered
+        # User confirmed the match — done. Settles immediately.
         conn.execute(
             text("""UPDATE grocery_items SET receipt_status = 'matched',
                    receipt_acknowledged = 1,
-                   checked = 1, checked_at = CURRENT_TIMESTAMP, ordered = 0
+                   checked = 1, checked_at = CURRENT_TIMESTAMP, ordered = 0,
+                   status = 'settled'
                WHERE id = :id AND user_id = :user_id"""),
             {"id": item_id, "user_id": user_id},
         )
@@ -3794,15 +3807,18 @@ async def resolve_receipt_item(body: dict, request: Request):
                    ordered = 0, submitted_at = NULL,
                    checked = 0, checked_at = NULL,
                    product_upc = '', product_name = '', product_brand = '',
-                   product_size = '', product_price = NULL, product_image = ''
+                   product_size = '', product_price = NULL, product_image = '',
+                   status = 'active'
                WHERE id = :id AND user_id = :user_id"""),
             {"id": item_id, "user_id": user_id},
         )
     else:
+        # Substituted ack — user confirmed the substitution. Settles immediately.
         conn.execute(
-            text("""UPDATE grocery_items SET receipt_status = :status, receipt_acknowledged = 1
+            text("""UPDATE grocery_items SET receipt_status = :rs, receipt_acknowledged = 1,
+                   status = 'settled'
                WHERE id = :id AND user_id = :user_id"""),
-            {"status": status, "id": item_id, "user_id": user_id},
+            {"rs": status, "id": item_id, "user_id": user_id},
         )
     conn.commit()
     return {"ok": True}
@@ -3829,7 +3845,8 @@ async def match_extra_to_grocery(body: dict, request: Request):
                receipt_item = :receipt_item, receipt_price = :receipt_price,
                receipt_upc = :receipt_upc, receipt_status = 'matched',
                receipt_acknowledged = 1,
-               checked = 1, checked_at = CURRENT_TIMESTAMP, ordered = 0
+               checked = 1, checked_at = CURRENT_TIMESTAMP, ordered = 0,
+               status = 'settled'
            WHERE id = :grocery_id AND user_id = :user_id"""),
         {"receipt_item": extra_name, "receipt_price": receipt_price,
          "receipt_upc": receipt_upc,
