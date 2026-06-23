@@ -1198,9 +1198,7 @@ async def add_grocery_item(body: dict, request: Request):
 
     active_rows = conn.execute(
         text("""SELECT name FROM grocery_items
-                WHERE user_id = :user_id
-                  AND have_it = 0 AND checked = 0 AND removed = 0
-                  AND ordered = 0 AND submitted_at IS NULL"""),
+                WHERE user_id = :user_id AND status = 'active'"""),
         {"user_id": user_id},
     ).fetchall()
     on_list = {compare_key(r["name"]) for r in active_rows}
@@ -1519,8 +1517,7 @@ async def add_staples_to_grocery(body: dict, request: Request):
     from mealrunner.normalize import compare_key
     active_rows = conn.execute(
         text("""SELECT name FROM grocery_items
-                WHERE user_id = :user_id
-                  AND have_it = 0 AND checked = 0 AND removed = 0"""),
+                WHERE user_id = :user_id AND status = 'active'"""),
         {"user_id": user_id},
     ).fetchall()
     on_list = {compare_key(r["name"]) for r in active_rows}
@@ -1686,8 +1683,7 @@ async def add_bundle_to_grocery(body: dict, request: Request):
 
     active_rows = conn.execute(
         text("""SELECT name FROM grocery_items
-                WHERE user_id = :user_id
-                  AND have_it = 0 AND checked = 0 AND removed = 0"""),
+                WHERE user_id = :user_id AND status = 'active'"""),
         {"user_id": user_id},
     ).fetchall()
     on_list = {compare_key(r["name"]) for r in active_rows}
