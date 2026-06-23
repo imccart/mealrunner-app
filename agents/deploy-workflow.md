@@ -25,17 +25,18 @@ Both deploy automatically when their branch is pushed.
 ### Commands
 
 ```sh
-# Deploy production:
+# 1. Deploy staging and trigger CI (push master's commit to staging branch):
+git push origin master:staging
+
+# 2. Watch the E2E run finish green (Actions tab or `gh run watch`).
+
+# 3. On green, deploy production:
 git push origin master
-
-# Deploy staging (force-update from master, since dev happens on master):
-git branch -f staging master && git push origin staging
-
-# Deploy both:
-git push origin master staging   # after `git branch -f staging master`
 ```
 
-**Always push to staging first for testing unless the user says otherwise.** Both deploys are independent and can go simultaneously.
+**Staging push is the test gate.** The E2E workflow is wired to fire on `staging` branch pushes only. When the run goes green, master is safe to push to production. When red, fix on master and re-push to staging until green.
+
+Master and staging can both be pushed in the same command if you want to deploy without waiting for tests (e.g. urgent hotfix), but the default is staging-first.
 
 ### "Everything up-to-date" gotcha
 

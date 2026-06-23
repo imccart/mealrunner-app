@@ -2,11 +2,13 @@ name: E2E Tests
 
 on:
   push:
-    # Only master — pushing the same commit to both master and staging
-    # was firing two concurrent runs against the same STAGING_URL, which
-    # caused them to contend for users/pool/cleanup and one would fail
-    # spuriously. One trigger, one run.
-    branches: [master]
+    # Trigger on staging branch push, against the staging URL. Daily-driver
+    # deploy is now `push staging → wait CI green → push master`, so tests
+    # actually gate production. Was master-only (session 88) to avoid two
+    # parallel runs from a `master && master:staging` double-push; the new
+    # flow has a single push, single run, and a real test-before-promote
+    # gate.
+    branches: [staging]
   workflow_dispatch:
 
 jobs:
