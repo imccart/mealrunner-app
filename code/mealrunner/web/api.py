@@ -2542,7 +2542,8 @@ async def select_product(body: dict, request: Request):
                    receipt_status = '', receipt_acknowledged = 0,
                    receipt_item = '', receipt_upc = '', receipt_price = NULL,
                    status = 'active'
-               WHERE user_id = :user_id AND LOWER(name) = :item_name"""),
+               WHERE user_id = :user_id AND LOWER(name) = :item_name
+                 AND status = 'active'"""),
             {"upc": product["upc"], "name": product["name"], "brand": product.get("brand", ""),
              "size": product.get("size", ""), "price": product.get("price"),
              "image": product.get("image", ""),
@@ -2677,7 +2678,8 @@ async def deselect_product(item_name: str, request: Request):
                product_size = '', product_price = NULL, product_image = '',
                ordered = 0, ordered_at = NULL, selected_at = NULL,
                status = 'active'
-           WHERE user_id = :user_id AND LOWER(name) = :name"""),
+           WHERE user_id = :user_id AND LOWER(name) = :name
+             AND status = 'active'"""),
         {"user_id": user_id, "name": item_name.lower()},
     )
     conn.commit()
