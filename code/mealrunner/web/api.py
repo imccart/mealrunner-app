@@ -1119,7 +1119,16 @@ async def get_grocery(request: Request):
         # planned row to 'not_fulfilled' and it pops back onto the list even
         # though the user bought/checked it elsewhere. A genuinely undelivered
         # item (no handled sibling) still shows. (feedback #110)
-        if is_active and rs == "not_fulfilled" and compare_key(r["name"]) in handled_keys:
+        # Gate on receipt_acknowledged=0: once the user explicitly clicks
+        # "Didn't get it" on the receipt page (ack=1), they've confirmed the
+        # demote and the row should reappear on the grocery list regardless
+        # of any matched sibling. Without this gate, "Didn't get it" rows
+        # came back to the order page but never to the grocery list.
+        try:
+            ack = bool(r["receipt_acknowledged"])
+        except (KeyError, Exception):
+            ack = False
+        if is_active and rs == "not_fulfilled" and not ack and compare_key(r["name"]) in handled_keys:
             is_active = False
         if is_active:
             items_by_group.setdefault(group, []).append({
