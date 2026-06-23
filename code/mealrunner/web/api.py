@@ -5857,6 +5857,26 @@ async def e2e_stage_grocery_row(body: dict):
             "meal_ids": body.get("meal_ids", ""),
         },
     )
+    # Re-derive status from the legacy flags this scaffold just set so the
+    # row reads correctly under the new active-list filter. Same formula as
+    # the cold-start backfill in db.py.
+    conn.execute(
+        text("""UPDATE grocery_items SET status = CASE
+                  WHEN removed = 1 THEN 'removed'
+                  WHEN have_it = 1 THEN 'have_it'
+                  WHEN receipt_status = 'dismissed' THEN 'dismissed'
+                  WHEN receipt_status IN ('matched','substituted') AND receipt_acknowledged = 1 THEN 'settled'
+                  WHEN receipt_status IN ('matched','substituted') AND receipt_acknowledged = 0 THEN 'bought'
+                  WHEN receipt_status = 'not_fulfilled' AND receipt_acknowledged = 1 THEN 'active'
+                  WHEN receipt_status = 'not_fulfilled' AND receipt_acknowledged = 0 THEN 'ordered'
+                  WHEN checked = 1 AND checked_at IS NOT NULL AND checked_at >= NOW() - INTERVAL '3 days' THEN 'bought'
+                  WHEN checked = 1 THEN 'settled'
+                  WHEN ordered = 1 AND submitted_at IS NOT NULL THEN 'ordered'
+                  ELSE 'active'
+                END
+                WHERE id = :id"""),
+        {"id": row_id},
+    )
     conn.commit()
     return {"ok": True}
 
@@ -5906,6 +5926,26 @@ async def e2e_create_grocery_row(body: dict, request: Request):
             "receipt_acknowledged": int(bool(body.get("receipt_acknowledged", False))),
         },
     ).fetchone()
+    # Re-derive status from the legacy flags this scaffold just inserted so
+    # the row reads correctly under the new active-list filter. Same formula
+    # as the cold-start backfill in db.py.
+    conn.execute(
+        text("""UPDATE grocery_items SET status = CASE
+                  WHEN removed = 1 THEN 'removed'
+                  WHEN have_it = 1 THEN 'have_it'
+                  WHEN receipt_status = 'dismissed' THEN 'dismissed'
+                  WHEN receipt_status IN ('matched','substituted') AND receipt_acknowledged = 1 THEN 'settled'
+                  WHEN receipt_status IN ('matched','substituted') AND receipt_acknowledged = 0 THEN 'bought'
+                  WHEN receipt_status = 'not_fulfilled' AND receipt_acknowledged = 1 THEN 'active'
+                  WHEN receipt_status = 'not_fulfilled' AND receipt_acknowledged = 0 THEN 'ordered'
+                  WHEN checked = 1 AND checked_at IS NOT NULL AND checked_at >= NOW() - INTERVAL '3 days' THEN 'bought'
+                  WHEN checked = 1 THEN 'settled'
+                  WHEN ordered = 1 AND submitted_at IS NOT NULL THEN 'ordered'
+                  ELSE 'active'
+                END
+                WHERE id = :id"""),
+        {"id": row["id"]},
+    )
     conn.commit()
     return {"ok": True, "id": row["id"]}
 
