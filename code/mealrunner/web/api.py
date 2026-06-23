@@ -710,6 +710,23 @@ def _ensure_active_trip(conn, mw, user_id: str):
         {"user_id": user_id},
     )
 
+    # Auto-settle not_fulfilled rows the user never acted on. 3-day grace
+    # period on the receipt page; after that, silently settle rather than
+    # reappear on the active list. User preference (session 89): silent
+    # settle is safer than silent reappearance — a reappeared row could
+    # lead to double-buying, while a settled row that the user didn't
+    # actually receive surfaces naturally next time they plan that meal.
+    conn.execute(
+        text("""UPDATE grocery_items SET status = 'settled', receipt_acknowledged = 1
+           WHERE user_id = :user_id
+             AND status = 'ordered'
+             AND receipt_status = 'not_fulfilled'
+             AND receipt_acknowledged = 0
+             AND submitted_at IS NOT NULL
+             AND submitted_at::timestamptz < NOW() - INTERVAL '3 days'"""),
+        {"user_id": user_id},
+    )
+
     # Prune checked/removed items older than 3 days.
     # Only prune non-meal items (extras, regulars). Meal-sourced items are
     # managed by _refresh_trip_meal_items which preserves checked state and
@@ -3099,7 +3116,7 @@ async def get_receipt(request: Request):
     # from a prior trip's reconciliation that never got cleaned up.
     rows = conn.execute(
         text("""SELECT * FROM grocery_items WHERE user_id = :user_id
-           AND NOT (receipt_status IN ('matched', 'substituted', 'dismissed')
+           AND NOT (receipt_status IN ('matched', 'substituted', 'dismissed', 'not_fulfilled')
                     AND receipt_acknowledged = 1)
            AND added_at >= NOW() - INTERVAL '5 days'
            ORDER BY shopping_group, name"""),
@@ -3502,8 +3519,11 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         # source of phantom rows reappearing on the grocery list (the
         # tagged row becomes invisible to meal sync, and meal sync inserts
         # a fresh sibling).
+        # submitted_at preserved so the auto-settle housekeeping can clock the
+        # 3-day window from the order submit. Clearing it would lose the only
+        # timestamp tying this row to its place in the order flow.
         _not_fulfilled_sql = """UPDATE grocery_items SET receipt_status = 'not_fulfilled',
-               ordered = 0, submitted_at = NULL,
+               ordered = 0,
                product_upc = '', product_name = '', product_brand = '',
                product_size = '', product_price = NULL, product_image = '',
                receipt_item = '', receipt_upc = '', receipt_price = NULL,
@@ -3519,8 +3539,11 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         # No receipt items left — only UPC-ordered items get the
         # not_fulfilled tag. See comment above for why name_rows are
         # left alone.
+        # submitted_at preserved so the auto-settle housekeeping can clock the
+        # 3-day window from the order submit. Clearing it would lose the only
+        # timestamp tying this row to its place in the order flow.
         _not_fulfilled_sql = """UPDATE grocery_items SET receipt_status = 'not_fulfilled',
-               ordered = 0, submitted_at = NULL,
+               ordered = 0,
                product_upc = '', product_name = '', product_brand = '',
                product_size = '', product_price = NULL, product_image = '',
                receipt_item = '', receipt_upc = '', receipt_price = NULL,
