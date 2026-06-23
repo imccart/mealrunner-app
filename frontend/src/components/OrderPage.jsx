@@ -996,7 +996,6 @@ export default function OrderPage() {
                         : <div className={styles.productRowThumbBlank}></div>}
                     </div>
                     <div className={styles.productRowMain}>
-                      {p.brand && <div className={styles.productRowBrand}>{p.brand}</div>}
                       <div className={styles.productRowName}>{p.name}</div>
                       <div className={styles.productRowPrices}>
                         <span className={styles.priceCurrent}>{formatPrice(effectivePrice)}</span>
