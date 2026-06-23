@@ -3779,11 +3779,16 @@ async def resolve_receipt_item(body: dict, request: Request):
             {"id": item_id, "user_id": user_id},
         )
     elif status == "not_fulfilled":
-        # Reset to active so item can be re-ordered.
-        # checked is cleared because the stale-order soft-delete may have set it.
+        # User clicked "Didn't get it" — fully reset to a plain active grocery
+        # row. Carrying receipt_status='not_fulfilled' past this point is
+        # residue with no consumer; every filter site otherwise has to
+        # special-case it (see audit, session 89). Receipt-side state is
+        # cleared along with order/product state and the stale-order
+        # soft-delete's checked flag.
         conn.execute(
-            text("""UPDATE grocery_items SET receipt_status = 'not_fulfilled',
-                   receipt_acknowledged = 1,
+            text("""UPDATE grocery_items SET receipt_status = '',
+                   receipt_acknowledged = 0,
+                   receipt_item = '', receipt_upc = '', receipt_price = NULL,
                    ordered = 0, submitted_at = NULL,
                    checked = 0, checked_at = NULL,
                    product_upc = '', product_name = '', product_brand = '',
