@@ -1412,7 +1412,9 @@ async def undo_grocery_item(item_id: int, request: Request):
                ordered = 0, ordered_at = NULL, submitted_at = NULL,
                selected_at = NULL, product_upc = '', product_name = '',
                product_brand = '', product_size = '', product_price = NULL,
-               product_image = ''
+               product_image = '',
+               receipt_status = '', receipt_acknowledged = 0,
+               receipt_item = '', receipt_upc = '', receipt_price = NULL
            WHERE id = :id AND user_id = :user_id"""),
         {"id": item_id, "user_id": user_id},
     )
