@@ -560,6 +560,11 @@ def _run_column_migrations(conn: DictConnection) -> None:
         ("idx_meals_user_date", "meals", "user_id, slot_date"),
         ("idx_grocery_items_user_source", "grocery_items", "user_id, source"),
         ("idx_grocery_items_user_checked", "grocery_items", "user_id, checked, have_it, removed"),
+        # Active-list, order-page, matcher, and housekeeping all filter on
+        # (user_id, status). Without this index every tab load scanned the
+        # full grocery_items table — pages took ~6s in prod after the status
+        # collapse landed (session 89).
+        ("idx_grocery_items_user_status", "grocery_items", "user_id, status"),
         # recipe_ingredients(recipe_id) is hit by build_grocery_list's bulk
         # WHERE recipe_id IN (...) queries; FK alone doesn't get an
         # auto-index on the source side.
