@@ -3591,19 +3591,24 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
     if rcpt_prices:
         _log_prices(conn, rcpt_prices, rcpt_location, "receipt", user_id)
 
-    # Save unmatched receipt items as extras. Dedupe at insert (was previously
-    # enforced by skipping receipt items whose text already appeared in extras,
-    # which silently blocked re-matching across trips). Use _extras_dedup_key
-    # so ligature / punctuation / unicode variants collapse to the same key.
+    # Save unmatched receipt items as extras. Per-row inserts with no silent
+    # excepts: a swallowed batch failure had been dropping every receipt's
+    # extras for the entire app's history (zero rows ever written across all
+    # users). Per-row INSERTs surface any real error instead of pretending it
+    # was a no-op. Dedupe at insert using _extras_dedup_key so ligature /
+    # punctuation / unicode variants collapse to the same key.
+    extras_attempted = 0
+    extras_written = 0
+    logger.info(
+        "Extras-write: receipt_remaining=%d user=%s",
+        len(receipt_remaining), user_id,
+    )
     if receipt_remaining:
         existing_extras = conn.execute(
             text("SELECT item_name FROM receipt_extra_items WHERE user_id = :uid"),
             {"uid": user_id},
         ).fetchall()
         existing_extra_keys = {_extras_dedup_key(r["item_name"]) for r in existing_extras}
-        # Collect rows to insert in one batch — was N round-trips for a
-        # receipt with N unmatched items.
-        to_insert = []
         for ri in receipt_remaining:
             display_name = ri.get("item") or ri.get("raw") or ""
             if not display_name:
@@ -3611,30 +3616,20 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
             key = _extras_dedup_key(display_name)
             if key in existing_extra_keys:
                 continue
-            to_insert.append({
-                "user_id": user_id, "item_name": display_name,
-                "price": ri.get("price"), "upc": ri.get("upc", ""),
-                "brand": ri.get("brand", ""),
-            })
+            extras_attempted += 1
+            conn.execute(
+                text("""INSERT INTO receipt_extra_items (user_id, item_name, price, upc, brand)
+                   VALUES (:user_id, :item_name, :price, :upc, :brand)"""),
+                {"user_id": user_id, "item_name": display_name,
+                 "price": ri.get("price"), "upc": ri.get("upc", ""),
+                 "brand": ri.get("brand", "")},
+            )
+            extras_written += 1
             existing_extra_keys.add(key)
-        if to_insert:
-            try:
-                conn.execute(
-                    text("""INSERT INTO receipt_extra_items (user_id, item_name, price, upc, brand)
-                       VALUES (:user_id, :item_name, :price, :upc, :brand)"""),
-                    to_insert,
-                )
-            except Exception:
-                logger.exception("Batch extras insert failed; falling back to per-row")
-                for params in to_insert:
-                    try:
-                        conn.execute(
-                            text("""INSERT INTO receipt_extra_items (user_id, item_name, price, upc, brand)
-                               VALUES (:user_id, :item_name, :price, :upc, :brand)"""),
-                            params,
-                        )
-                    except Exception:
-                        pass
+        logger.info(
+            "Extras-write: attempted=%d written=%d user=%s",
+            extras_attempted, extras_written, user_id,
+        )
 
     conn.commit()
 
@@ -3642,9 +3637,9 @@ async def _process_receipt(receipt_type: str, content: str, request: Request):
         "ok": True,
         "matched": total_matched,
         "not_fulfilled": total_not_fulfilled,
+        "extras_remaining": len(receipt_remaining),
+        "extras_written": extras_written,
     }
-    if receipt_remaining:
-        result["extras"] = len(receipt_remaining)
     if footer_count is not None:
         parsed_qty = sum((ri.get("qty") or 1) for ri in receipt_items)
         result["item_count_footer"] = footer_count
