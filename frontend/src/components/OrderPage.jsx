@@ -138,12 +138,13 @@ function ProductTransparency({ nova, nutriscore, brand, parentCompany, violation
 // between pills doesn't re-query Kroger.
 
 const MR_WEIGHTS = {
-  price: 0.25,
-  unitPrice: 0.15,
-  deal: 0.15,
-  nova: 0.20,
-  nutri: 0.10,
-  rep: 0.15,
+  price: 0.19,
+  unitPrice: 0.11,
+  deal: 0.11,
+  nova: 0.15,
+  nutri: 0.08,
+  rep: 0.11,
+  category: 0.25,
 }
 const NUTRI_VALUES = { A: 1.0, B: 0.75, C: 0.5, D: 0.25, E: 0.0 }
 const NOVA_VALUES = { 1: 1.0, 2: 0.67, 3: 0.33, 4: 0.0 }
@@ -161,6 +162,22 @@ function computeMrRank(products) {
   const maxPrice = prices.length ? Math.max(...prices) : null
   const minUnit = unitPrices.length ? Math.min(...unitPrices) : null
   const maxUnit = unitPrices.length ? Math.max(...unitPrices) : null
+
+  // Dominant-category set: any Kroger category that appears on at least
+  // 30% (or 2+) of the result rows. A product whose categories don't
+  // intersect this set is off-topic for the search (e.g. "Maple Syrup
+  // Breakfast Sausage Patties" leaking into a maple syrup search).
+  const catCounts = new Map()
+  let productsWithCats = 0
+  for (const p of products) {
+    if (Array.isArray(p.categories) && p.categories.length) {
+      productsWithCats++
+      for (const c of p.categories) catCounts.set(c, (catCounts.get(c) || 0) + 1)
+    }
+  }
+  const catThreshold = Math.max(2, Math.ceil(productsWithCats * 0.3))
+  const expectedCats = new Set()
+  for (const [c, n] of catCounts) if (n >= catThreshold) expectedCats.add(c)
 
   return products.map(p => {
     const axes = {}
@@ -190,6 +207,9 @@ function computeMrRank(products) {
       const serious = p.violations.fda_class_i || 0
       const penalty = Math.min(1, (total / 30) * 0.7 + (serious / 5) * 0.3)
       axes.rep = 1 - penalty
+    }
+    if (expectedCats.size && Array.isArray(p.categories) && p.categories.length) {
+      axes.category = p.categories.some(c => expectedCats.has(c)) ? 1 : 0
     }
     // Reallocate weights of missing axes proportionally across present ones
     // so a product with missing NOVA isn't penalised vs one with NOVA = 1.
@@ -962,7 +982,7 @@ export default function OrderPage() {
                       <strong>Deal:</strong> biggest savings vs your usual price first.
                     </div>
                     <div className={styles.sortLegendItem}>
-                      <strong>MR Rank:</strong> MealRunner's balanced pick — combines price, per-unit cost, current deal, processing level, nutrition grade, and parent-company recall history.
+                      <strong>MR Rank:</strong> MealRunner's balanced pick — combines category relevance, price, per-unit cost, current deal, processing level, nutrition grade, and parent-company recall history.
                     </div>
                   </div>
                 )}

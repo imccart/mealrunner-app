@@ -2379,6 +2379,7 @@ def _build_search_response(conn, user_id: str, item_name: str, ff: str, start: i
             "image": p.image_url,
             "rating": rating,
             "parent_company": parent,
+            "categories": p.categories or [],
         }
         if violations:
             item["violations"] = violations
