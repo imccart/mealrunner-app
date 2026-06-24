@@ -224,6 +224,28 @@ function computeMrRank(products) {
   })
 }
 
+function computeAlternatives(selected, pool, maxN = 3) {
+  if (!selected || !Array.isArray(pool) || !selected.unit_price || !selected.unit_label) return []
+  const selectedCats = new Set(Array.isArray(selected.categories) ? selected.categories : [])
+  if (!selectedCats.size) return []
+  const nutriOrd = s => (s && typeof s === 'string') ? s.toUpperCase().charCodeAt(0) : null
+  const selNutri = nutriOrd(selected.nutriscore)
+
+  const candidates = pool.filter(p => {
+    if (!p || p.upc === selected.upc) return false
+    if (p.unit_price == null || p.unit_price >= selected.unit_price) return false
+    if (p.unit_label !== selected.unit_label) return false
+    const pCats = Array.isArray(p.categories) ? p.categories : []
+    if (!pCats.some(c => selectedCats.has(c))) return false
+    if (selected.nova != null && p.nova != null && Math.abs(p.nova - selected.nova) > 1) return false
+    const pNutri = nutriOrd(p.nutriscore)
+    if (selNutri != null && pNutri != null && Math.abs(pNutri - selNutri) > 1) return false
+    return true
+  })
+  candidates.sort((a, b) => a.unit_price - b.unit_price)
+  return candidates.slice(0, maxN)
+}
+
 function sortProducts(products, mode) {
   if (!products || products.length === 0) return products
   const arr = [...products]
@@ -828,20 +850,47 @@ export default function OrderPage() {
         </div>
       )}
 
-      {pendingProduct && (
-        <div className={styles.orderModalOverlay} onClick={() => setPendingProduct(null)}>
-          <div className={styles.orderModal} onClick={e => e.stopPropagation()}>
-            <div className={styles.orderQtyLabel}>How many?</div>
-            <div className={styles.orderQtyProduct}>{pendingProduct.name}</div>
-            <div className={styles.orderQtyControls}>
-              <button className={styles.orderQtyBtn} onClick={() => setPendingQty(q => Math.max(1, q - 1))}>{'\u2212'}</button>
-              <span className="order-qty-value">{pendingQty}</span>
-              <button className={styles.orderQtyBtn} onClick={() => setPendingQty(q => q + 1)}>+</button>
+      {pendingProduct && (() => {
+        const altPool = products?.products || []
+        const alts = computeAlternatives(pendingProduct, altPool)
+        return (
+          <div className={styles.orderModalOverlay} onClick={() => setPendingProduct(null)}>
+            <div className={styles.orderModal} onClick={e => e.stopPropagation()}>
+              <div className={styles.orderQtyLabel}>How many?</div>
+              <div className={styles.orderQtyProduct}>{pendingProduct.name}</div>
+              <div className={styles.orderQtyControls}>
+                <button className={styles.orderQtyBtn} onClick={() => setPendingQty(q => Math.max(1, q - 1))}>{'\u2212'}</button>
+                <span className="order-qty-value">{pendingQty}</span>
+                <button className={styles.orderQtyBtn} onClick={() => setPendingQty(q => q + 1)}>+</button>
+              </div>
+              {alts.length > 0 && (
+                <div className={styles.orderSavingsPanel}>
+                  <div className={styles.orderSavingsLabel}>Potential savings</div>
+                  {alts.map(alt => (
+                    <button
+                      key={alt.upc}
+                      className={styles.orderSavingsCard}
+                      onClick={() => { setPendingProduct(alt); setPendingQty(1) }}
+                    >
+                      <div className={styles.orderSavingsName}>{alt.name}</div>
+                      <div className={styles.orderSavingsMeta}>
+                        {alt.brand ? `${alt.brand} \u00b7 ` : ''}{alt.size}
+                      </div>
+                      <div className={styles.orderSavingsPrices}>
+                        <span>{formatPrice(effectivePrice(alt))}</span>
+                        <span className={styles.orderSavingsUnit}>
+                          ${alt.unit_price.toFixed(2)}{alt.unit_label}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button className={styles.orderQtyConfirm} onClick={handleConfirmQuantity}>Confirm</button>
             </div>
-            <button className={styles.orderQtyConfirm} onClick={handleConfirmQuantity}>Confirm</button>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {showAnythingElse && (
         <div className={styles.orderModalOverlay}>
