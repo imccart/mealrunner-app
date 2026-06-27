@@ -322,11 +322,28 @@ async def optimize_plan(request: Request):
     if len(planned) < 2:
         return {"suggestions": []}
 
+    # Score only ingredients that would actually drive the grocery list:
+    # universal pantry staples (salt, pepper, oil) and the user's own
+    # "keep on hand" staples (butter, soy sauce) don't move the needle.
+    # Drop both from every recipe's scored ingredient set.
+    excluded: set[int] = set()
+    rows = conn.execute(
+        text("SELECT id FROM ingredients WHERE is_pantry_staple = 1"),
+    ).fetchall()
+    excluded.update(r["id"] for r in rows)
+    rows = conn.execute(
+        text("SELECT ingredient_id FROM staples "
+             "WHERE user_id = :uid AND mode = 'keep_on_hand' "
+             "AND ingredient_id IS NOT NULL"),
+        {"uid": user_id},
+    ).fetchall()
+    excluded.update(r["ingredient_id"] for r in rows)
+
     plan_ings: dict[str, set[int]] = {}
     plan_recipe_name: dict[str, str] = {}
     for m in planned:
         ings = get_recipe_ingredients(conn, m.recipe_id)
-        plan_ings[m.slot_date] = {i.ingredient_id for i in ings}
+        plan_ings[m.slot_date] = {i.ingredient_id for i in ings} - excluded
         plan_recipe_name[m.slot_date] = m.recipe_name
 
     ing_count: Counter = Counter()
@@ -341,7 +358,7 @@ async def optimize_plan(request: Request):
     for c in candidates:
         cand_ings[c.id] = {
             i.ingredient_id for i in get_recipe_ingredients(conn, c.id)
-        }
+        } - excluded
 
     scored: list[dict] = []
     for m in planned:
