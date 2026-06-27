@@ -298,6 +298,108 @@ async def set_meal(date: str, body: dict, request: Request):
     return await get_meals(request)
 
 
+@router.get("/plan/optimize")
+async def optimize_plan(request: Request):
+    """Suggest 1-2 recipe swaps that reduce single-use ingredients and
+    increase ingredient overlap across the rolling plan.
+
+    v1 efficiency-only scoring (no diet, no parent-follow-up bulk-cooking
+    pairs yet). Returns whole-meal swap proposals only — per-meal
+    ingredient overrides are a v2 concern.
+    """
+    from mealrunner.planner import load_rolling_week, _get_recent_recipe_ids
+    from mealrunner.recipes import get_recipe_ingredients, filter_recipes, get_recipe
+    from collections import Counter
+    from datetime import date as _date
+
+    user_id = request.state.user_id
+    conn = _conn()
+    mw = load_rolling_week(conn, user_id)
+
+    today_iso = _date.today().isoformat()
+    planned = [m for m in mw.meals
+               if m.recipe_id and m.slot_date >= today_iso]
+    if len(planned) < 2:
+        return {"suggestions": []}
+
+    plan_ings: dict[str, set[int]] = {}
+    plan_recipe_name: dict[str, str] = {}
+    for m in planned:
+        ings = get_recipe_ingredients(conn, m.recipe_id)
+        plan_ings[m.slot_date] = {i.ingredient_id for i in ings}
+        plan_recipe_name[m.slot_date] = m.recipe_name
+
+    ing_count: Counter = Counter()
+    for s in plan_ings.values():
+        ing_count.update(s)
+
+    used_ids = {m.recipe_id for m in planned}
+    used_ids |= _get_recent_recipe_ids(conn, user_id, today_iso)
+    candidates = filter_recipes(conn, exclude_ids=used_ids, user_id=user_id)
+
+    cand_ings: dict[int, set[int]] = {}
+    for c in candidates:
+        cand_ings[c.id] = {
+            i.ingredient_id for i in get_recipe_ingredients(conn, c.id)
+        }
+
+    scored: list[dict] = []
+    for m in planned:
+        orig_ings = plan_ings[m.slot_date]
+        orig_single = {i for i in orig_ings if ing_count[i] == 1}
+        other_ings: set[int] = set()
+        for d, s in plan_ings.items():
+            if d != m.slot_date:
+                other_ings |= s
+
+        for c in candidates:
+            c_ings = cand_ings[c.id]
+            if not c_ings:
+                continue
+            dropped_single = len(orig_single - c_ings)
+            added_single = len(c_ings - other_ings - orig_ings)
+            shared = len(c_ings & other_ings)
+            similarity = (len(c_ings & orig_ings)
+                          / max(len(c_ings | orig_ings), 1))
+            score = dropped_single * 1.5 + shared * 1.0 - added_single * 0.8 + similarity * 0.5
+            if score <= 0:
+                continue
+            scored.append({
+                "slot_date": m.slot_date,
+                "current_recipe_id": m.recipe_id,
+                "current_recipe_name": m.recipe_name,
+                "candidate_recipe_id": c.id,
+                "candidate_recipe_name": c.name,
+                "score": round(score, 2),
+                "dropped_single_use": dropped_single,
+                "newly_shared": shared,
+                "added_single_use": added_single,
+                "similarity": round(similarity, 2),
+            })
+
+    scored.sort(key=lambda s: -s["score"])
+
+    seen_slots: set[str] = set()
+    top: list[dict] = []
+    for s in scored:
+        if s["slot_date"] in seen_slots:
+            continue
+        seen_slots.add(s["slot_date"])
+        bits = []
+        if s["dropped_single_use"]:
+            bits.append(f"drops {s['dropped_single_use']} single-use ingredient" + ("s" if s["dropped_single_use"] != 1 else ""))
+        if s["newly_shared"]:
+            bits.append(f"reuses {s['newly_shared']} ingredient" + ("s" if s["newly_shared"] != 1 else "") + " from other meals")
+        if s["added_single_use"]:
+            bits.append(f"adds {s['added_single_use']} new single-use")
+        s["explanation"] = "; ".join(bits) or "improves overall ingredient overlap"
+        top.append(s)
+        if len(top) >= 2:
+            break
+
+    return {"suggestions": top}
+
+
 @router.post("/meals/fresh-start")
 async def fresh_start(request: Request):
     """Clear all meals in the rolling window. Grocery list updates on next view."""

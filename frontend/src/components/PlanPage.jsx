@@ -41,6 +41,35 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   const [actionView, setActionView] = useState('main')
 
   const [loadError, setLoadError] = useState(false)
+  const [optimizing, setOptimizing] = useState(false)
+  const [optimizeResult, setOptimizeResult] = useState(null)
+
+  const handleOptimize = async () => {
+    setOptimizing(true)
+    try {
+      const result = await api.optimizePlan()
+      setOptimizeResult(result)
+    } catch { /* silent */ }
+    setOptimizing(false)
+  }
+
+  const handleAcceptSuggestion = async (s) => {
+    try {
+      const result = await api.setMeal(s.slot_date, s.candidate_recipe_id, null)
+      setData(result)
+      const remaining = (optimizeResult?.suggestions || []).filter(x =>
+        x.slot_date !== s.slot_date
+      )
+      setOptimizeResult({ ...optimizeResult, suggestions: remaining })
+    } catch { /* silent */ }
+  }
+
+  const handleSkipSuggestion = (s) => {
+    const remaining = (optimizeResult?.suggestions || []).filter(x =>
+      !(x.slot_date === s.slot_date && x.candidate_recipe_id === s.candidate_recipe_id)
+    )
+    setOptimizeResult({ ...optimizeResult, suggestions: remaining })
+  }
 
   const load = async () => {
     try {
@@ -239,8 +268,17 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
       )}
 
       {/* Past meals (read-only) */}
-      <div className="past-toggle" onClick={handleViewPast}>
-        {showPast ? 'Hide past meals' : 'View past meals'}
+      <div className={styles.planTopActions}>
+        <div className="past-toggle" onClick={handleViewPast}>
+          {showPast ? 'Hide past meals' : 'View past meals'}
+        </div>
+        <button
+          className={styles.optimizeBtn}
+          onClick={handleOptimize}
+          disabled={optimizing}
+        >
+          {optimizing ? 'Thinking…' : 'Optimize'}
+        </button>
       </div>
       {showPast && pastDays && (
         <div className={`${styles.mealRows} ${styles.pastMeals}`}>
@@ -495,6 +533,48 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
       </div>
 
       <FeedbackFab page="plan" />
+
+      {optimizeResult && (
+        <Sheet
+          isOpen={true}
+          onClose={() => setOptimizeResult(null)}
+          title="Plan optimizer"
+        >
+          {(!optimizeResult.suggestions || optimizeResult.suggestions.length === 0) ? (
+            <div className={styles.optimizeEmpty}>
+              No swaps would meaningfully improve this plan. Looks efficient as-is.
+            </div>
+          ) : (
+            <div className={styles.optimizeList}>
+              {optimizeResult.suggestions.map(s => {
+                const day = new Date(s.slot_date + 'T00:00:00')
+                  .toLocaleDateString('en-US', { weekday: 'long' })
+                return (
+                  <div key={`${s.slot_date}-${s.candidate_recipe_id}`} className={styles.optimizeCard}>
+                    <div className={styles.optimizeDay}>{day}</div>
+                    <div className={styles.optimizeSwap}>
+                      <span className={styles.optimizeFrom}>{s.current_recipe_name}</span>
+                      <span className={styles.optimizeArrow}>→</span>
+                      <span className={styles.optimizeTo}>{s.candidate_recipe_name}</span>
+                    </div>
+                    <div className={styles.optimizeReason}>{s.explanation}</div>
+                    <div className={styles.optimizeActions}>
+                      <button
+                        className={styles.optimizeAccept}
+                        onClick={() => handleAcceptSuggestion(s)}
+                      >Swap</button>
+                      <button
+                        className={styles.optimizeSkip}
+                        onClick={() => handleSkipSuggestion(s)}
+                      >Skip</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Sheet>
+      )}
 
       {/* Meal picker sheet */}
       {pickerDate && (

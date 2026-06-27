@@ -73,6 +73,7 @@ export const api = {
   surprisePick: (date, cuisine, excludeIds) =>
     request(`/meals/${date}/surprise?cuisine=${encodeURIComponent(cuisine || 'all')}&exclude=${(excludeIds || []).join(',')}`),
   freshStart: () => request('/meals/fresh-start', { method: 'POST' }),
+  optimizePlan: () => request('/plan/optimize'),
   allToGrocery: () => request('/meals/all-to-grocery', { method: 'POST' }),
   swapDays: (dateA, dateB) => request('/meals/swap-days', {
     method: 'POST',

@@ -19,6 +19,86 @@
   font-weight: 300;
 }
 
+.planTopActions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.optimizeBtn {
+  background: white;
+  border: 1px solid var(--tan);
+  color: var(--dark);
+  border-radius: 16px;
+  padding: 6px 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.optimizeBtn:hover { border-color: var(--accent); background: #FBF6F1; }
+.optimizeBtn:disabled { opacity: 0.6; cursor: default; }
+
+.optimizeEmpty {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.optimizeList { display: flex; flex-direction: column; gap: 12px; }
+.optimizeCard {
+  border: 1px solid var(--tan);
+  border-radius: 10px;
+  padding: 12px;
+  background: white;
+}
+.optimizeDay {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.optimizeSwap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.optimizeFrom { color: var(--text-muted); text-decoration: line-through; font-size: 14px; }
+.optimizeArrow { color: var(--accent); }
+.optimizeTo { color: var(--dark); font-weight: 500; font-size: 14px; }
+.optimizeReason {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+.optimizeActions { display: flex; gap: 8px; }
+.optimizeAccept {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+}
+.optimizeSkip {
+  background: none;
+  border: 1px solid var(--tan);
+  color: var(--dark);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+}
+
 /* ── Meal Rows ────────────────────────── */
 
 .mealRows {
