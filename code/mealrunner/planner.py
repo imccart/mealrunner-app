@@ -412,8 +412,9 @@ def get_candidates(conn: DictConnection, user_id: str, slot_date: str) -> list:
 
     The manual picker shows the full library minus what's already used this
     week or cooked in the last two weeks. Cuisine/effort narrowing is opt-in
-    by the user via filter chips (applied client-side), not a silent day-theme
-    filter. Day themes still drive auto-generation elsewhere.
+    by the user via filter chips (applied client-side). Day themes were
+    removed; the candidate pool here is the same one auto-generation draws
+    from.
     """
     s, e = week_range(slot_date)
     week_meals = load_meals(conn, user_id, s, e)
@@ -426,8 +427,16 @@ def get_candidates(conn: DictConnection, user_id: str, slot_date: str) -> list:
 
 
 def _most_paired_side(conn: DictConnection, user_id: str, recipe_id: int) -> dict | None:
-    """The side most often served with a given meal in this user's history.
-    Falls back to the user's most-used side overall when there's no pairing."""
+    """The side most often served with a given meal. Cascades through three
+    fallbacks so the suggestion stays meal-relevant rather than defaulting to
+    "your most-used side overall" — which produced curry-with-mashed-potatoes
+    style mismatches when the picked meal had no pairing history.
+
+    Priority:
+      1. Most-paired side for this exact recipe.
+      2. Most-paired side across recipes in the same cuisine.
+      3. Most-paired side overall (last-resort fallback).
+    """
     row = conn.execute(
         text("""SELECT ms.side_recipe_id, ms.side_name, COUNT(*) AS c
                 FROM meal_sides ms JOIN meals m ON m.id = ms.meal_id
@@ -437,6 +446,21 @@ def _most_paired_side(conn: DictConnection, user_id: str, recipe_id: int) -> dic
                 ORDER BY c DESC LIMIT 1"""),
         {"u": user_id, "rid": recipe_id},
     ).fetchone()
+    if not row:
+        row = conn.execute(
+            text("""SELECT ms.side_recipe_id, ms.side_name, COUNT(*) AS c
+                    FROM meal_sides ms
+                    JOIN meals m ON m.id = ms.meal_id
+                    JOIN recipes target ON target.id = :rid
+                    JOIN recipes r ON r.id = m.recipe_id
+                    WHERE m.user_id = :u
+                      AND ms.side_recipe_id IS NOT NULL
+                      AND r.cuisine = target.cuisine
+                      AND target.cuisine != ''
+                    GROUP BY ms.side_recipe_id, ms.side_name
+                    ORDER BY c DESC LIMIT 1"""),
+            {"u": user_id, "rid": recipe_id},
+        ).fetchone()
     if not row:
         row = conn.execute(
             text("""SELECT ms.side_recipe_id, ms.side_name, COUNT(*) AS c
