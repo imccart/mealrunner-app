@@ -97,7 +97,7 @@
 @keyframes revealMeal {
   0%   { width: 0; opacity: 0; }
   1%   { opacity: 1; }
-  100% { width: 72px; opacity: 1; }
+  100% { width: 92px; opacity: 1; }
 }
 
 .unnerPart {
@@ -121,7 +121,7 @@
 @keyframes revealUnner {
   0%   { width: 0; opacity: 0; }
   1%   { opacity: 1; }
-  100% { width: 78px; opacity: 1; }
+  100% { width: 100px; opacity: 1; }
 }
 
 @keyframes fadeIn {
