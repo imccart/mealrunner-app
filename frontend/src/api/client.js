@@ -74,6 +74,10 @@ export const api = {
     request(`/meals/${date}/surprise?cuisine=${encodeURIComponent(cuisine || 'all')}&exclude=${(excludeIds || []).join(',')}`),
   freshStart: () => request('/meals/fresh-start', { method: 'POST' }),
   optimizePlan: () => request('/plan/optimize'),
+  applyIngredientSwap: (fromName, toName) => request('/plan/optimize/ingredient-swap', {
+    method: 'POST',
+    body: JSON.stringify({ from_ingredient_name: fromName, to_ingredient_name: toName }),
+  }),
   allToGrocery: () => request('/meals/all-to-grocery', { method: 'POST' }),
   swapDays: (dateA, dateB) => request('/meals/swap-days', {
     method: 'POST',

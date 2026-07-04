@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     Table,
@@ -108,6 +109,20 @@ ingredients = Table(
     Column("store_pref", Text, nullable=False, server_default=text("'either'")),
     Column("is_pantry_staple", Integer, nullable=False, server_default=text("0")),
     Column("root", Text, nullable=False, server_default=text("''")),
+)
+
+# Ingredient swap-groups drive the v2 optimizer's "chicken thighs ↔ chicken
+# breast" style suggestions. Membership is many-to-many via (group_name,
+# ingredient_id); an ingredient can belong to more than one group if it
+# genuinely functions in multiple roles. Seeded from
+# data/seed_ingredient_groups.yaml at DB init.
+ingredient_groups = Table(
+    "ingredient_groups", metadata,
+    Column("group_name", Text, nullable=False),
+    Column("ingredient_id", Integer, ForeignKey("ingredients.id"), nullable=False),
+    Index("ix_ingredient_groups_group", "group_name"),
+    Index("ix_ingredient_groups_ingredient", "ingredient_id"),
+    UniqueConstraint("group_name", "ingredient_id", name="uq_ingredient_groups"),
 )
 
 recipes = Table(

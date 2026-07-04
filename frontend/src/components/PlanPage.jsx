@@ -55,8 +55,12 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
 
   const handleAcceptSuggestion = async (s) => {
     try {
-      const result = await api.setMeal(s.slot_date, s.candidate_recipe_id, null)
-      setData(result)
+      if (s.type === 'ingredient') {
+        await api.applyIngredientSwap(s.from_ingredient_name, s.to_ingredient_name)
+      } else {
+        const result = await api.setMeal(s.slot_date, s.candidate_recipe_id, null)
+        setData(result)
+      }
       const remaining = (optimizeResult?.suggestions || []).filter(x =>
         x.slot_date !== s.slot_date
       )
@@ -65,9 +69,7 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
   }
 
   const handleSkipSuggestion = (s) => {
-    const remaining = (optimizeResult?.suggestions || []).filter(x =>
-      !(x.slot_date === s.slot_date && x.candidate_recipe_id === s.candidate_recipe_id)
-    )
+    const remaining = (optimizeResult?.suggestions || []).filter(x => x !== s)
     setOptimizeResult({ ...optimizeResult, suggestions: remaining })
   }
 
@@ -546,17 +548,37 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
             </div>
           ) : (
             <div className={styles.optimizeList}>
-              {optimizeResult.suggestions.map(s => {
+              {optimizeResult.suggestions.map((s, idx) => {
                 const day = new Date(s.slot_date + 'T00:00:00')
                   .toLocaleDateString('en-US', { weekday: 'long' })
+                const isIngredient = s.type === 'ingredient'
+                const key = isIngredient
+                  ? `${s.slot_date}-ing-${s.from_ingredient_id}-${s.to_ingredient_id}`
+                  : `${s.slot_date}-rec-${s.candidate_recipe_id}`
                 return (
-                  <div key={`${s.slot_date}-${s.candidate_recipe_id}`} className={styles.optimizeCard}>
-                    <div className={styles.optimizeDay}>{day}</div>
-                    <div className={styles.optimizeSwap}>
-                      <span className={styles.optimizeFrom}>{s.current_recipe_name}</span>
-                      <span className={styles.optimizeArrow}>→</span>
-                      <span className={styles.optimizeTo}>{s.candidate_recipe_name}</span>
+                  <div key={key} className={styles.optimizeCard}>
+                    <div className={styles.optimizeDay}>
+                      {day}
+                      {isIngredient && (
+                        <span className={styles.optimizeBadge}>ingredient</span>
+                      )}
                     </div>
+                    {isIngredient ? (
+                      <>
+                        <div className={styles.optimizeSlotName}>{s.current_recipe_name}</div>
+                        <div className={styles.optimizeSwap}>
+                          <span className={styles.optimizeFrom}>{s.from_ingredient_name}</span>
+                          <span className={styles.optimizeArrow}>→</span>
+                          <span className={styles.optimizeTo}>{s.to_ingredient_name}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className={styles.optimizeSwap}>
+                        <span className={styles.optimizeFrom}>{s.current_recipe_name}</span>
+                        <span className={styles.optimizeArrow}>→</span>
+                        <span className={styles.optimizeTo}>{s.candidate_recipe_name}</span>
+                      </div>
+                    )}
                     <div className={styles.optimizeReason}>{s.explanation}</div>
                     <div className={styles.optimizeActions}>
                       <button

@@ -59,6 +59,22 @@
   letter-spacing: 0.06em;
   color: var(--text-muted);
   margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.optimizeBadge {
+  background: var(--tan);
+  color: var(--dark);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.optimizeSlotName {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
 }
 .optimizeSwap {
   display: flex;

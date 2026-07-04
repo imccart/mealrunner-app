@@ -1,0 +1,59 @@
+# Ingredient swap-groups for the plan optimizer.
+#
+# Each entry lists ingredient names that are functionally interchangeable
+# in the context of an optimize-mode ingredient swap (e.g. beef → turkey
+# in "ground meat" recipes). Names must match rows in `ingredients.name`
+# exactly (case-insensitive); unknown names are logged and skipped at
+# seed time.
+#
+# Guiding principles:
+#   - Only include swaps a reasonable cook would accept without any
+#     recipe-level rewriting.
+#   - Cheese swaps deliberately excluded — too recipe-specific.
+#   - Prefer under-including over over-including; noise here shows up
+#     as bad grocery-list edits later.
+
+poultry_cuts:
+  - chicken thighs
+  - chicken breast
+  - chicken drumsticks
+  - chicken tenders
+  - chicken wings
+  - bone-in chicken breast
+
+ground_meat:
+  - ground beef
+  - ground turkey
+  - ground chicken
+  - ground pork
+  - ground lamb
+
+rice:
+  - white rice
+  - brown rice
+  - jasmine rice
+  - basmati rice
+  - wild rice
+  - instant rice
+
+pasta_shapes:
+  - spaghetti
+  - angel hair pasta
+  - penne
+  - rigatoni
+  - shells pasta
+  - fusilli pasta
+
+leafy_greens:
+  - spinach
+  - kale
+  - arugula
+  - lettuce
+
+canned_beans:
+  - black beans
+  - kidney beans
+  - pinto beans
+  - navy beans
+  - great northern beans
+  - cannellini beans

@@ -300,12 +300,21 @@ async def set_meal(date: str, body: dict, request: Request):
 
 @router.get("/plan/optimize")
 async def optimize_plan(request: Request):
-    """Suggest 1-2 recipe swaps that reduce single-use ingredients and
-    increase ingredient overlap across the rolling plan.
+    """Suggest efficiency-mode swaps across the rolling plan.
 
-    v1 efficiency-only scoring (no diet, no parent-follow-up bulk-cooking
-    pairs yet). Returns whole-meal swap proposals only — per-meal
-    ingredient overrides are a v2 concern.
+    Two kinds of suggestions:
+      - "recipe" — whole-meal swap where the candidate recipe scores
+        better than the currently-planned one on ingredient overlap +
+        single-use reduction.
+      - "ingredient" — swap a single ingredient (e.g. chicken thighs →
+        chicken breast) inside the currently-planned recipe when the
+        substitute already appears in another planned meal. Substitutions
+        are drawn from the curated `ingredient_groups` table.
+
+    Ingredient swaps are gentler than recipe swaps and usually surface
+    first when a swap-group hit exists. The grocery list will reflect the
+    ingredient swap by removing the original and adding the substitute
+    with a note; the underlying recipe is untouched.
     """
     from mealrunner.planner import load_rolling_week, _get_recent_recipe_ids
     from mealrunner.recipes import get_recipe_ingredients, filter_recipes, get_recipe
@@ -339,36 +348,104 @@ async def optimize_plan(request: Request):
     ).fetchall()
     excluded.update(r["ingredient_id"] for r in rows)
 
+    # Full ingredient objects per slot, keyed by ingredient_id → name, so
+    # the ingredient-swap suggestions can render human text without a
+    # second lookup.
     plan_ings: dict[str, set[int]] = {}
+    ing_name: dict[int, str] = {}
     plan_recipe_name: dict[str, str] = {}
     for m in planned:
         ings = get_recipe_ingredients(conn, m.recipe_id)
-        plan_ings[m.slot_date] = {i.ingredient_id for i in ings} - excluded
+        ids = {i.ingredient_id for i in ings} - excluded
+        plan_ings[m.slot_date] = ids
         plan_recipe_name[m.slot_date] = m.recipe_name
+        for i in ings:
+            ing_name[i.ingredient_id] = i.ingredient_name
 
     ing_count: Counter = Counter()
     for s in plan_ings.values():
         ing_count.update(s)
 
+    # Swap-group lookup: for each ingredient in a planned recipe, gather
+    # every OTHER member of every group it belongs to. Keeps the swap
+    # search O(planned ingredients) instead of a full scan.
+    swap_candidates: dict[int, set[int]] = {}
+    group_rows = conn.execute(text(
+        "SELECT group_name, ingredient_id FROM ingredient_groups"
+    )).fetchall()
+    group_members: dict[str, set[int]] = {}
+    for r in group_rows:
+        group_members.setdefault(r["group_name"], set()).add(r["ingredient_id"])
+    ing_to_groups: dict[int, list[str]] = {}
+    for gname, members in group_members.items():
+        for iid in members:
+            ing_to_groups.setdefault(iid, []).append(gname)
+    for iid, gnames in ing_to_groups.items():
+        peers: set[int] = set()
+        for g in gnames:
+            peers |= group_members[g]
+        peers.discard(iid)
+        swap_candidates[iid] = peers
+
+    # Ingredient-swap suggestions.
+    ing_suggestions: list[dict] = []
+    for m in planned:
+        my_ings = plan_ings[m.slot_date]
+        other_ings: set[int] = set()
+        for d, s in plan_ings.items():
+            if d != m.slot_date:
+                other_ings |= s
+        for iid in my_ings:
+            peers = swap_candidates.get(iid, set())
+            if not peers:
+                continue
+            # Prefer peers that ALREADY appear on the rest of the plan —
+            # the swap consolidates a purchase instead of creating a new one.
+            reusable = peers & other_ings
+            if not reusable:
+                continue
+            # Pick the peer that appears most across other slots.
+            best = max(reusable, key=lambda p: ing_count[p])
+            reuse_count = ing_count[best]
+            # Score: number of other planned meals that already need this
+            # substitute (weight 2) minus 1 if the original was already
+            # shared (dropping a shared ingredient is worthless).
+            was_single = ing_count[iid] == 1
+            score = reuse_count * 2.0 + (1.5 if was_single else 0.0)
+            ing_suggestions.append({
+                "type": "ingredient",
+                "slot_date": m.slot_date,
+                "current_recipe_id": m.recipe_id,
+                "current_recipe_name": m.recipe_name,
+                "from_ingredient_id": iid,
+                "from_ingredient_name": ing_name.get(iid, ""),
+                "to_ingredient_id": best,
+                "to_ingredient_name": ing_name.get(best) or _lookup_ing_name(conn, best),
+                "score": round(score, 2),
+                "explanation": (
+                    f"swap {ing_name.get(iid, '')} for {ing_name.get(best) or _lookup_ing_name(conn, best)} "
+                    f"— already needed in {reuse_count} other meal" + ("s" if reuse_count != 1 else "")
+                ),
+            })
+
+    # Recipe-swap suggestions (unchanged v1 logic).
     used_ids = {m.recipe_id for m in planned}
     used_ids |= _get_recent_recipe_ids(conn, user_id, today_iso)
     candidates = filter_recipes(conn, exclude_ids=used_ids, user_id=user_id)
-
     cand_ings: dict[int, set[int]] = {}
     for c in candidates:
         cand_ings[c.id] = {
             i.ingredient_id for i in get_recipe_ingredients(conn, c.id)
         } - excluded
 
-    scored: list[dict] = []
+    recipe_suggestions: list[dict] = []
     for m in planned:
         orig_ings = plan_ings[m.slot_date]
         orig_single = {i for i in orig_ings if ing_count[i] == 1}
-        other_ings: set[int] = set()
+        other_ings = set()
         for d, s in plan_ings.items():
             if d != m.slot_date:
                 other_ings |= s
-
         for c in candidates:
             c_ings = cand_ings[c.id]
             if not c_ings:
@@ -381,40 +458,103 @@ async def optimize_plan(request: Request):
             score = dropped_single * 1.5 + shared * 1.0 - added_single * 0.8 + similarity * 0.5
             if score <= 0:
                 continue
-            scored.append({
+            bits = []
+            if dropped_single:
+                bits.append(f"drops {dropped_single} single-use ingredient" + ("s" if dropped_single != 1 else ""))
+            if shared:
+                bits.append(f"reuses {shared} ingredient" + ("s" if shared != 1 else "") + " from other meals")
+            if added_single:
+                bits.append(f"adds {added_single} new single-use")
+            recipe_suggestions.append({
+                "type": "recipe",
                 "slot_date": m.slot_date,
                 "current_recipe_id": m.recipe_id,
                 "current_recipe_name": m.recipe_name,
                 "candidate_recipe_id": c.id,
                 "candidate_recipe_name": c.name,
                 "score": round(score, 2),
-                "dropped_single_use": dropped_single,
-                "newly_shared": shared,
-                "added_single_use": added_single,
-                "similarity": round(similarity, 2),
+                "explanation": "; ".join(bits) or "improves overall ingredient overlap",
             })
 
-    scored.sort(key=lambda s: -s["score"])
+    # Rank ingredient swaps first when both are competitive (they're
+    # gentler edits). Otherwise pick by raw score.
+    all_suggestions = ing_suggestions + recipe_suggestions
+    all_suggestions.sort(key=lambda s: (-s["score"], 0 if s["type"] == "ingredient" else 1))
 
     seen_slots: set[str] = set()
     top: list[dict] = []
-    for s in scored:
+    for s in all_suggestions:
         if s["slot_date"] in seen_slots:
             continue
         seen_slots.add(s["slot_date"])
-        bits = []
-        if s["dropped_single_use"]:
-            bits.append(f"drops {s['dropped_single_use']} single-use ingredient" + ("s" if s["dropped_single_use"] != 1 else ""))
-        if s["newly_shared"]:
-            bits.append(f"reuses {s['newly_shared']} ingredient" + ("s" if s["newly_shared"] != 1 else "") + " from other meals")
-        if s["added_single_use"]:
-            bits.append(f"adds {s['added_single_use']} new single-use")
-        s["explanation"] = "; ".join(bits) or "improves overall ingredient overlap"
         top.append(s)
         if len(top) >= 2:
             break
 
     return {"suggestions": top}
+
+
+def _lookup_ing_name(conn, ing_id: int) -> str:
+    row = conn.execute(
+        text("SELECT name FROM ingredients WHERE id = :id"),
+        {"id": ing_id},
+    ).fetchone()
+    return row["name"] if row else ""
+
+
+@router.post("/plan/optimize/ingredient-swap")
+async def apply_ingredient_swap(body: dict, request: Request):
+    """Apply an ingredient swap suggestion from the optimizer to the
+    grocery list.
+
+    Marks any active grocery rows for the original ingredient as removed
+    (the meal-sync respects `removed` and won't bring the row back), then
+    adds the substitute as an extra with a note explaining the swap.
+
+    The underlying recipe is untouched — this is purely a grocery-list
+    edit. Undo is: user unremoves the original row and removes the
+    substitute manually.
+    """
+    from mealrunner.normalize import compare_key
+
+    user_id = request.state.user_id
+    from_name = (body.get("from_ingredient_name") or "").strip().lower()
+    to_name = (body.get("to_ingredient_name") or "").strip().lower()
+    if not from_name or not to_name:
+        return {"ok": False, "error": "missing ingredient names"}
+
+    conn = _conn()
+    from_key = compare_key(from_name)
+    to_key = compare_key(to_name)
+
+    active_rows = conn.execute(
+        text("SELECT id, name FROM grocery_items "
+             "WHERE user_id = :uid AND status = 'active'"),
+        {"uid": user_id},
+    ).fetchall()
+
+    # Remove the original — meal-sync's `removed` state is terminal, so
+    # the row won't get re-added on the next _refresh_trip_meal_items pass.
+    removed_ids = [r["id"] for r in active_rows if compare_key(r["name"]) == from_key]
+    for rid in removed_ids:
+        conn.execute(
+            text("UPDATE grocery_items SET removed = 1, removed_at = CURRENT_TIMESTAMP, "
+                 "status = 'removed' WHERE id = :id"),
+            {"id": rid},
+        )
+
+    already_active = any(compare_key(r["name"]) == to_key for r in active_rows)
+    if not already_active:
+        group = _infer_item_group(conn, to_name, user_id)
+        note = f"optimize swap: replaced {from_name}"
+        conn.execute(
+            text("""INSERT INTO grocery_items
+                  (user_id, name, shopping_group, source, for_meals, meal_count, notes)
+                  VALUES (:uid, :name, :group, 'extra', '', 0, :note)"""),
+            {"uid": user_id, "name": to_name, "group": group, "note": note},
+        )
+    conn.commit()
+    return {"ok": True, "removed": len(removed_ids), "added": 0 if already_active else 1}
 
 
 @router.post("/meals/fresh-start")

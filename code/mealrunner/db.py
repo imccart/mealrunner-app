@@ -798,6 +798,29 @@ def _run_column_migrations(conn: DictConnection) -> None:
         except Exception:
             pass
 
+    # Create ingredient_groups table for v2 optimizer swap suggestions.
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS ingredient_groups (
+                group_name TEXT NOT NULL,
+                ingredient_id INTEGER NOT NULL REFERENCES ingredients(id),
+                CONSTRAINT uq_ingredient_groups UNIQUE (group_name, ingredient_id)
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_ingredient_groups_group ON ingredient_groups (group_name)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_ingredient_groups_ingredient ON ingredient_groups (ingredient_id)"
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   ingredient_groups table skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
     # Backfill product_key from upc where missing
     try:
         conn.execute(text(
@@ -1324,6 +1347,7 @@ def seed_from_yaml(conn: DictConnection, data_dir: str | None = None) -> None:
     ingredient_db_file = Path(data_dir) / "seed_ingredient_database.yaml"
     common_recipes_file = Path(data_dir) / "seed_recipes_common.yaml"
     brand_file = Path(data_dir) / "brand_ownership.yaml"
+    groups_file = Path(data_dir) / "seed_ingredient_groups.yaml"
 
     if ingredients_file.exists():
         _seed_ingredients(conn, ingredients_file)
@@ -1336,6 +1360,8 @@ def seed_from_yaml(conn: DictConnection, data_dir: str | None = None) -> None:
         _seed_recipes(conn, common_recipes_file, user_id="__library__")
     if recipes_file.exists():
         _seed_recipes(conn, recipes_file)
+    if groups_file.exists():
+        _seed_ingredient_groups(conn, groups_file)
 
     conn.commit()
 
@@ -1381,6 +1407,38 @@ def _seed_ingredient_database(conn: DictConnection, path: Path) -> None:
             "staple": int(ing.get("is_pantry_staple", 0)),
             "root": ing.get("root", ""),
         })
+
+
+def _seed_ingredient_groups(conn: DictConnection, path: Path) -> None:
+    """Seed swap-groups from YAML. Idempotent — ON CONFLICT DO NOTHING
+    on (group_name, ingredient_id). Unknown ingredient names are logged
+    and skipped so a stale YAML doesn't crash startup."""
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+
+    id_by_name: dict[str, int] = {}
+    rows = conn.execute(text("SELECT id, LOWER(name) AS name FROM ingredients")).fetchall()
+    for r in rows:
+        id_by_name[r["name"]] = r["id"]
+
+    missing: list[tuple[str, str]] = []
+    inserted = 0
+    for group_name, names in data.items():
+        if not isinstance(names, list):
+            continue
+        for raw in names:
+            ing_id = id_by_name.get((raw or "").strip().lower())
+            if ing_id is None:
+                missing.append((group_name, raw))
+                continue
+            conn.execute(text(
+                """INSERT INTO ingredient_groups (group_name, ingredient_id)
+                   VALUES (:g, :i) ON CONFLICT DO NOTHING"""
+            ), {"g": group_name, "i": ing_id})
+            inserted += 1
+    if missing:
+        print(f"[seed] ingredient_groups: {len(missing)} unknown ingredient names skipped: {missing[:5]}{'...' if len(missing) > 5 else ''}", flush=True)
+    print(f"[seed] ingredient_groups: {inserted} memberships upserted", flush=True)
 
 
 def _seed_brand_ownership(conn: DictConnection, path: Path) -> None:
