@@ -19,42 +19,33 @@
   font-weight: 300;
 }
 
-.dateHeaderRow {
+.planTopActions {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-}
-.optimizeBlock {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 12px;
 }
 .optimizeBtn {
   background: transparent;
   border: none;
-  padding: 4px;
+  padding: 4px 8px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: transform 0.15s, background 0.15s;
+  gap: 6px;
+  border-radius: 16px;
+  color: var(--text-muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  transition: color 0.15s, background 0.15s;
 }
-.optimizeBtn:hover { background: rgba(212, 98, 58, 0.08); transform: scale(1.04); }
-.optimizeBtn:disabled { opacity: 0.5; cursor: default; transform: none; background: transparent; }
+.optimizeBtn:hover { color: var(--accent); background: rgba(212, 98, 58, 0.06); }
+.optimizeBtn:disabled { opacity: 0.5; cursor: default; }
 .optimizeGlyph {
-  width: 44px;
-  height: 44px;
+  width: 22px;
+  height: 22px;
   object-fit: contain;
   display: block;
-}
-.optimizeCaption {
-  font-size: 14px;
-  color: var(--text-muted);
-  font-weight: 300;
-  line-height: 1;
 }
 
 .optimizeEmpty {

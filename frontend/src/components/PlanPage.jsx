@@ -262,35 +262,29 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
       {showHeader && (
         <>
           <div className="page-header">
-            <div className={styles.dateHeaderRow}>
-              <div>
-                <div className={styles.dateRangeBig}>
-                  {dateRange.text} <em>&ndash;</em> {dateRange.endText}
-                </div>
-                <div className={styles.dateSubtitle}>Your next 10 days</div>
-              </div>
-              <div className={styles.optimizeBlock}>
-                <button
-                  className={styles.optimizeBtn}
-                  onClick={handleOptimize}
-                  disabled={optimizing}
-                  title="Optimize this plan"
-                  aria-label="Optimize this plan"
-                >
-                  <img src={optimizeIcon} alt="" className={styles.optimizeGlyph} />
-                </button>
-                <div className={styles.optimizeCaption}>
-                  {optimizing ? 'Thinking…' : 'Optimize'}
-                </div>
-              </div>
+            <div className={styles.dateRangeBig}>
+              {dateRange.text} <em>&ndash;</em> {dateRange.endText}
             </div>
+            <div className={styles.dateSubtitle}>Your next 10 days</div>
           </div>
         </>
       )}
 
-      {/* Past meals (read-only) */}
-      <div className="past-toggle" onClick={handleViewPast}>
-        {showPast ? 'Hide past meals' : 'View past meals'}
+      {/* Past meals + optimize action */}
+      <div className={styles.planTopActions}>
+        <div className="past-toggle" onClick={handleViewPast}>
+          {showPast ? 'Hide past meals' : 'View past meals'}
+        </div>
+        <button
+          className={styles.optimizeBtn}
+          onClick={handleOptimize}
+          disabled={optimizing}
+          title="Optimize this plan"
+          aria-label="Optimize this plan"
+        >
+          <img src={optimizeIcon} alt="" className={styles.optimizeGlyph} />
+          <span>{optimizing ? 'Thinking…' : 'Optimize'}</span>
+        </button>
       </div>
       {showPast && pastDays && (
         <div className={`${styles.mealRows} ${styles.pastMeals}`}>
