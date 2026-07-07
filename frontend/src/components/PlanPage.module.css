@@ -19,26 +19,31 @@
   font-weight: 300;
 }
 
-.planTopActions {
+.dateHeaderRow {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: 16px;
 }
 .optimizeBtn {
-  background: white;
-  border: 1px solid var(--tan);
-  color: var(--dark);
-  border-radius: 16px;
-  padding: 6px 14px;
-  font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
+  background: transparent;
+  border: none;
+  padding: 4px;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: transform 0.15s, background 0.15s;
 }
-.optimizeBtn:hover { border-color: var(--accent); background: #FBF6F1; }
-.optimizeBtn:disabled { opacity: 0.6; cursor: default; }
+.optimizeBtn:hover { background: rgba(212, 98, 58, 0.08); transform: scale(1.04); }
+.optimizeBtn:disabled { opacity: 0.5; cursor: default; transform: none; background: transparent; }
+.optimizeGlyph {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  display: block;
+}
 
 .optimizeEmpty {
   padding: 24px 8px;
