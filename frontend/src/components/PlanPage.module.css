@@ -50,8 +50,8 @@
 .optimizeBtn:hover { color: var(--accent); background: rgba(212, 98, 58, 0.06); }
 .optimizeBtn:disabled { opacity: 0.5; cursor: default; }
 .optimizeGlyph {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
   display: block;
 }
