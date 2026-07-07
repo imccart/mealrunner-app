@@ -25,6 +25,14 @@
   align-items: center;
   gap: 12px;
 }
+/* The global .past-toggle is width:100% + text-align:center, which
+   collapses this flex row on mobile. Constrain it back to content-width
+   and left-align inside this row. */
+.planTopActions :global(.past-toggle) {
+  width: auto;
+  text-align: left;
+  padding: 4px 0;
+}
 .optimizeBtn {
   background: transparent;
   border: none;
