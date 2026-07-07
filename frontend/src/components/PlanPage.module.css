@@ -22,8 +22,14 @@
 .dateHeaderRow {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
+}
+.optimizeBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
 .optimizeBtn {
   background: transparent;
@@ -43,6 +49,12 @@
   height: 44px;
   object-fit: contain;
   display: block;
+}
+.optimizeCaption {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 300;
+  line-height: 1;
 }
 
 .optimizeEmpty {

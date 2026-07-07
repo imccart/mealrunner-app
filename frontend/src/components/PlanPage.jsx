@@ -269,15 +269,20 @@ export default function PlanPage({ showHeader = true, onLoad, onNavigate }) {
                 </div>
                 <div className={styles.dateSubtitle}>Your next 10 days</div>
               </div>
-              <button
-                className={styles.optimizeBtn}
-                onClick={handleOptimize}
-                disabled={optimizing}
-                title="Optimize this plan"
-                aria-label="Optimize this plan"
-              >
-                <img src={optimizeIcon} alt="" className={styles.optimizeGlyph} />
-              </button>
+              <div className={styles.optimizeBlock}>
+                <button
+                  className={styles.optimizeBtn}
+                  onClick={handleOptimize}
+                  disabled={optimizing}
+                  title="Optimize this plan"
+                  aria-label="Optimize this plan"
+                >
+                  <img src={optimizeIcon} alt="" className={styles.optimizeGlyph} />
+                </button>
+                <div className={styles.optimizeCaption}>
+                  {optimizing ? 'Thinking…' : 'Optimize'}
+                </div>
+              </div>
             </div>
           </div>
         </>
