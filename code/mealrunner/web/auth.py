@@ -296,6 +296,14 @@ def _magic_link_html(link: str) -> str:
 # ── Whitelist ────────────────────────────────────────────
 
 
+def signup_open() -> bool:
+    """When true, anyone can sign up — no allowlist gate, no waitlist detour.
+    Flip by setting OPEN_SIGNUP to 0/false/no/off in the environment; defaults
+    to open."""
+    val = os.environ.get("OPEN_SIGNUP", "true").strip().lower()
+    return val not in ("0", "false", "no", "off")
+
+
 def is_email_allowed(conn: DictConnection, email: str) -> bool:
     """Check if an email is on the beta whitelist. E2E test emails (RFC2606
     reserved invalid domain) are auto-allowed so the magic-link login flow

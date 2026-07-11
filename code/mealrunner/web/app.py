@@ -23,6 +23,7 @@ from mealrunner.web.auth import (
     _is_public,
     get_user_id_from_request,
     is_email_allowed,
+    signup_open,
     find_or_create_user,
     create_magic_link,
     send_magic_link_email,
@@ -276,7 +277,8 @@ def _claim_default_data(conn, user_id: str) -> None:
 
 @app.post("/api/auth/login")
 async def auth_login(body: dict):
-    """Send a magic link to the given email (if whitelisted)."""
+    """Send a magic link to the given email. Anyone with a valid address gets
+    one when signup is open; the OPEN_SIGNUP env flag re-closes the gate."""
     from mealrunner.web.api import _check_throttle
 
     email = body.get("email", "").strip().lower()
@@ -289,8 +291,8 @@ async def auth_login(body: dict):
         return {"ok": False, "error": "Too many login attempts. Please try again later."}
 
     conn = get_request_connection()
-    if not is_email_allowed(conn, email):
-        # Save to waitlist for future approval
+    if not signup_open() and not is_email_allowed(conn, email):
+        # Gate is closed and this email isn't on the allowlist — waitlist it.
         conn.execute(
             text("INSERT INTO waitlist (email) VALUES (:email) ON CONFLICT DO NOTHING"),
             {"email": email},
@@ -339,7 +341,7 @@ async def auth_google(body: dict):
         return JSONResponse({"error": "Email not verified"}, status_code=401)
 
     conn = get_request_connection()
-    if not is_email_allowed(conn, email):
+    if not signup_open() and not is_email_allowed(conn, email):
         conn.execute(
             text("INSERT INTO waitlist (email) VALUES (:email) ON CONFLICT DO NOTHING"),
             {"email": email},
