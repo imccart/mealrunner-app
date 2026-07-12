@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MealRunner — Meal planning the way your family talks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --warm-white: #F5F0E8;
+    --tan: #E8DDD0;
+    --brown: #8B6F5E;
+    --dark: #2C2420;
+    --accent: #D4623A;
+    --accent-light: #F0A882;
+    --accent-bg: #FFF5F0;
+    --text-muted: #6B5D52;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--warm-white); color: var(--dark); font-family: 'DM Sans', sans-serif; -webkit-font-smoothing: antialiased; }
+
+  .nav {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .wordmark {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--dark);
+    letter-spacing: -0.01em;
+  }
+  .wordmark em { color: var(--accent); font-style: italic; font-weight: 400; }
+
+  .hero {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 60px 24px 40px;
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 60px;
+    align-items: center;
+  }
+  .hero-copy h1 {
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    font-size: 52px;
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+    margin: 0 0 24px;
+    color: var(--dark);
+  }
+  .hero-copy h1 em { color: var(--accent); font-style: italic; font-weight: 400; }
+  .hero-copy p.lede {
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--text-muted);
+    margin: 0 0 32px;
+    max-width: 480px;
+  }
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--accent);
+    color: white;
+    text-decoration: none;
+    padding: 14px 26px;
+    border-radius: 999px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    box-shadow: 0 4px 14px rgba(212, 98, 58, 0.25);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .cta:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(212, 98, 58, 0.32); }
+  .cta-note {
+    display: block;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* --- Proof mockup: phone-shaped card showing the tacos → ingredients → grocery flow --- */
+  .proof {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .phone {
+    width: 320px;
+    background: white;
+    border: 1px solid var(--tan);
+    border-radius: 24px;
+    padding: 20px;
+    box-shadow: 0 20px 40px rgba(44, 36, 32, 0.10);
+  }
+  .phone-header {
+    font-family: 'Playfair Display', serif;
+    font-size: 16px;
+    color: var(--dark);
+    margin-bottom: 4px;
+  }
+  .phone-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+  .meal-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--tan);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    background: white;
+  }
+  .meal-row.today {
+    border-color: var(--accent-light);
+    background: linear-gradient(135deg, #fff 0%, #FDF5F0 100%);
+  }
+  .meal-day {
+    font-family: 'Playfair Display', serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    width: 28px;
+  }
+  .meal-row.today .meal-day { color: var(--accent); }
+  .meal-name { font-size: 15px; font-weight: 500; color: var(--dark); }
+  .meal-side { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .arrow {
+    text-align: center;
+    color: var(--accent);
+    margin: 8px 0;
+    font-size: 18px;
+  }
+  .ing-card {
+    background: var(--accent-bg);
+    border: 1px solid var(--tan);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .ing-card h4 {
+    margin: 0 0 8px;
+    font-family: 'Playfair Display', serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--dark);
+  }
+  .ing-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 13px;
+    color: var(--brown);
+    line-height: 1.7;
+  }
+  .ing-list li::before {
+    content: "•";
+    color: var(--accent);
+    margin-right: 8px;
+  }
+
+  /* --- Explainer strip: three-step "how it works" --- */
+  .how {
+    background: white;
+    border-top: 1px solid var(--tan);
+    border-bottom: 1px solid var(--tan);
+    padding: 60px 24px;
+    margin-top: 60px;
+  }
+  .how-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 32px;
+  }
+  .step-num {
+    font-family: 'Playfair Display', serif;
+    font-style: italic;
+    font-size: 28px;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .step h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.25;
+    min-height: 2.5em;
+    margin: 0 0 10px;
+    color: var(--dark);
+  }
+  .step p {
+    color: var(--text-muted);
+    font-size: 15px;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  /* --- Smarter band --- */
+  .smarter {
+    padding: 72px 24px 60px;
+    background: var(--warm-white);
+  }
+  .smarter-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .smarter h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 34px;
+    font-weight: 600;
+    margin: 0 0 12px;
+    color: var(--dark);
+    letter-spacing: -0.01em;
+  }
+  .smarter-lede {
+    color: var(--text-muted);
+    font-size: 16px;
+    line-height: 1.55;
+    margin: 0 auto 44px;
+    max-width: 620px;
+  }
+  .smarter-cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    text-align: left;
+  }
+  .smarter-card {
+    background: white;
+    border: 1px solid var(--tan);
+    border-radius: 14px;
+    padding: 24px 22px;
+  }
+  .smarter-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-family: 'Playfair Display', serif;
+    font-weight: 600;
+    font-size: 18px;
+    margin-bottom: 14px;
+  }
+  .smarter-card h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.25;
+    min-height: 2.5em;
+    margin: 0 0 8px;
+    color: var(--dark);
+  }
+  .smarter-card p {
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  /* --- Footer --- */
+  footer {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px 48px;
+    color: var(--text-muted);
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  footer a { color: var(--brown); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+
+  @media (max-width: 820px) {
+    .hero { grid-template-columns: 1fr; gap: 40px; padding-top: 32px; }
+    .hero-copy h1 { font-size: 38px; }
+    .proof { order: 2; }
+    .how-inner { grid-template-columns: 1fr; gap: 32px; }
+    .smarter-cards { grid-template-columns: 1fr; }
+    .smarter h2 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wordmark">Meal<em>Runner</em></div>
+</nav>
+
+<section class="hero">
+  <div class="hero-copy">
+    <h1>Meal planning the way your family <em>actually talks.</em></h1>
+    <p class="lede">
+      You say "tacos." MealRunner remembers what tacos means in your house, puts the fixings on the grocery list, and integrates with Kroger — or reads your receipt if you shop elsewhere.
+    </p>
+    <a class="cta" href="/app">Plan your first week &rarr;</a>
+  </div>
+
+  <div class="proof">
+    <div class="phone">
+      <div class="phone-header">Your next 10 days</div>
+      <div class="phone-sub">Jul 9 — Jul 18</div>
+
+      <div class="meal-row today">
+        <div class="meal-day">Thu</div>
+        <div>
+          <div class="meal-name">Tacos</div>
+          <div class="meal-side">with cilantro rice</div>
+        </div>
+      </div>
+      <div class="meal-row">
+        <div class="meal-day">Fri</div>
+        <div>
+          <div class="meal-name">Spaghetti</div>
+        </div>
+      </div>
+      <div class="meal-row">
+        <div class="meal-day">Sat</div>
+        <div>
+          <div class="meal-name">Hamburgers</div>
+        </div>
+      </div>
+
+      <div class="arrow">&darr;</div>
+
+      <div class="ing-card">
+        <h4>Tacos means, in your house:</h4>
+        <ul class="ing-list">
+          <li>Ground beef</li>
+          <li>Flour tortillas</li>
+          <li>Shredded cheddar</li>
+          <li>Salsa, sour cream</li>
+          <li>Cilantro, lime</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="how">
+  <div class="how-inner">
+    <div class="step">
+      <div class="step-num">1.</div>
+      <h3>Plan in your own shorthand</h3>
+      <p>Type the meals your family already knows — "tacos," "burgers," "stir fry." No recipe browsing, no scrolling through someone else's dinners.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">2.</div>
+      <h3>Grocery list builds itself</h3>
+      <p>MealRunner turns each meal into the ingredients you told it you needed. Add staples once and they roll forward every week.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">3.</div>
+      <h3>Only the staples you actually need</h3>
+      <p>Nothing gets auto-added to your list — no assumed butter, no assumed salt. Mark what you keep on hand once and MealRunner knows to leave it off.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">4.</div>
+      <h3>Order through Kroger or scan the receipt</h3>
+      <p>One-tap ordering when you shop Kroger, or upload a receipt from any store and MealRunner reconciles what you actually bought.</p>
+    </div>
+  </div>
+</section>
+
+<section class="smarter">
+  <div class="smarter-inner">
+    <h2>Buy smarter as you go.</h2>
+    <p class="smarter-lede">MealRunner surfaces the pricing and product details you'd usually have to hunt for. You still pick what to buy — you just have more to go on.</p>
+    <div class="smarter-cards">
+      <div class="smarter-card">
+        <div class="smarter-icon">$</div>
+        <h3>Cheaper equivalents as you order</h3>
+        <p>When you pick a Kroger product, MealRunner shows same-category, same-size alternatives that cost less per unit. You decide if they're worth swapping.</p>
+      </div>
+      <div class="smarter-card">
+        <div class="smarter-icon">↻</div>
+        <h3>Reuse ingredients across the week</h3>
+        <p>Tap Optimize and MealRunner suggests small swaps — a different meal, or one ingredient inside a meal — so a single purchase can carry two dinners instead of one.</p>
+      </div>
+      <div class="smarter-card">
+        <div class="smarter-icon">◎</div>
+        <h3>See what's really in your cart</h3>
+        <p>NOVA processing scores, Nutri-Score, and the parent company behind each brand — surfaced next to the products you're about to buy.</p>
+      </div>
+      <div class="smarter-card">
+        <div class="smarter-icon">↗</div>
+        <h3>Know what your groceries actually cost</h3>
+        <p>MealRunner quietly logs prices from your orders and receipts. Over a few weeks you see what your typical basket costs and when it tends to be cheapest.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div>© 2026 Aletheia LLC</div>
+  <div>
+    <a href="/app">Sign in</a>
+    &nbsp;·&nbsp;
+    <a href="mailto:hello@getmealrunner.app">Contact</a>
+  </div>
+</footer>
+
+</body>
+</html>

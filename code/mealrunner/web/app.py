@@ -736,9 +736,14 @@ async def store_allow_household(request: Request):
 
 # ── Routes ────────────────────────────────────────────────
 
+_LANDING_HTML = Path(__file__).parent / "landing.html"
+
+
 @app.get("/")
 async def index():
-    """Landing page — redirect to React app."""
+    """Serve the marketing landing page. The React app lives at /app."""
+    if _LANDING_HTML.exists():
+        return FileResponse(str(_LANDING_HTML), media_type="text/html")
     return RedirectResponse(url="/app", status_code=302)
 
 
