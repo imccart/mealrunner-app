@@ -5701,22 +5701,51 @@ async def get_admin_metrics(request: Request):
         val = next(iter(row.values()), None)
         return int(val) if val is not None else 0
 
-    # NOTE on "active": last_login is a poor proxy because household members log
-    # in once and stay signed in, so they never refresh it. A live (unexpired)
-    # session is the truthful "currently has access / using it" signal and counts
-    # household members. Engagement counts (meals/grocery/receipts) are aggregate,
-    # not per-user, because a household member's activity is written under the
-    # household owner's user_id — so distinct-user counts would undercount.
+    # NOTE on "active_signed_in": last_login is a poor proxy because household
+    # members log in once and stay signed in, so they never refresh it. A live
+    # (unexpired) session is the truthful "currently has access" signal and
+    # counts household members.
+    #
+    # Activation buckets (ghosts / bounces / active) partition users by whether
+    # they actually did anything, not just whether they logged in:
+    #   ghosts   = signed up, never logged in (last_login IS NULL)
+    #   bounces  = logged in, but no substantive activity — only counts owners
+    #              and solo users, because a household member's actions write
+    #              under the owner's user_id so their own row counts are always
+    #              zero by design
+    #   active   = did something substantive; owners/solo users need at least
+    #              one meal/grocery/receipt row of their own, household members
+    #              qualify by having logged in (their activity is merged into
+    #              the owner's counts and can't be attributed back)
+    # Sums to users_total.
+    activity_where = """
+        EXISTS (SELECT 1 FROM meals m WHERE m.user_id = u.id)
+        OR EXISTS (SELECT 1 FROM grocery_items g WHERE g.user_id = u.id)
+        OR EXISTS (
+            SELECT 1 FROM grocery_state gs
+            WHERE gs.user_id = u.id AND gs.receipt_parsed_at IS NOT NULL
+        )
+    """
     metrics = {
         "users_total": scalar("SELECT COUNT(*) FROM users"),
         "users_new_7d": scalar("SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days'"),
         "active_signed_in": scalar("SELECT COUNT(DISTINCT user_id) FROM sessions WHERE expires_at > NOW()"),
-        "pending_activation": scalar("SELECT COUNT(*) FROM users WHERE last_login IS NULL"),
+        "ghosts": scalar("SELECT COUNT(*) FROM users WHERE last_login IS NULL"),
+        "bounces": scalar(f"""
+            SELECT COUNT(*) FROM users u
+            LEFT JOIN household_members hm ON hm.user_id = u.id
+            WHERE u.last_login IS NOT NULL
+              AND COALESCE(hm.role, 'owner') = 'owner'
+              AND NOT ({activity_where})
+        """),
+        "active": scalar(f"""
+            SELECT COUNT(*) FROM users u
+            LEFT JOIN household_members hm ON hm.user_id = u.id
+            WHERE u.last_login IS NOT NULL
+              AND (hm.role = 'member' OR ({activity_where}))
+        """),
         "households": scalar("SELECT COUNT(DISTINCT household_id) FROM household_members"),
         "kroger_linked": scalar("SELECT COUNT(DISTINCT user_id) FROM user_kroger_tokens"),
-        "meals_planned_7d": scalar("SELECT COUNT(*) FROM meals WHERE created_at > NOW() - INTERVAL '7 days'"),
-        "grocery_items_7d": scalar("SELECT COUNT(*) FROM grocery_items WHERE added_at > NOW() - INTERVAL '7 days'"),
-        "receipts_7d": scalar("SELECT COUNT(*) FROM grocery_state WHERE receipt_parsed_at > NOW() - INTERVAL '7 days'"),
         "invites_sent": scalar("SELECT COUNT(*) FROM household_invites"),
         "invites_accepted": scalar("SELECT COUNT(*) FROM household_invites WHERE status = 'accepted'"),
         "open_feedback": scalar("SELECT COUNT(*) FROM user_feedback WHERE COALESCE(dismissed, 0) = 0 AND status NOT IN ('responded', 'resolved', 'dismissed')"),
@@ -5779,6 +5808,54 @@ async def get_admin_detail(key: str, request: Request):
             FROM tips t JOIN users u ON u.id = t.user_id
             WHERE t.status = 'succeeded'
             ORDER BY t.created_at DESC
+        """)}
+
+    if key == "ghosts":
+        return {"ok": True, "rows": rows_of("""
+            SELECT email, created_at
+            FROM users
+            WHERE last_login IS NULL
+            ORDER BY created_at DESC
+        """)}
+
+    if key == "bounces":
+        return {"ok": True, "rows": rows_of("""
+            SELECT u.email, u.created_at, u.last_login
+            FROM users u
+            LEFT JOIN household_members hm ON hm.user_id = u.id
+            WHERE u.last_login IS NOT NULL
+              AND COALESCE(hm.role, 'owner') = 'owner'
+              AND NOT EXISTS (SELECT 1 FROM meals m WHERE m.user_id = u.id)
+              AND NOT EXISTS (SELECT 1 FROM grocery_items g WHERE g.user_id = u.id)
+              AND NOT EXISTS (
+                  SELECT 1 FROM grocery_state gs
+                  WHERE gs.user_id = u.id AND gs.receipt_parsed_at IS NOT NULL
+              )
+            ORDER BY u.last_login DESC
+        """)}
+
+    if key == "active":
+        return {"ok": True, "rows": rows_of("""
+            SELECT u.email,
+                   u.last_login,
+                   COALESCE(hm.role, 'solo') AS hh_role,
+                   (SELECT COUNT(*) FROM meals m WHERE m.user_id = u.id) AS meals,
+                   (SELECT COUNT(*) FROM grocery_items g WHERE g.user_id = u.id) AS grocery,
+                   (SELECT COUNT(*) FROM grocery_state gs
+                    WHERE gs.user_id = u.id AND gs.receipt_parsed_at IS NOT NULL) AS receipts
+            FROM users u
+            LEFT JOIN household_members hm ON hm.user_id = u.id
+            WHERE u.last_login IS NOT NULL
+              AND (
+                hm.role = 'member'
+                OR EXISTS (SELECT 1 FROM meals m WHERE m.user_id = u.id)
+                OR EXISTS (SELECT 1 FROM grocery_items g WHERE g.user_id = u.id)
+                OR EXISTS (
+                    SELECT 1 FROM grocery_state gs
+                    WHERE gs.user_id = u.id AND gs.receipt_parsed_at IS NOT NULL
+                )
+              )
+            ORDER BY (meals + grocery + receipts) DESC, u.last_login DESC
         """)}
 
     if key == "households":

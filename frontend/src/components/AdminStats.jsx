@@ -84,7 +84,7 @@ export default function AdminStats() {
   )
   if (!m) return <div className={styles.empty}>Loading…</div>
 
-  const usersSub = `${m.active_signed_in} active · ${m.pending_activation} not logged in`
+  const usersSub = `${m.active_signed_in} signed in`
     + (m.users_new_7d > 0 ? ` · ${m.users_new_7d} new this wk` : '')
   const tipsSub = money(m.tips_cents)
     + (m.tip_subscribers > 0 ? ` · ${m.tip_subscribers} monthly` : '')
@@ -95,17 +95,17 @@ export default function AdminStats() {
       tiles: [
         { label: 'Users', value: m.users_total, sub: usersSub, detail: 'users' },
         { label: 'Households', value: m.households, detail: 'households' },
+        { label: 'Kroger linked', value: m.kroger_linked, detail: 'kroger' },
         { label: 'Waitlist', value: m.waitlist, detail: 'waitlist' },
         { label: 'Invites sent', value: m.invites_sent, sub: `${m.invites_accepted ?? 0} accepted`, detail: 'invites' },
       ],
     },
     {
-      title: 'Engagement (last 7 days)',
+      title: 'Activation',
       tiles: [
-        { label: 'Kroger linked', value: m.kroger_linked, detail: 'kroger' },
-        { label: 'Meals planned', value: m.meals_planned_7d },
-        { label: 'Grocery items added', value: m.grocery_items_7d },
-        { label: 'Receipts parsed', value: m.receipts_7d },
+        { label: 'Ghosts', value: m.ghosts, sub: 'signed up, never opened', detail: 'ghosts' },
+        { label: 'Bounces', value: m.bounces, sub: 'opened, no activity', detail: 'bounces' },
+        { label: 'Active', value: m.active, sub: 'actually used it', detail: 'active' },
       ],
     },
     {
@@ -188,6 +188,16 @@ function Detail({ keyName, rows, error, actions }) {
     if (keyName === 'waitlist') return fmtDate(r.requested_at)
     if (keyName === 'invites') return r.status + (r.invited_by ? ` · by ${r.invited_by}` : '')
     if (keyName === 'tips') return `${money(r.amount_cents)} · ${r.mode} · ${fmtDate(r.created_at)}`
+    if (keyName === 'ghosts') return `signed up ${fmtDate(r.created_at)}`
+    if (keyName === 'bounces') return `last signed in ${fmtDate(r.last_login)}`
+    if (keyName === 'active') {
+      if (r.hh_role === 'member') return 'household member · activity under owner'
+      const parts = []
+      if (r.meals > 0) parts.push(`${r.meals} meal${r.meals === 1 ? '' : 's'}`)
+      if (r.grocery > 0) parts.push(`${r.grocery} grocery`)
+      if (r.receipts > 0) parts.push(`${r.receipts} receipt${r.receipts === 1 ? '' : 's'}`)
+      return parts.join(' · ')
+    }
     return ''  // kroger: email only
   }
 
