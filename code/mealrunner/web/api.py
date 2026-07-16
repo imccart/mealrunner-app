@@ -5835,27 +5835,25 @@ async def get_admin_detail(key: str, request: Request):
         """)}
 
     if key == "active":
+        # CTE so ORDER BY can reference the aggregated activity columns —
+        # Postgres won't resolve SELECT aliases inside an ORDER BY expression.
         return {"ok": True, "rows": rows_of("""
-            SELECT u.email,
-                   u.last_login,
-                   COALESCE(hm.role, 'solo') AS hh_role,
-                   (SELECT COUNT(*) FROM meals m WHERE m.user_id = u.id) AS meals,
-                   (SELECT COUNT(*) FROM grocery_items g WHERE g.user_id = u.id) AS grocery,
-                   (SELECT COUNT(*) FROM grocery_state gs
-                    WHERE gs.user_id = u.id AND gs.receipt_parsed_at IS NOT NULL) AS receipts
-            FROM users u
-            LEFT JOIN household_members hm ON hm.user_id = u.id
-            WHERE u.last_login IS NOT NULL
-              AND (
-                hm.role = 'member'
-                OR EXISTS (SELECT 1 FROM meals m WHERE m.user_id = u.id)
-                OR EXISTS (SELECT 1 FROM grocery_items g WHERE g.user_id = u.id)
-                OR EXISTS (
-                    SELECT 1 FROM grocery_state gs
-                    WHERE gs.user_id = u.id AND gs.receipt_parsed_at IS NOT NULL
-                )
-              )
-            ORDER BY (meals + grocery + receipts) DESC, u.last_login DESC
+            WITH per_user AS (
+                SELECT u.email,
+                       u.last_login,
+                       COALESCE(hm.role, 'solo') AS hh_role,
+                       (SELECT COUNT(*) FROM meals m WHERE m.user_id = u.id) AS meals,
+                       (SELECT COUNT(*) FROM grocery_items g WHERE g.user_id = u.id) AS grocery,
+                       (SELECT COUNT(*) FROM grocery_state gs
+                        WHERE gs.user_id = u.id AND gs.receipt_parsed_at IS NOT NULL) AS receipts
+                FROM users u
+                LEFT JOIN household_members hm ON hm.user_id = u.id
+                WHERE u.last_login IS NOT NULL
+            )
+            SELECT email, last_login, hh_role, meals, grocery, receipts
+            FROM per_user
+            WHERE hh_role = 'member' OR meals > 0 OR grocery > 0 OR receipts > 0
+            ORDER BY (meals + grocery + receipts) DESC, last_login DESC
         """)}
 
     if key == "households":
