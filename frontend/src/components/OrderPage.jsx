@@ -595,9 +595,13 @@ export default function OrderPage() {
     if (pending.length > 0) {
       setActiveItem(pending[0].name)
     } else {
-      // All picked — wrap to first item
-      const allNames = [...order.pending.map(p => p.name), ...order.selected.map(s => s.name)]
-      if (allNames.length > 0) setActiveItem(allNames[0])
+      // Everything's picked — this is the "Review selections" case. Don't
+      // jump into the picker (that hides the selections on mobile and looks
+      // like a blank picker). Instead flip the mobile view to the ordered
+      // section so the list of picked items is what shows. On desktop the
+      // ordered items are always visible in the sidebar; leaving activeItem
+      // null keeps the end-state panel where the Send button lives.
+      setMobileSection('ordered')
     }
   }
 
