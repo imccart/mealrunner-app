@@ -1619,38 +1619,44 @@
   margin-bottom: 8px;
 }
 
-/* Sits above the "N left · N ordered" row on mobile. Wraps the fill-from-
-   history button and the after-action toast. */
+/* Sits above the "N left · N ordered" row on mobile. Icon+text pill matches
+   the Optimize button on the Plan page — transparent, muted, right-aligned. */
 .selectDefaultsRow {
   padding: 0 16px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  justify-content: flex-end;
 }
 .selectDefaultsBtn {
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--accent-bg);
-  color: var(--accent);
-  border: 1px solid var(--accent-light);
-  border-radius: 999px;
-  padding: 6px 14px;
+  border-radius: 16px;
+  color: var(--text-muted);
   font-family: 'DM Sans', sans-serif;
   font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s, color 0.15s;
 }
-.selectDefaultsBtn:hover:not(:disabled) { background: var(--accent); color: white; }
-.selectDefaultsBtn:disabled { opacity: 0.6; cursor: default; }
+.selectDefaultsBtn:hover:not(:disabled) { color: var(--accent); background: rgba(212, 98, 58, 0.06); }
+.selectDefaultsBtn:disabled { opacity: 0.5; cursor: default; }
+.selectDefaultsGlyph {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  display: block;
+}
 .defaultsToast {
+  padding: 0 16px;
+  margin-bottom: 8px;
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
+  text-align: right;
 }
 
 .pickingRow {

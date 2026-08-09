@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../api/client'
 import Sheet from './Sheet'
 import FeedbackFab from './FeedbackFab'
+import optimizeIcon from '../assets/optimize-icon.png'
 import styles from './OrderPage.module.css'
 
 // Render an item's display name with the user's chosen grocery-list quantity
@@ -1274,7 +1275,7 @@ export default function OrderPage() {
         {storeDetails}
       </div>
 
-      {/* Mobile: select defaults + header counts */}
+      {/* Mobile: select defaults row (icon+text, right-aligned) — only when there's something to fill */}
       {pendingCount > 0 && (
         <div className={styles.selectDefaultsRow}>
           <button
@@ -1282,17 +1283,18 @@ export default function OrderPage() {
             onClick={handleSelectDefaults}
             disabled={selectingDefaults}
           >
-            {selectingDefaults ? 'Filling…' : 'Select defaults'}
+            <img src={optimizeIcon} alt="" className={styles.selectDefaultsGlyph} />
+            <span>{selectingDefaults ? 'Filling…' : 'Select defaults'}</span>
           </button>
-          {defaultsToast && (
-            <div className={styles.defaultsToast}>
-              {defaultsToast.error
-                ? defaultsToast.error
-                : defaultsToast.selected > 0
-                  ? `Filled ${defaultsToast.selected} of ${defaultsToast.total_pending} from your history`
-                  : 'Nothing to fill — no items with 3+ prior picks currently available'}
-            </div>
-          )}
+        </div>
+      )}
+      {defaultsToast && (
+        <div className={styles.defaultsToast}>
+          {defaultsToast.error
+            ? defaultsToast.error
+            : defaultsToast.selected > 0
+              ? `Filled ${defaultsToast.selected} of ${defaultsToast.total_pending} from your history`
+              : 'Nothing to fill — no items with 3+ prior picks currently available'}
         </div>
       )}
       <div className={styles.orderMobileQueueRow}>
