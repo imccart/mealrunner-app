@@ -322,8 +322,37 @@ export default function OrderPage() {
   const [showCompareSheet, setShowCompareSheet] = useState(false)
 
   const [sharedAccountName, setSharedAccountName] = useState(null)
+  const [selectingDefaults, setSelectingDefaults] = useState(false)
+  const [defaultsToast, setDefaultsToast] = useState(null)  // {selected, no_history, unavailable, total_pending} | null
 
   const activeItemRef = useRef(null)
+
+  // Auto-dismiss the defaults toast after 5s
+  useEffect(() => {
+    if (!defaultsToast) return
+    const t = setTimeout(() => setDefaultsToast(null), 5000)
+    return () => clearTimeout(t)
+  }, [defaultsToast])
+
+  const handleSelectDefaults = async () => {
+    if (selectingDefaults) return
+    setSelectingDefaults(true)
+    try {
+      const res = await api.selectDefaults()
+      if (res?.ok) {
+        // Refresh the order so newly-selected items move to the ordered section
+        const data = await api.getOrder()
+        setOrder(data)
+        setDefaultsToast(res)
+      } else {
+        setDefaultsToast({ error: res?.error || 'Could not select defaults' })
+      }
+    } catch {
+      setDefaultsToast({ error: 'Could not select defaults' })
+    } finally {
+      setSelectingDefaults(false)
+    }
+  }
 
   // When activeItem changes (prev/next nav, queue tap), scroll the new item's
   // section to the top of the viewport. Without this, the page stays scrolled
@@ -1245,7 +1274,27 @@ export default function OrderPage() {
         {storeDetails}
       </div>
 
-      {/* Mobile: header counts */}
+      {/* Mobile: select defaults + header counts */}
+      {pendingCount > 0 && (
+        <div className={styles.selectDefaultsRow}>
+          <button
+            className={styles.selectDefaultsBtn}
+            onClick={handleSelectDefaults}
+            disabled={selectingDefaults}
+          >
+            {selectingDefaults ? 'Filling…' : 'Select defaults'}
+          </button>
+          {defaultsToast && (
+            <div className={styles.defaultsToast}>
+              {defaultsToast.error
+                ? defaultsToast.error
+                : defaultsToast.selected > 0
+                  ? `Filled ${defaultsToast.selected} of ${defaultsToast.total_pending} from your history`
+                  : 'Nothing to fill — no items with 3+ prior picks currently available'}
+            </div>
+          )}
+        </div>
+      )}
       <div className={styles.orderMobileQueueRow}>
         {mobileHeaderCounts}
       </div>

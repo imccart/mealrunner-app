@@ -2961,6 +2961,157 @@ async def deselect_product(item_name: str, request: Request):
     return await get_order(request)
 
 
+@router.post("/order/select-defaults")
+async def select_defaults(request: Request):
+    """Auto-fill each unselected item on the current order with the user's
+    most-picked product for that item, provided (a) they've picked it 3+
+    times and (b) it's currently available at their Kroger location.
+
+    Threshold of 3 balances "confident preference" against beta-limited
+    history. Availability is checked via Kroger search with
+    fulfillment=curbside, which only returns products currently pickupable
+    at the store — a UPC we picked 3 weeks ago that's since gone
+    out-of-stock or discontinued won't show up and gets skipped.
+    """
+    from mealrunner.kroger import search_products_fast, save_preference
+    from mealrunner.stores import get_kroger_location_id
+    from mealrunner.planner import load_rolling_week
+    import anyio
+    import asyncio
+
+    user_id = request.state.user_id
+    conn = _conn()
+    location_id = get_kroger_location_id(conn, user_id)
+    if not location_id:
+        return {"ok": False, "error": "Kroger account not linked or store not selected"}
+
+    mw = load_rolling_week(conn, user_id)
+    _ensure_active_trip(conn, mw, user_id)
+
+    # Every unselected item on the active order
+    pending = conn.execute(
+        text("""SELECT name FROM grocery_items
+                WHERE user_id = :uid AND status = 'active'
+                  AND product_upc = ''
+                  AND buy_elsewhere = 0
+                ORDER BY name"""),
+        {"uid": user_id},
+    ).fetchall()
+
+    if not pending:
+        return {"ok": True, "selected": 0, "no_history": 0, "unavailable": 0,
+                "total_pending": 0}
+
+    # For each pending name, look up the top pick. Recent-first pass wins
+    # when the user has current signal (3+ picks in the last 60 days), so a
+    # freshly-switched preference beats a stale-but-frequent old one. If the
+    # recent pass finds nothing, fall back to all-time so users with sparser
+    # or older history still get an auto-fill.
+    #
+    # times_picked in the preferences table is a running counter (bumped on
+    # every save_preference call), not a per-window count, so the "recent"
+    # pass has to derive its count from the picks table by user + item name.
+    # We approximate that by requiring last_picked to be within 60 days AND
+    # times_picked >= 3 — a good-enough proxy given a picked-once, picked-
+    # again product's last_picked slides forward each time.
+    candidates = []
+    no_history = 0
+    for r in pending:
+        item_name = r["name"]
+        top = conn.execute(
+            text("""SELECT search_term, upc
+                    FROM product_preferences
+                    WHERE user_id = :uid
+                      AND LOWER(search_term) = LOWER(:name)
+                      AND times_picked >= 3
+                      AND upc != ''
+                      AND last_picked > NOW() - INTERVAL '60 days'
+                    ORDER BY times_picked DESC, last_picked DESC
+                    LIMIT 1"""),
+            {"uid": user_id, "name": item_name},
+        ).fetchone()
+        if not top:
+            # Full-history fallback
+            top = conn.execute(
+                text("""SELECT search_term, upc
+                        FROM product_preferences
+                        WHERE user_id = :uid
+                          AND LOWER(search_term) = LOWER(:name)
+                          AND times_picked >= 3
+                          AND upc != ''
+                        ORDER BY times_picked DESC, last_picked DESC
+                        LIMIT 1"""),
+                {"uid": user_id, "name": item_name},
+            ).fetchone()
+        if not top:
+            no_history += 1
+            continue
+        candidates.append({
+            "item_name": item_name,
+            "search_term": top["search_term"],
+            "upc": top["upc"],
+        })
+
+    # Parallel availability check — bounded concurrency to be gentle on
+    # Kroger's rate limit. Blocking requests.* must be offloaded so the
+    # event loop doesn't stall for other in-flight requests.
+    sem = asyncio.Semaphore(4)
+
+    async def _verify(c):
+        async with sem:
+            products = await anyio.to_thread.run_sync(
+                lambda: search_products_fast(
+                    term=c["search_term"], limit=50,
+                    fulfillment="curbside", location_id=location_id,
+                )
+            )
+        match = next((p for p in products if p.upc == c["upc"]), None)
+        return c, match
+
+    results = await asyncio.gather(*(_verify(c) for c in candidates))
+
+    selected = 0
+    unavailable = 0
+    for c, match in results:
+        if not match:
+            unavailable += 1
+            continue
+        # In-place update mirrors the "same product / first pick" branch of
+        # /order/select. We limit to product_upc='' so a race with the user
+        # picking manually can't overwrite their choice.
+        conn.execute(
+            text("""UPDATE grocery_items SET
+                       product_upc = :upc, product_name = :name, product_brand = :brand,
+                       product_size = :size, product_price = :price, product_image = :image,
+                       quantity = 1,
+                       ordered = 1, ordered_at = CURRENT_TIMESTAMP, selected_at = CURRENT_TIMESTAMP,
+                       receipt_status = '', receipt_acknowledged = 0,
+                       receipt_item = '', receipt_upc = '', receipt_price = NULL,
+                       status = 'active'
+                   WHERE user_id = :uid AND LOWER(name) = :item_name
+                     AND status = 'active' AND product_upc = ''"""),
+            {"upc": match.upc, "name": match.description, "brand": match.brand,
+             "size": match.size, "price": match.price, "image": match.image_url,
+             "uid": user_id, "item_name": c["item_name"].lower()},
+        )
+        save_preference(conn, user_id, c["item_name"], match, source="auto-default")
+        selected += 1
+
+    if selected > 0:
+        conn.execute(
+            text("""UPDATE grocery_state SET order_source = CASE
+                       WHEN order_source IN ('none', 'kroger') THEN 'kroger'
+                       ELSE 'mixed'
+                   END WHERE user_id = :uid"""),
+            {"uid": user_id},
+        )
+    conn.commit()
+
+    return {"ok": True, "selected": selected,
+            "no_history": no_history, "unavailable": unavailable,
+            "total_pending": len(pending)}
+
+
 @router.delete("/order/preference/{upc}")
 async def delete_preference(upc: str, request: Request):
     """Remove a product preference (prior selection) by UPC."""

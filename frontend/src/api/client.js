@@ -109,6 +109,7 @@ export const api = {
     body: JSON.stringify({ item_name: itemName, product, quantity: quantity || 1 }),
   }),
   deselectProduct: (itemName) => request(`/order/deselect/${encodeURIComponent(itemName)}`, { method: 'POST' }),
+  selectDefaults: () => request('/order/select-defaults', { method: 'POST' }),
   deletePreference: (upc) => request(`/order/preference/${encodeURIComponent(upc)}`, { method: 'DELETE' }),
   getPriceComparison: () => request('/order/price-comparison'),
   submitOrder: (krogerUserId) => request('/order/submit', {

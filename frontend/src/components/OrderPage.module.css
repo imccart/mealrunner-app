@@ -1619,6 +1619,40 @@
   margin-bottom: 8px;
 }
 
+/* Sits above the "N left · N ordered" row on mobile. Wraps the fill-from-
+   history button and the after-action toast. */
+.selectDefaultsRow {
+  padding: 0 16px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.selectDefaultsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 1px solid var(--accent-light);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, color 0.15s;
+}
+.selectDefaultsBtn:hover:not(:disabled) { background: var(--accent); color: white; }
+.selectDefaultsBtn:disabled { opacity: 0.6; cursor: default; }
+.defaultsToast {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 .pickingRow {
   display: flex;
   align-items: center;
