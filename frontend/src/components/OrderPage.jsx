@@ -1461,9 +1461,26 @@ export default function OrderPage() {
             {order.total_price > 0 && ` · ${formatPrice(order.total_price)} est.`}
           </div>
           <div className={styles.reviewSheetList}>
-            {order.selected.map(item => (
+            {order.selected.length === 0 ? (
+              <div className={styles.reviewEmpty}>
+                Nothing selected. Close this to re-pick items from the order list.
+              </div>
+            ) : order.selected.map(item => (
               <div key={item.name} className={styles.reviewRow}>
-                <div className={styles.reviewItemName}>{displayName(item)}</div>
+                <div className={styles.reviewRowHeader}>
+                  <div className={styles.reviewItemName}>{displayName(item)}</div>
+                  <button
+                    className={styles.reviewChangeBtn}
+                    onClick={async () => {
+                      try {
+                        const data = await api.deselectProduct(item.name)
+                        setOrder(data)
+                      } catch { /* silent — user will notice row didn't disappear */ }
+                    }}
+                  >
+                    Change
+                  </button>
+                </div>
                 <div className={styles.reviewProduct}>
                   <span className={styles.reviewProductName}>{item.product.name}</span>
                   {(item.product.brand || item.product.size) && (
