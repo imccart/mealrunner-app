@@ -325,6 +325,7 @@ export default function OrderPage() {
   const [sharedAccountName, setSharedAccountName] = useState(null)
   const [selectingDefaults, setSelectingDefaults] = useState(false)
   const [defaultsToast, setDefaultsToast] = useState(null)  // {selected, no_history, unavailable, total_pending} | null
+  const [showReviewSheet, setShowReviewSheet] = useState(false)
 
   const activeItemRef = useRef(null)
 
@@ -588,20 +589,17 @@ export default function OrderPage() {
 
   const handleKeepShopping = () => {
     if (!order) return
-    // Explicit "keep shopping" tap = the user wants to see what's left,
-    // including anything they skipped earlier. Clear the session skip list.
     setSkipped(new Set())
     const pending = order.pending
     if (pending.length > 0) {
+      // "Keep shopping" case — jump into the picker on the next unpicked item.
       setActiveItem(pending[0].name)
     } else {
-      // Everything's picked — this is the "Review selections" case. Don't
-      // jump into the picker (that hides the selections on mobile and looks
-      // like a blank picker). Instead flip the mobile view to the ordered
-      // section so the list of picked items is what shows. On desktop the
-      // ordered items are always visible in the sidebar; leaving activeItem
-      // null keeps the end-state panel where the Send button lives.
-      setMobileSection('ordered')
+      // "Review selections" case — open a dedicated sheet with each grocery
+      // item and its selected product side-by-side. Sheet dismisses back to
+      // the end-state panel where the Send button lives, so the review flow
+      // is non-destructive.
+      setShowReviewSheet(true)
     }
   }
 
@@ -1455,6 +1453,34 @@ export default function OrderPage() {
       {communityConfirm && (
         <div className={styles.communityToast}>Yes, Chef!</div>
       )}
+      {showReviewSheet && (
+        <Sheet onClose={() => setShowReviewSheet(false)}>
+          <div className="sheet-title">Review your order</div>
+          <div className="sheet-sub">
+            {pickedCount} item{pickedCount !== 1 ? 's' : ''}
+            {order.total_price > 0 && ` · ${formatPrice(order.total_price)} est.`}
+          </div>
+          <div className={styles.reviewSheetList}>
+            {order.selected.map(item => (
+              <div key={item.name} className={styles.reviewRow}>
+                <div className={styles.reviewItemName}>{displayName(item)}</div>
+                <div className={styles.reviewProduct}>
+                  <span className={styles.reviewProductName}>{item.product.name}</span>
+                  {(item.product.brand || item.product.size) && (
+                    <span className={styles.reviewProductMeta}>
+                      {[item.product.brand, item.product.size].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                  {item.product.price != null && (
+                    <span className={styles.reviewProductPrice}>{formatPrice(item.product.price)}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Sheet>
+      )}
+
       {showSendSheet && (
         <Sheet onClose={() => setShowSendSheet(false)}>
           <div className="sheet-title">Send to {storeName}</div>

@@ -1264,6 +1264,49 @@
   padding: 16px 0;
 }
 
+/* Review-selections sheet — condensed grocery→product mapping */
+.reviewSheetList {
+  padding: 12px 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.reviewRow {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--tan);
+  border-radius: 8px;
+  background: white;
+}
+.reviewItemName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dark);
+  font-family: 'Playfair Display', serif;
+}
+.reviewProduct {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+.reviewProductName {
+  color: var(--dark);
+  font-weight: 500;
+}
+.reviewProductMeta { font-size: 12px; }
+.reviewProductPrice {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+}
+
 .compareSheetContent {
   padding: 8px 0;
 }
