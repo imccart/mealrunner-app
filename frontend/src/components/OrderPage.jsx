@@ -1275,7 +1275,10 @@ export default function OrderPage() {
         {storeDetails}
       </div>
 
-      {/* Mobile: select defaults row (icon+text, right-aligned) — only when there's something to fill */}
+      <div className={styles.orderMobileQueueRow}>
+        {mobileHeaderCounts}
+      </div>
+      {/* Mobile: select defaults — chunky pill below the counts, only when there's something to fill */}
       {pendingCount > 0 && (
         <div className={styles.selectDefaultsRow}>
           <button
@@ -1297,9 +1300,6 @@ export default function OrderPage() {
               : 'Nothing to fill — no items with 3+ prior picks currently available'}
         </div>
       )}
-      <div className={styles.orderMobileQueueRow}>
-        {mobileHeaderCounts}
-      </div>
 
       {/* Mobile: collapsed queue row */}
       <div className={styles.orderMobileQueueRow}>

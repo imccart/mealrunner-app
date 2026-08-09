@@ -1619,44 +1619,48 @@
   margin-bottom: 8px;
 }
 
-/* Sits above the "N left · N ordered" row on mobile. Icon+text pill matches
-   the Optimize button on the Plan page — transparent, muted, right-aligned. */
+/* Sits below the "N left · N ordered" row on mobile. Chunky centered pill —
+   this is an offered shortcut, not a hint, so it earns some visual weight. */
 .selectDefaultsRow {
-  padding: 0 16px;
-  margin-bottom: 4px;
+  padding: 4px 16px 8px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
 }
 .selectDefaultsBtn {
-  background: transparent;
-  border: none;
-  padding: 4px 8px;
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border-radius: 16px;
-  color: var(--text-muted);
+  gap: 10px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 10px 22px;
+  border-radius: 999px;
+  min-height: 44px;
   font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
-  transition: color 0.15s, background 0.15s;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 2px 6px rgba(212, 98, 58, 0.22);
+  transition: background 0.15s, box-shadow 0.15s, transform 0.05s;
 }
-.selectDefaultsBtn:hover:not(:disabled) { color: var(--accent); background: rgba(212, 98, 58, 0.06); }
-.selectDefaultsBtn:disabled { opacity: 0.5; cursor: default; }
+.selectDefaultsBtn:hover:not(:disabled) { background: #C25630; box-shadow: 0 3px 10px rgba(212, 98, 58, 0.30); }
+.selectDefaultsBtn:active:not(:disabled) { transform: translateY(1px); }
+.selectDefaultsBtn:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
 .selectDefaultsGlyph {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   object-fit: contain;
   display: block;
+  /* Icon PNG is dark on transparent — invert to white so it reads on the accent pill. */
+  filter: brightness(0) invert(1);
 }
 .defaultsToast {
-  padding: 0 16px;
-  margin-bottom: 8px;
-  font-size: 12px;
+  padding: 0 16px 8px;
+  font-size: 13px;
   color: var(--text-muted);
   line-height: 1.4;
-  text-align: right;
+  text-align: center;
 }
 
 .pickingRow {
