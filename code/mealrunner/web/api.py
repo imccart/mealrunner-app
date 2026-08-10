@@ -3076,6 +3076,24 @@ async def select_defaults(request: Request):
         if not match:
             unavailable += 1
             continue
+        # Quantity: use the mode of past-order quantities for this exact
+        # (user, item name, product) combo, so "potatoes" doesn't come back
+        # as 1 when the user typically buys 5. Falls back to 1 when there's
+        # no submitted history for this pair (never ordered before, first
+        # cart, etc.). MODE is more robust than MAX (one party-sized order
+        # doesn't skew every future auto-fill).
+        qty_row = conn.execute(
+            text("""SELECT MODE() WITHIN GROUP (ORDER BY quantity) AS qty
+                    FROM grocery_items
+                    WHERE user_id = :uid
+                      AND LOWER(name) = LOWER(:name)
+                      AND product_upc = :upc
+                      AND submitted_at IS NOT NULL
+                      AND quantity > 0"""),
+            {"uid": user_id, "name": c["item_name"], "upc": match.upc},
+        ).fetchone()
+        qty = int(qty_row["qty"]) if qty_row and qty_row["qty"] else 1
+
         # In-place update mirrors the "same product / first pick" branch of
         # /order/select. We limit to product_upc='' so a race with the user
         # picking manually can't overwrite their choice.
@@ -3083,7 +3101,7 @@ async def select_defaults(request: Request):
             text("""UPDATE grocery_items SET
                        product_upc = :upc, product_name = :name, product_brand = :brand,
                        product_size = :size, product_price = :price, product_image = :image,
-                       quantity = 1,
+                       quantity = :quantity,
                        ordered = 1, ordered_at = CURRENT_TIMESTAMP, selected_at = CURRENT_TIMESTAMP,
                        receipt_status = '', receipt_acknowledged = 0,
                        receipt_item = '', receipt_upc = '', receipt_price = NULL,
@@ -3092,6 +3110,7 @@ async def select_defaults(request: Request):
                      AND status = 'active' AND product_upc = ''"""),
             {"upc": match.upc, "name": match.description, "brand": match.brand,
              "size": match.size, "price": match.price, "image": match.image_url,
+             "quantity": qty,
              "uid": user_id, "item_name": c["item_name"].lower()},
         )
         save_preference(conn, user_id, c["item_name"], match, source="auto-default")
