@@ -109,6 +109,10 @@ export const api = {
     body: JSON.stringify({ item_name: itemName, product, quantity: quantity || 1 }),
   }),
   deselectProduct: (itemName) => request(`/order/deselect/${encodeURIComponent(itemName)}`, { method: 'POST' }),
+  updateQuantity: (itemName, quantity) => request('/order/quantity', {
+    method: 'POST',
+    body: JSON.stringify({ item_name: itemName, quantity }),
+  }),
   selectDefaults: () => request('/order/select-defaults', { method: 'POST' }),
   deletePreference: (upc) => request(`/order/preference/${encodeURIComponent(upc)}`, { method: 'DELETE' }),
   getPriceComparison: () => request('/order/price-comparison'),

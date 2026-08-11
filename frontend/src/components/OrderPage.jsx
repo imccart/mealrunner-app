@@ -1465,35 +1465,69 @@ export default function OrderPage() {
               <div className={styles.reviewEmpty}>
                 Nothing selected. Close this to re-pick items from the order list.
               </div>
-            ) : order.selected.map(item => (
-              <div key={item.name} className={styles.reviewRow}>
-                <div className={styles.reviewRowHeader}>
-                  <div className={styles.reviewItemName}>{displayName(item)}</div>
-                  <button
-                    className={styles.reviewChangeBtn}
-                    onClick={async () => {
-                      try {
-                        const data = await api.deselectProduct(item.name)
-                        setOrder(data)
-                      } catch { /* silent — user will notice row didn't disappear */ }
-                    }}
-                  >
-                    Change
-                  </button>
+            ) : order.selected.map(item => {
+              const currentQty = item.product.quantity || item.quantity || 1
+              const setQty = async (newQty) => {
+                const clamped = Math.max(1, Math.min(24, newQty))
+                if (clamped === currentQty) return
+                // Optimistic: patch local state, then hit backend.
+                setOrder(prev => prev && ({
+                  ...prev,
+                  selected: prev.selected.map(s => s.name === item.name
+                    ? { ...s, quantity: clamped, product: { ...s.product, quantity: clamped } }
+                    : s
+                  ),
+                }))
+                try { await api.updateQuantity(item.name, clamped) }
+                catch { /* silent — refresh on next getOrder poll will reconcile */ }
+              }
+              return (
+                <div key={item.name} className={styles.reviewRow}>
+                  <div className={styles.reviewRowHeader}>
+                    <div className={styles.reviewItemName}>{item.name}</div>
+                    <button
+                      className={styles.reviewChangeBtn}
+                      onClick={async () => {
+                        try {
+                          const data = await api.deselectProduct(item.name)
+                          setOrder(data)
+                        } catch { /* silent — user will notice row didn't disappear */ }
+                      }}
+                    >
+                      Change
+                    </button>
+                  </div>
+                  <div className={styles.reviewProduct}>
+                    <span className={styles.reviewProductName}>{item.product.name}</span>
+                    {(item.product.brand || item.product.size) && (
+                      <span className={styles.reviewProductMeta}>
+                        {[item.product.brand, item.product.size].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                    <div className={styles.reviewQtyStepper}>
+                      <button
+                        type="button"
+                        className={styles.reviewQtyBtn}
+                        onClick={() => setQty(currentQty - 1)}
+                        disabled={currentQty <= 1}
+                        aria-label="Decrease quantity"
+                      >{'−'}</button>
+                      <span className={styles.reviewQtyValue}>{currentQty}</span>
+                      <button
+                        type="button"
+                        className={styles.reviewQtyBtn}
+                        onClick={() => setQty(currentQty + 1)}
+                        disabled={currentQty >= 24}
+                        aria-label="Increase quantity"
+                      >+</button>
+                    </div>
+                    {item.product.price != null && (
+                      <span className={styles.reviewProductPrice}>{formatPrice(item.product.price * currentQty)}</span>
+                    )}
+                  </div>
                 </div>
-                <div className={styles.reviewProduct}>
-                  <span className={styles.reviewProductName}>{item.product.name}</span>
-                  {(item.product.brand || item.product.size) && (
-                    <span className={styles.reviewProductMeta}>
-                      {[item.product.brand, item.product.size].filter(Boolean).join(' · ')}
-                    </span>
-                  )}
-                  {item.product.price != null && (
-                    <span className={styles.reviewProductPrice}>{formatPrice(item.product.price)}</span>
-                  )}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </Sheet>
       )}

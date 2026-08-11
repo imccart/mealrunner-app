@@ -1331,6 +1331,45 @@
   font-weight: 600;
   font-family: 'DM Sans', sans-serif;
 }
+/* Compact +/- stepper for cart quantity, inline with the product line */
+.reviewQtyStepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  margin-left: auto;
+  border: 1px solid var(--tan);
+  border-radius: 999px;
+  background: white;
+  overflow: hidden;
+}
+.reviewQtyBtn {
+  background: none;
+  border: none;
+  width: 26px;
+  height: 26px;
+  font-size: 15px;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--dark);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.reviewQtyBtn:hover:not(:disabled) { color: var(--accent); }
+.reviewQtyBtn:disabled { color: var(--text-light); cursor: default; }
+.reviewQtyValue {
+  min-width: 22px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--dark);
+  padding: 0 2px;
+}
+/* When a stepper is present the price is no longer the margin-left:auto element */
+.reviewProduct .reviewQtyStepper + .reviewProductPrice { margin-left: 8px; }
 
 .compareSheetContent {
   padding: 8px 0;

@@ -2961,6 +2961,34 @@ async def deselect_product(item_name: str, request: Request):
     return await get_order(request)
 
 
+@router.post("/order/quantity")
+async def update_quantity(body: dict, request: Request):
+    """Update the cart quantity for a selected item on the current order.
+    Limited to items that already have a product picked and are still active —
+    won't touch submitted, removed, or unselected rows."""
+    user_id = request.state.user_id
+    item_name = (body.get("item_name") or "").strip()
+    if not item_name:
+        return {"ok": False, "error": "item_name required"}
+    try:
+        qty = max(1, min(24, int(body.get("quantity", 1))))
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "invalid quantity"}
+
+    conn = _conn()
+    result = conn.execute(
+        text("""UPDATE grocery_items SET quantity = :qty
+                WHERE user_id = :uid AND LOWER(name) = LOWER(:name)
+                  AND status = 'active' AND product_upc != ''
+                  AND submitted_at IS NULL"""),
+        {"qty": qty, "uid": user_id, "name": item_name},
+    )
+    conn.commit()
+    if result.rowcount == 0:
+        return {"ok": False, "error": "No matching selected item"}
+    return {"ok": True, "quantity": qty}
+
+
 @router.post("/order/select-defaults")
 async def select_defaults(request: Request):
     """Auto-fill each unselected item on the current order with the user's
