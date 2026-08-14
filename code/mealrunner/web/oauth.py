@@ -158,9 +158,12 @@ def _consume_auth_code(conn, code: str) -> dict | None:
     if row["used_at"] is not None:
         return None
     expires_at = row["expires_at"]
-    # Postgres TIMESTAMPTZ comes back tz-aware; compare in UTC.
-    if expires_at is not None and expires_at.replace(tzinfo=timezone.utc) < _now() if expires_at.tzinfo is None else expires_at < _now():
-        return None
+    if expires_at is not None:
+        # Postgres TIMESTAMPTZ comes back tz-aware; the psycopg2 fallback
+        # path can return naive datetimes though, so normalize first.
+        exp_utc = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+        if exp_utc < _now():
+            return None
     conn.execute(
         text("UPDATE oauth_auth_codes SET used_at = CURRENT_TIMESTAMP WHERE code_hash = :h"),
         {"h": _sha(code)},
@@ -454,9 +457,14 @@ async def authorize_get(request: Request):
 
     # Session check — the user must be logged in to consent on their own behalf.
     session_id = request.cookies.get(SESSION_COOKIE)
-    user = get_user_from_session(conn, session_id) if session_id else None
-    if not user:
+    user_id = get_user_from_session(conn, session_id) if session_id else None
+    if not user_id:
         return HTMLResponse(_login_prompt_html(return_to=str(request.url)), status_code=200)
+
+    email_row = conn.execute(
+        text("SELECT email FROM users WHERE id = :id"), {"id": user_id},
+    ).fetchone()
+    user_email = email_row["email"] if email_row else ""
 
     # Show consent screen. Post back to POST /oauth/authorize with the same params.
     form_fields = {
@@ -471,7 +479,7 @@ async def authorize_get(request: Request):
         client_name=client["client_name"] or "An application",
         form_action="/oauth/authorize",
         form_fields=form_fields,
-        user_email=user.get("email", ""),
+        user_email=user_email,
     )
     return HTMLResponse(html)
 
@@ -502,8 +510,8 @@ async def authorize_post(request: Request):
                                      description="User cancelled", state=state)
 
     session_id = request.cookies.get(SESSION_COOKIE)
-    user = get_user_from_session(conn, session_id) if session_id else None
-    if not user:
+    user_id = get_user_from_session(conn, session_id) if session_id else None
+    if not user_id:
         return _redirect_with_error(redirect_uri, error="access_denied",
                                      description="Not authenticated", state=state)
 
@@ -511,7 +519,7 @@ async def authorize_post(request: Request):
         return _redirect_with_error(redirect_uri, error="invalid_request",
                                      description="PKCE code_challenge required", state=state)
 
-    code = _create_auth_code(conn, client_id=client_id, user_id=user["id"],
+    code = _create_auth_code(conn, client_id=client_id, user_id=user_id,
                               redirect_uri=redirect_uri, code_challenge=code_challenge,
                               code_challenge_method=code_challenge_method,
                               resource=resource, scope=scope)
