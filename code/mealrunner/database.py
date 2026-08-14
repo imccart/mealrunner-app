@@ -90,6 +90,22 @@ allowed_emails = Table(
     Column("added_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
 )
 
+# Personal access tokens for external clients (Claude via MCP, etc.). We store
+# only a hash of the token — the plaintext value is shown once at creation and
+# never persisted. Revocation is soft (revoked_at timestamp) rather than a
+# delete, so we retain the audit trail of which token did what.
+personal_access_tokens = Table(
+    "personal_access_tokens", metadata,
+    Column("id", Text, primary_key=True),  # uuid, used as opaque handle
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
+    Column("label", Text, nullable=False, server_default=text("''")),  # user-set name for their reference
+    Column("token_hash", Text, unique=True, nullable=False),  # sha256 hex of the plaintext
+    Column("token_prefix", Text, nullable=False, server_default=text("''")),  # first ~8 chars for UI recognition
+    Column("created_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("last_used_at", TS),
+    Column("revoked_at", TS),
+)
+
 waitlist = Table(
     "waitlist", metadata,
     Column("email", Text, primary_key=True),

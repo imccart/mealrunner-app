@@ -821,6 +821,34 @@ def _run_column_migrations(conn: DictConnection) -> None:
         except Exception:
             pass
 
+    # Create personal_access_tokens table for external clients (Claude MCP, etc.)
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS personal_access_tokens (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id),
+                label TEXT NOT NULL DEFAULT '',
+                token_hash TEXT UNIQUE NOT NULL,
+                token_prefix TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TIMESTAMPTZ,
+                revoked_at TIMESTAMPTZ
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_pat_user ON personal_access_tokens (user_id) WHERE revoked_at IS NULL"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_pat_hash ON personal_access_tokens (token_hash) WHERE revoked_at IS NULL"
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   personal_access_tokens table skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
     # Backfill product_key from upc where missing
     try:
         conn.execute(text(

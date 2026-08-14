@@ -296,6 +296,83 @@ def _magic_link_html(link: str) -> str:
 # ── Whitelist ────────────────────────────────────────────
 
 
+# ── Personal Access Tokens ──────────────────────────────
+#
+# Tokens are stored hashed. The plaintext is shown exactly once at creation and
+# never persisted. The short prefix ("mr_ab12") is kept in cleartext so the UI
+# can help the user recognize which token is which without exposing anything
+# usable. Revocation is soft — we keep the row and set revoked_at, both to
+# preserve the audit trail and to prevent a token id from being reused.
+
+def _hash_token(plaintext: str) -> str:
+    import hashlib
+    return hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
+
+
+def create_pat(conn: DictConnection, user_id: str, label: str = "") -> tuple[str, str]:
+    """Mint a new personal access token. Returns (token_id, plaintext).
+    The plaintext is shown to the user once and never stored."""
+    plaintext = "mr_" + secrets.token_urlsafe(32)  # ~43 chars after prefix
+    token_id = str(uuid.uuid4())
+    conn.execute(
+        text("""INSERT INTO personal_access_tokens
+               (id, user_id, label, token_hash, token_prefix)
+               VALUES (:id, :uid, :label, :hash, :prefix)"""),
+        {"id": token_id, "uid": user_id, "label": (label or "").strip()[:120],
+         "hash": _hash_token(plaintext), "prefix": plaintext[:8]},
+    )
+    conn.commit()
+    return token_id, plaintext
+
+
+def resolve_pat(conn: DictConnection, plaintext: str) -> str | None:
+    """Look up a token's user_id. Returns None if unknown or revoked.
+    Bumps last_used_at as a side effect (best-effort; never fatal)."""
+    if not plaintext:
+        return None
+    row = conn.execute(
+        text("""SELECT id, user_id FROM personal_access_tokens
+                WHERE token_hash = :hash AND revoked_at IS NULL"""),
+        {"hash": _hash_token(plaintext)},
+    ).fetchone()
+    if not row:
+        return None
+    try:
+        conn.execute(
+            text("UPDATE personal_access_tokens SET last_used_at = CURRENT_TIMESTAMP WHERE id = :id"),
+            {"id": row["id"]},
+        )
+        conn.commit()
+    except Exception:
+        pass
+    return row["user_id"]
+
+
+def list_pats(conn: DictConnection, user_id: str) -> list[dict]:
+    """List metadata for a user's tokens (never the token itself)."""
+    rows = conn.execute(
+        text("""SELECT id, label, token_prefix, created_at, last_used_at, revoked_at
+                FROM personal_access_tokens
+                WHERE user_id = :uid
+                ORDER BY created_at DESC"""),
+        {"uid": user_id},
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def revoke_pat(conn: DictConnection, user_id: str, token_id: str) -> bool:
+    """Soft-revoke a token. Only the owning user may revoke it. Returns True
+    if a row was updated, False otherwise (unknown id or wrong user)."""
+    result = conn.execute(
+        text("""UPDATE personal_access_tokens
+                SET revoked_at = CURRENT_TIMESTAMP
+                WHERE id = :id AND user_id = :uid AND revoked_at IS NULL"""),
+        {"id": token_id, "uid": user_id},
+    )
+    conn.commit()
+    return result.rowcount > 0
+
+
 def signup_open() -> bool:
     """When true, anyone can sign up — no allowlist gate, no waitlist detour.
     Flip by setting OPEN_SIGNUP to 0/false/no/off in the environment; defaults

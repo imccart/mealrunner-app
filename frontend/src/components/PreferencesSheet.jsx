@@ -21,6 +21,132 @@ function AccordionSection({ title, count, children, defaultOpen = false }) {
 
 const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+function fmtTokenDate(iso) {
+  if (!iso) return null
+  try {
+    const d = new Date(iso)
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  } catch { return null }
+}
+
+function ClaudeConnectSection() {
+  const [tokens, setTokens] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [showLabelInput, setShowLabelInput] = useState(false)
+  const [newLabel, setNewLabel] = useState('')
+  const [freshToken, setFreshToken] = useState(null)  // shown once, then dismissed
+  const [copyStatus, setCopyStatus] = useState('')
+
+  const refresh = () => {
+    api.listAccessTokens()
+      .then(r => setTokens((r?.tokens || []).filter(t => !t.revoked_at)))
+      .catch(() => setTokens([]))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { refresh() }, [])
+
+  const handleCreate = async () => {
+    setCreating(true)
+    try {
+      const res = await api.createAccessToken(newLabel)
+      if (res?.token) {
+        setFreshToken({ token: res.token, label: newLabel })
+        setNewLabel('')
+        setShowLabelInput(false)
+        refresh()
+      }
+    } catch { /* silent */ } finally { setCreating(false) }
+  }
+
+  const handleRevoke = async (id) => {
+    if (!window.confirm('Revoke this token? Claude will lose access immediately.')) return
+    try { await api.revokeAccessToken(id); refresh() } catch { /* silent */ }
+  }
+
+  const handleCopy = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyStatus('Copied')
+      setTimeout(() => setCopyStatus(''), 2000)
+    } catch { setCopyStatus('Copy failed') }
+  }
+
+  return (
+    <>
+      <div className={ls.sectionHint}>
+        Generate a token to let Claude interact with MealRunner. Paste it into Claude
+        when adding a MealRunner connector. Each token is shown once — copy it before
+        closing this dialog.
+      </div>
+
+      {freshToken && (
+        <div className={styles.claudeFreshToken}>
+          <div className={styles.claudeFreshTokenLabel}>New token{freshToken.label ? ` (${freshToken.label})` : ''}:</div>
+          <div className={styles.claudeFreshTokenRow}>
+            <code className={styles.claudeFreshTokenValue}>{freshToken.token}</code>
+            <button className={styles.claudeCopyBtn} onClick={() => handleCopy(freshToken.token)}>
+              {copyStatus || 'Copy'}
+            </button>
+          </div>
+          <button className={styles.claudeFreshTokenDismiss} onClick={() => setFreshToken(null)}>
+            I've saved it, dismiss
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className={ls.sectionHint}>Loading...</div>
+      ) : tokens.length === 0 ? (
+        <div className={ls.sectionHint} style={{ marginTop: 8 }}>No active tokens.</div>
+      ) : (
+        <div className={styles.claudeTokenList}>
+          {tokens.map(t => (
+            <div key={t.id} className={styles.claudeTokenRow}>
+              <div className={styles.claudeTokenMeta}>
+                <div className={styles.claudeTokenLabel}>{t.label || 'Unnamed token'}</div>
+                <div className={styles.claudeTokenSub}>
+                  <code>{t.token_prefix}…</code>
+                  {' · '}created {fmtTokenDate(t.created_at)}
+                  {t.last_used_at && ` · last used ${fmtTokenDate(t.last_used_at)}`}
+                </div>
+              </div>
+              <button className={styles.claudeRevokeBtn} onClick={() => handleRevoke(t.id)}>Revoke</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showLabelInput ? (
+        <div className={ls.addRow} style={{ marginTop: 12 }}>
+          <input
+            className={ls.addInput}
+            type="text"
+            placeholder="Label (e.g. 'My iPhone', 'Desktop Claude')"
+            value={newLabel}
+            onChange={e => setNewLabel(e.target.value)}
+            disabled={creating}
+            autoFocus
+          />
+          <button className="btn primary" onClick={handleCreate} disabled={creating}>
+            {creating ? 'Creating...' : 'Create'}
+          </button>
+          <button
+            className={styles.claudeCancelBtn}
+            onClick={() => { setShowLabelInput(false); setNewLabel('') }}
+            disabled={creating}
+          >Cancel</button>
+        </div>
+      ) : (
+        <button className={styles.claudeNewTokenBtn} onClick={() => setShowLabelInput(true)}>
+          + New token
+        </button>
+      )}
+    </>
+  )
+}
+
+
 function BestDayInsight() {
   const [scope, setScope] = useState('trip')
   const [data, setData] = useState(null)
@@ -618,6 +744,11 @@ export default function PreferencesSheet({ onClose, onStartTour, isAdmin }) {
               {betaInviteStatus.msg}
             </div>
           )}
+        </AccordionSection>
+
+        {/* Connect to Claude — MCP tokens */}
+        <AccordionSection title="Connect to Claude">
+          <ClaudeConnectSection />
         </AccordionSection>
 
         {/* Take the Tour */}

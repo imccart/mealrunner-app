@@ -6236,6 +6236,38 @@ async def delete_own_account(request: Request):
     return {"ok": True}
 
 
+@router.post("/account/tokens")
+async def create_access_token(body: dict, request: Request):
+    """Mint a personal access token for external clients (Claude MCP, etc.).
+    The plaintext is returned exactly once; only its hash is stored server-side.
+    Tokens attach to the *real* logged-in user, not the household-resolved id."""
+    from mealrunner.web.auth import create_pat
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    label = (body.get("label") or "").strip()
+    conn = _conn()
+    token_id, plaintext = create_pat(conn, real_user_id, label)
+    return {"ok": True, "id": token_id, "token": plaintext, "label": label}
+
+
+@router.get("/account/tokens")
+async def list_access_tokens(request: Request):
+    """List the caller's tokens (metadata only — never the tokens themselves)."""
+    from mealrunner.web.auth import list_pats
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    conn = _conn()
+    return {"tokens": list_pats(conn, real_user_id)}
+
+
+@router.delete("/account/tokens/{token_id}")
+async def revoke_access_token(token_id: str, request: Request):
+    """Soft-revoke a token. Only the owning user can revoke."""
+    from mealrunner.web.auth import revoke_pat
+    real_user_id = getattr(request.state, 'real_user_id', request.state.user_id)
+    conn = _conn()
+    ok = revoke_pat(conn, real_user_id, token_id)
+    return {"ok": ok}
+
+
 @router.get("/admin/unknown-brands")
 async def get_unknown_brands(request: Request):
     """Admin: list unknown brands sorted by frequency."""

@@ -349,6 +349,123 @@
   color: white;
 }
 
+/* Connect to Claude — MCP token management */
+.claudeFreshToken {
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-light);
+  border-radius: 10px;
+  padding: 12px;
+  margin: 12px 0;
+}
+.claudeFreshTokenLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dark);
+  margin-bottom: 6px;
+}
+.claudeFreshTokenRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.claudeFreshTokenValue {
+  flex: 1;
+  padding: 6px 10px;
+  background: white;
+  border: 1px solid var(--tan);
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--dark);
+  word-break: break-all;
+  user-select: all;
+}
+.claudeCopyBtn {
+  padding: 6px 12px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 68px;
+}
+.claudeFreshTokenDismiss {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.claudeTokenList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+.claudeTokenRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--tan);
+  border-radius: 8px;
+  background: white;
+}
+.claudeTokenMeta { flex: 1; min-width: 0; }
+.claudeTokenLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dark);
+}
+.claudeTokenSub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.claudeTokenSub code {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+}
+.claudeRevokeBtn {
+  background: none;
+  border: 1px solid var(--tan);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.claudeRevokeBtn:hover { color: var(--accent); border-color: var(--accent); }
+.claudeNewTokenBtn {
+  background: none;
+  border: 1px dashed var(--accent);
+  color: var(--accent);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+.claudeNewTokenBtn:hover { background: var(--accent-bg); }
+.claudeCancelBtn {
+  background: none;
+  border: none;
+  padding: 8px 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
 .prefsAdminBtn {
   display: block;
   width: 100%;

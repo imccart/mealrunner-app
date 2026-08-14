@@ -356,6 +356,12 @@ export const api = {
   revokeUser: (email) => request('/admin/user/revoke', { method: 'POST', body: JSON.stringify({ email }) }),
   deleteUserAdmin: (email) => request('/admin/user/delete', { method: 'POST', body: JSON.stringify({ email }) }),
   deleteAccount: () => request('/account/delete', { method: 'POST' }),
+  listAccessTokens: () => request('/account/tokens'),
+  createAccessToken: (label) => request('/account/tokens', {
+    method: 'POST',
+    body: JSON.stringify({ label: label || '' }),
+  }),
+  revokeAccessToken: (id) => request(`/account/tokens/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   getAllFeedback: () => request('/feedback/all'),
   respondToFeedback: (id, response) => request(`/feedback/${id}/respond`, {
     method: 'POST',

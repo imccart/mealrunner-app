@@ -87,10 +87,39 @@ class ConnectionMiddleware(BaseHTTPMiddleware):
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Global auth check. Rejects unauthenticated API requests with 401."""
+    """Global auth check. Rejects unauthenticated API requests with 401.
+
+    Two auth paths:
+    - Session cookies for browser traffic on /api/*
+    - Bearer personal access tokens for external clients on /mcp/*
+      (typically Claude Desktop / mobile connecting to a remote MCP server)
+    """
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
+
+        # MCP routes authenticate via Bearer token, not cookies
+        if path.startswith("/mcp/") or path == "/mcp":
+            auth_header = request.headers.get("authorization", "")
+            if not auth_header.startswith("Bearer "):
+                return JSONResponse({"error": "Bearer token required"}, status_code=401)
+            token = auth_header[len("Bearer "):].strip()
+            conn = get_request_connection()
+            try:
+                from mealrunner.web.auth import resolve_pat
+                user_id = resolve_pat(conn, token)
+            except Exception as e:
+                print(f"[auth] PAT resolution failed: {e}")
+                user_id = None
+            if not user_id:
+                return JSONResponse({"error": "Invalid or revoked token"}, status_code=401)
+            try:
+                effective_user_id = get_household_owner_id(conn, user_id)
+            except Exception:
+                effective_user_id = user_id
+            request.state.user_id = effective_user_id
+            request.state.real_user_id = user_id
+            return await call_next(request)
 
         # Public paths and non-API paths (static files, SPA) don't need auth
         if _is_public(path) or not path.startswith("/api/"):
@@ -143,6 +172,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(api_router)
+
+from mealrunner.web.mcp import router as mcp_router  # noqa: E402
+app.include_router(mcp_router)
 
 # Serve React static assets if the build exists
 if _FRONTEND_DIST.exists():
