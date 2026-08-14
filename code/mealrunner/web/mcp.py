@@ -111,8 +111,17 @@ def _tool_view_plan(user_id: str, arguments: dict) -> dict:
         if meal is None:
             meal_line = "no meal planned"
         else:
-            name = getattr(meal, "name", None) or (meal.get("name") if isinstance(meal, dict) else None) or "unnamed meal"
-            meal_line = str(name)
+            # The Meal dataclass exposes `recipe_name` for library recipes and
+            # `notes` for freeform "chef's night out" entries. Prefer the
+            # recipe name, fall back to the notes string, then to a placeholder
+            # so we always print something recognizable.
+            name = (getattr(meal, "recipe_name", "") or "").strip()
+            if not name:
+                name = (getattr(meal, "notes", "") or "").strip() or "unnamed meal"
+            sides = ", ".join(
+                s.side_name for s in (getattr(meal, "sides", []) or []) if getattr(s, "side_name", "")
+            )
+            meal_line = f"{name} (with {sides})" if sides else name
         lines.append(f"  {day['day_short']} {day['date']} — {meal_line}")
 
     return {
