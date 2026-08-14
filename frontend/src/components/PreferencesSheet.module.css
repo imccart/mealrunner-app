@@ -349,6 +349,51 @@
   color: white;
 }
 
+/* Connect to Claude — MCP */
+.claudeUrlRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0 6px;
+}
+.claudeUrl {
+  flex: 1;
+  padding: 10px 12px;
+  background: var(--warm-white);
+  border: 1px solid var(--tan);
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: var(--dark);
+  user-select: all;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.claudeTip {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  padding: 0 2px;
+}
+.claudeAdvancedToggle {
+  margin-top: 20px;
+  padding: 6px 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.claudeAdvancedToggle:hover { color: var(--accent); }
+.claudeAdvancedBody {
+  padding: 12px 0 0;
+  border-top: 1px solid var(--tan);
+  margin-top: 8px;
+}
+
 /* Connect to Claude — MCP token management */
 .claudeFreshToken {
   background: var(--accent-bg);

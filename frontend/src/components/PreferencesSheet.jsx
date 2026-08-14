@@ -37,6 +37,10 @@ function ClaudeConnectSection() {
   const [newLabel, setNewLabel] = useState('')
   const [freshToken, setFreshToken] = useState(null)  // shown once, then dismissed
   const [copyStatus, setCopyStatus] = useState('')
+  const [urlCopyStatus, setUrlCopyStatus] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+
+  const mcpUrl = `${window.location.origin}/mcp`
 
   const refresh = () => {
     api.listAccessTokens()
@@ -45,6 +49,14 @@ function ClaudeConnectSection() {
       .finally(() => setLoading(false))
   }
   useEffect(() => { refresh() }, [])
+
+  const handleCopyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(mcpUrl)
+      setUrlCopyStatus('Copied')
+      setTimeout(() => setUrlCopyStatus(''), 2000)
+    } catch { setUrlCopyStatus('Copy failed') }
+  }
 
   const handleCreate = async () => {
     setCreating(true)
@@ -75,10 +87,37 @@ function ClaudeConnectSection() {
   return (
     <>
       <div className={ls.sectionHint}>
-        Generate a token to let Claude interact with MealRunner. Paste it into Claude
-        when adding a MealRunner connector. Each token is shown once — copy it before
-        closing this dialog.
+        In Claude's Settings, add a Custom Connector with the URL below. When you
+        approve the connector, Claude opens a browser tab where you'll sign in and
+        grant access.
       </div>
+
+      <div className={styles.claudeUrlRow}>
+        <code className={styles.claudeUrl}>{mcpUrl}</code>
+        <button className={styles.claudeCopyBtn} onClick={handleCopyUrl}>
+          {urlCopyStatus || 'Copy'}
+        </button>
+      </div>
+
+      <div className={styles.claudeTip}>
+        You need to be signed in to MealRunner in the same browser Claude opens for
+        the sign-in prompt.
+      </div>
+
+      <button
+        className={styles.claudeAdvancedToggle}
+        onClick={() => setShowAdvanced(!showAdvanced)}
+      >
+        {showAdvanced ? '▴' : '▾'} Advanced: personal access tokens (for CLI/scripting)
+      </button>
+
+      {showAdvanced && (
+        <div className={styles.claudeAdvancedBody}>
+          <div className={ls.sectionHint} style={{ marginBottom: 8 }}>
+            Personal access tokens work for machine-to-machine access (CLI tools,
+            scripts). Most people don't need these — the URL above is the way to
+            connect Claude apps.
+          </div>
 
       {freshToken && (
         <div className={styles.claudeFreshToken}>
@@ -141,6 +180,8 @@ function ClaudeConnectSection() {
         <button className={styles.claudeNewTokenBtn} onClick={() => setShowLabelInput(true)}>
           + New token
         </button>
+      )}
+        </div>
       )}
     </>
   )

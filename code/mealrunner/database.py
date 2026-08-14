@@ -106,6 +106,69 @@ personal_access_tokens = Table(
     Column("revoked_at", TS),
 )
 
+# ── OAuth 2.1 (for Claude connectors and any MCP-standard client) ─────────
+#
+# We are both the MCP resource server (protected /mcp endpoint) and the
+# authorization server. Dynamic Client Registration (RFC 7591) is supported,
+# so Claude auto-registers itself when the user pastes the connector URL —
+# no manual client_id/client_secret entry required.
+#
+# Client secrets and tokens are stored hashed. Redirect URIs are validated
+# against the exact list registered at DCR time; refresh tokens are rotated
+# on every use per OAuth 2.1.
+oauth_clients = Table(
+    "oauth_clients", metadata,
+    Column("client_id", Text, primary_key=True),
+    Column("client_secret_hash", Text),  # nullable — public clients (PKCE-only) don't have one
+    Column("client_name", Text, nullable=False, server_default=text("''")),
+    Column("redirect_uris", Text, nullable=False),  # JSON array of exact-match URIs
+    Column("created_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+)
+
+# Short-lived (~10 min) codes issued at the /oauth/authorize consent step,
+# exchanged once at /oauth/token. Bound to the user, the client, the exact
+# redirect URI used, the PKCE challenge, and the resource the token will be
+# audience-scoped to.
+oauth_auth_codes = Table(
+    "oauth_auth_codes", metadata,
+    Column("code_hash", Text, primary_key=True),
+    Column("client_id", Text, ForeignKey("oauth_clients.client_id"), nullable=False),
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
+    Column("redirect_uri", Text, nullable=False),
+    Column("code_challenge", Text, nullable=False),
+    Column("code_challenge_method", Text, nullable=False, server_default=text("'S256'")),
+    Column("resource", Text, nullable=False, server_default=text("''")),
+    Column("scope", Text, nullable=False, server_default=text("''")),
+    Column("expires_at", TS, nullable=False),
+    Column("used_at", TS),
+)
+
+oauth_access_tokens = Table(
+    "oauth_access_tokens", metadata,
+    Column("token_hash", Text, primary_key=True),
+    Column("client_id", Text, ForeignKey("oauth_clients.client_id"), nullable=False),
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
+    Column("scope", Text, nullable=False, server_default=text("''")),
+    Column("audience", Text, nullable=False, server_default=text("''")),  # resource URI the token is bound to
+    Column("expires_at", TS, nullable=False),
+    Column("created_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("last_used_at", TS),
+    Column("revoked_at", TS),
+)
+
+oauth_refresh_tokens = Table(
+    "oauth_refresh_tokens", metadata,
+    Column("token_hash", Text, primary_key=True),
+    Column("client_id", Text, ForeignKey("oauth_clients.client_id"), nullable=False),
+    Column("user_id", Text, ForeignKey("users.id"), nullable=False),
+    Column("scope", Text, nullable=False, server_default=text("''")),
+    Column("audience", Text, nullable=False, server_default=text("''")),
+    Column("expires_at", TS, nullable=False),
+    Column("created_at", TS, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("rotated_at", TS),  # set when consumed and swapped for a new refresh token
+    Column("revoked_at", TS),
+)
+
 waitlist = Table(
     "waitlist", metadata,
     Column("email", Text, primary_key=True),

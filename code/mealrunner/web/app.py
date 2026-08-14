@@ -98,21 +98,60 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        # MCP routes authenticate via Bearer token, not cookies
+        # MCP routes authenticate via Bearer token. We accept two token
+        # kinds: OAuth 2.1 access tokens (issued to Claude connectors via
+        # /oauth/*) and Personal Access Tokens (issued from the UI for
+        # CLI/debugging). OAuth is checked first because it's the
+        # user-facing path; PAT is the escape hatch.
+        #
+        # On 401 we return a WWW-Authenticate header pointing at our
+        # Protected Resource Metadata document (RFC 9728) — this is how
+        # Claude discovers where to run the OAuth flow.
         if path.startswith("/mcp/") or path == "/mcp":
+            def _unauthorized(desc: str) -> JSONResponse:
+                # Derive the base URL Claude reached us at so the metadata
+                # link is correct across staging/prod.
+                scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+                host = (request.headers.get("x-forwarded-host")
+                        or request.headers.get("host")
+                        or request.url.hostname or "getmealrunner.app")
+                resource_metadata = f'{scheme}://{host}/.well-known/oauth-protected-resource'
+                return JSONResponse(
+                    {"error": "unauthorized", "error_description": desc},
+                    status_code=401,
+                    headers={"WWW-Authenticate": f'Bearer resource_metadata="{resource_metadata}"'},
+                )
+
             auth_header = request.headers.get("authorization", "")
-            if not auth_header.startswith("Bearer "):
-                return JSONResponse({"error": "Bearer token required"}, status_code=401)
+            if not auth_header.lower().startswith("bearer "):
+                return _unauthorized("Bearer token required")
             token = auth_header[len("Bearer "):].strip()
+
             conn = get_request_connection()
+            user_id = None
+            # OAuth path first — the primary Claude-connector auth mechanism.
             try:
-                from mealrunner.web.auth import resolve_pat
-                user_id = resolve_pat(conn, token)
+                from mealrunner.web.oauth import resolve_access_token
+                scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+                host = (request.headers.get("x-forwarded-host")
+                        or request.headers.get("host")
+                        or request.url.hostname or "getmealrunner.app")
+                mcp_uri = f"{scheme}://{host}/mcp"
+                user_id = resolve_access_token(conn, token, expected_audience=mcp_uri)
             except Exception as e:
-                print(f"[auth] PAT resolution failed: {e}")
-                user_id = None
+                print(f"[auth] OAuth token resolution failed: {e}")
+
+            # Fall back to PAT (personal access tokens).
             if not user_id:
-                return JSONResponse({"error": "Invalid or revoked token"}, status_code=401)
+                try:
+                    from mealrunner.web.auth import resolve_pat
+                    user_id = resolve_pat(conn, token)
+                except Exception as e:
+                    print(f"[auth] PAT resolution failed: {e}")
+
+            if not user_id:
+                return _unauthorized("Invalid or expired token")
+
             try:
                 effective_user_id = get_household_owner_id(conn, user_id)
             except Exception:
@@ -175,6 +214,9 @@ app.include_router(api_router)
 
 from mealrunner.web.mcp import router as mcp_router  # noqa: E402
 app.include_router(mcp_router)
+
+from mealrunner.web.oauth import router as oauth_router  # noqa: E402
+app.include_router(oauth_router)
 
 # Serve React static assets if the build exists
 if _FRONTEND_DIST.exists():

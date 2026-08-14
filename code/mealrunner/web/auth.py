@@ -65,6 +65,11 @@ PUBLIC_PREFIXES = (
     "/app",
     "/assets",
     "/api/auth/",
+    # OAuth 2.1 endpoints for MCP connectors. Metadata + client registration
+    # + token are entirely public per spec; /oauth/authorize gates itself on
+    # a session cookie internally rather than relying on the auth middleware.
+    "/.well-known/",
+    "/oauth/",
 )
 
 

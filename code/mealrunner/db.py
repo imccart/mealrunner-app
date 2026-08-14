@@ -849,6 +849,72 @@ def _run_column_migrations(conn: DictConnection) -> None:
         except Exception:
             pass
 
+    # OAuth 2.1 tables — Claude connectors and any MCP-standard client.
+    # Create all four in one block so a partial failure rolls back together.
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS oauth_clients (
+                client_id TEXT PRIMARY KEY,
+                client_secret_hash TEXT,
+                client_name TEXT NOT NULL DEFAULT '',
+                redirect_uris TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS oauth_auth_codes (
+                code_hash TEXT PRIMARY KEY,
+                client_id TEXT NOT NULL REFERENCES oauth_clients(client_id),
+                user_id TEXT NOT NULL REFERENCES users(id),
+                redirect_uri TEXT NOT NULL,
+                code_challenge TEXT NOT NULL,
+                code_challenge_method TEXT NOT NULL DEFAULT 'S256',
+                resource TEXT NOT NULL DEFAULT '',
+                scope TEXT NOT NULL DEFAULT '',
+                expires_at TIMESTAMPTZ NOT NULL,
+                used_at TIMESTAMPTZ
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS oauth_access_tokens (
+                token_hash TEXT PRIMARY KEY,
+                client_id TEXT NOT NULL REFERENCES oauth_clients(client_id),
+                user_id TEXT NOT NULL REFERENCES users(id),
+                scope TEXT NOT NULL DEFAULT '',
+                audience TEXT NOT NULL DEFAULT '',
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TIMESTAMPTZ,
+                revoked_at TIMESTAMPTZ
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
+                token_hash TEXT PRIMARY KEY,
+                client_id TEXT NOT NULL REFERENCES oauth_clients(client_id),
+                user_id TEXT NOT NULL REFERENCES users(id),
+                scope TEXT NOT NULL DEFAULT '',
+                audience TEXT NOT NULL DEFAULT '',
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                rotated_at TIMESTAMPTZ,
+                revoked_at TIMESTAMPTZ
+            )
+        """))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_oauth_access_user ON oauth_access_tokens (user_id) WHERE revoked_at IS NULL"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_oauth_refresh_user ON oauth_refresh_tokens (user_id) WHERE revoked_at IS NULL AND rotated_at IS NULL"
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"[db]   oauth_* tables skipped: {e}", flush=True)
+        try:
+            conn.raw.rollback()
+        except Exception:
+            pass
+
     # Backfill product_key from upc where missing
     try:
         conn.execute(text(
