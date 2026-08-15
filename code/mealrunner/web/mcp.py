@@ -74,6 +74,28 @@ _TOOLS: list[dict] = [
             "additionalProperties": False,
         },
     },
+    # Recipe library — read
+    {
+        "name": "list_recipes",
+        "description": (
+            "List the recipes in the user's library — the meals they've told the "
+            "app they know how to make. Optionally filter by cuisine. Call this "
+            "before add_meal or suggest_meal_plan when you need to know what "
+            "meals are actually available, or when the user asks 'what can I "
+            "cook', 'what's in my recipe list', 'what do I know how to make'. "
+            "Sides are excluded — this is main dishes only."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "cuisine": {
+                    "type": "string",
+                    "description": "Optional cuisine filter (e.g. 'Italian', 'Mexican'). Case-insensitive.",
+                },
+            },
+            "additionalProperties": False,
+        },
+    },
     # Plan — write
     {
         "name": "add_meal",
@@ -81,7 +103,10 @@ _TOOLS: list[dict] = [
             "Add a meal to a specific date on the rolling plan. If the name matches "
             "a recipe in the user's library, that recipe is linked; otherwise the "
             "meal is added as a freeform entry (the tool returns a note when this "
-            "happens). Use for 'add tacos Thursday', 'plan spaghetti for tomorrow', etc."
+            "happens). Use for 'add tacos Thursday', 'plan spaghetti for tomorrow', etc. "
+            "When the user's ask is ambiguous, or when you're recommending a meal, "
+            "call list_recipes FIRST so you're picking from what's actually in their "
+            "library instead of guessing."
         ),
         "inputSchema": {
             "type": "object",
@@ -297,6 +322,33 @@ def _tool_view_plan(user_id: str, arguments: dict) -> dict:
     return _text_result("\n".join(lines))
 
 
+def _tool_list_recipes(user_id: str, arguments: dict) -> dict:
+    from mealrunner.recipes import filter_recipes
+    cuisine = (arguments.get("cuisine") or "").strip() or None
+    with get_connection() as conn:
+        # Case-insensitive cuisine filter — filter_recipes matches exact, so
+        # normalize by pulling everything and filtering ourselves if a cuisine
+        # was requested.
+        recipes = filter_recipes(conn, user_id=user_id)  # recipe_type='meal' by default
+    if cuisine:
+        recipes = [r for r in recipes if (r.cuisine or "").lower() == cuisine.lower()]
+    if not recipes:
+        base = "No recipes in your library"
+        return _text_result(f"{base}{f' for cuisine {cuisine!r}' if cuisine else ''}.")
+
+    by_cuisine: dict[str, list[str]] = {}
+    for r in recipes:
+        c = r.cuisine or "Uncategorized"
+        by_cuisine.setdefault(c, []).append(r.name)
+
+    lines = [f"Recipe library ({len(recipes)} meal{'s' if len(recipes) != 1 else ''}):"]
+    for c in sorted(by_cuisine.keys()):
+        lines.append(f"\n{c}:")
+        for name in sorted(by_cuisine[c]):
+            lines.append(f"  • {name}")
+    return _text_result("\n".join(lines))
+
+
 def _tool_add_meal(user_id: str, arguments: dict) -> dict:
     from mealrunner.planner import set_meal, set_freeform_meal
     from mealrunner.recipes import filter_recipes
@@ -323,6 +375,26 @@ def _tool_add_meal(user_id: str, arguments: dict) -> dict:
         return _text_result(
             f"Added '{name}' for {iso} as a freeform meal — no recipe on file for that name."
         )
+
+
+def _side_to_set_meal_arg(side: Any) -> list[dict] | None:
+    """`_most_paired_side` returns {'side_recipe_id': int|None, 'side_name': str}
+    or None. `set_meal` accepts a list of that same dict shape (max 3) or None.
+    Wrap correctly — passing the raw dict as `side_name` was our bug."""
+    if not side or not isinstance(side, dict):
+        return None
+    name = side.get("side_name") or ""
+    if not name:
+        return None
+    return [{"side_name": name, "side_recipe_id": side.get("side_recipe_id")}]
+
+
+def _side_display(side: Any) -> str:
+    if isinstance(side, dict):
+        return side.get("side_name") or ""
+    if isinstance(side, str):
+        return side
+    return ""
 
 
 def _tool_suggest_meal_plan(user_id: str, arguments: dict) -> dict:
@@ -372,10 +444,11 @@ def _tool_suggest_meal_plan(user_id: str, arguments: dict) -> dict:
                 continue
             recipe_name = pick["meal"]["name"]
             side = pick.get("side")
-            sides = [{"side_name": side, "side_recipe_id": None}] if side else None
-            set_meal(conn, user_id, iso, recipe_name, sides=sides)
+            sides_arg = _side_to_set_meal_arg(side)
+            set_meal(conn, user_id, iso, recipe_name, sides=sides_arg)
             chosen_recipe_ids.add(pick["meal"]["id"])
-            added.append(f"{iso}: {recipe_name}" + (f" (with {side})" if side else ""))
+            side_name = _side_display(side)
+            added.append(f"{iso}: {recipe_name}" + (f" (with {side_name})" if side_name else ""))
 
     if not added:
         return _text_result(
@@ -409,15 +482,16 @@ def _tool_swap_meal(user_id: str, arguments: dict) -> dict:
             )
         recipe_name = pick["meal"]["name"]
         side = pick.get("side")
-        sides = [{"side_name": side, "side_recipe_id": None}] if side else None
-        set_meal(conn, user_id, iso, recipe_name, sides=sides)
+        sides_arg = _side_to_set_meal_arg(side)
+        set_meal(conn, user_id, iso, recipe_name, sides=sides_arg)
 
     if old_name:
         line = f"Swapped {old_name} for {recipe_name} on {iso}"
     else:
         line = f"Added {recipe_name} for {iso} (that slot was empty)"
-    if side:
-        line += f" (with {side})"
+    side_name = _side_display(side)
+    if side_name:
+        line += f" (with {side_name})"
     return _text_result(line + ".")
 
 
@@ -718,6 +792,7 @@ def _tool_submit_to_kroger(user_id: str, arguments: dict) -> dict:
 def _call_tool(user_id: str, name: str, arguments: dict) -> dict:
     dispatch = {
         "view_plan": _tool_view_plan,
+        "list_recipes": _tool_list_recipes,
         "add_meal": _tool_add_meal,
         "suggest_meal_plan": _tool_suggest_meal_plan,
         "swap_meal": _tool_swap_meal,
