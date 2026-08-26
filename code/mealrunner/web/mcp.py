@@ -633,7 +633,7 @@ def _tool_list_staples(user_id: str, arguments: dict) -> dict:
 def _tool_select_defaults(user_id: str, arguments: dict) -> dict:
     """Mirror the /order/select-defaults endpoint logic, minus the async
     Kroger fanout — for the MCP path we keep it synchronous."""
-    from mealrunner.kroger import search_products_fast, save_preference
+    from mealrunner.kroger import search_products_fast
     from mealrunner.stores import get_kroger_location_id
     from mealrunner.planner import load_rolling_week
     from mealrunner.web.api import _ensure_active_trip
@@ -724,7 +724,6 @@ def _tool_select_defaults(user_id: str, arguments: dict) -> dict:
                  "quantity": qty,
                  "uid": user_id, "item_name": item_name.lower()},
             )
-            save_preference(conn, user_id, item_name, match, source="auto-default")
             selected += 1
         conn.commit()
 
@@ -740,7 +739,7 @@ def _tool_submit_to_kroger(user_id: str, arguments: dict) -> dict:
     core logic of /order/submit (fetches the user's DB-stored token, adds
     to cart, marks rows as ordered), skipping the household-account-picker
     branch — the MCP client is always operating as its own user."""
-    from mealrunner.kroger import add_to_cart, get_user_token_from_db
+    from mealrunner.kroger import add_to_cart, get_user_token_from_db, save_preference, KrogerProduct
     from mealrunner.stores import get_kroger_location_id
 
     with get_connection() as conn:
@@ -759,7 +758,8 @@ def _tool_submit_to_kroger(user_id: str, arguments: dict) -> dict:
         # Same chokepoint filters /order/submit uses — avoids double-sending
         # rows already submitted, or in a closed state.
         rows = conn.execute(
-            text("""SELECT product_upc, quantity FROM grocery_items
+            text("""SELECT name, product_upc, product_name, product_brand, product_size, quantity
+                    FROM grocery_items
                     WHERE user_id = :uid AND status = 'active'
                       AND product_upc != '' AND ordered = 1 AND submitted_at IS NULL
                       AND checked = 0 AND have_it = 0 AND removed = 0
@@ -783,6 +783,14 @@ def _tool_submit_to_kroger(user_id: str, arguments: dict) -> dict:
                       AND product_upc != '' AND submitted_at IS NULL"""),
             {"uid": user_id},
         )
+        for r in rows:
+            kp = KrogerProduct(
+                product_id="", upc=r["product_upc"],
+                description=r.get("product_name", "") or "",
+                brand=r.get("product_brand", "") or "",
+                size=r.get("product_size", "") or "",
+            )
+            save_preference(conn, user_id, r["name"], kp, source="submitted")
         conn.commit()
     return _text_result(
         f"Sent {len(items)} item{'s' if len(items) != 1 else ''} to your Kroger cart. Finish checkout at kroger.com."

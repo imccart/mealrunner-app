@@ -414,28 +414,24 @@ def get_preferred_product(conn: DictConnection, user_id: str, search_term: str) 
 
 
 def save_preference(conn: DictConnection, user_id: str, search_term: str, product: KrogerProduct,
-                    source: str = "picked", order_id: str = "") -> None:
-    """Save or update a product preference for a search term.
+                    source: str = "submitted", order_id: str = "") -> None:
+    """Increment times_picked for this (user, search_term, product) once.
 
-    times_picked only increments for genuine user signal: an explicit pick on
-    the Order page ('picked') or a receipt reconciliation ('receipt'). It does
-    NOT increment for 'auto-default' — that's the tool's own action, and
-    counting it as a user preference creates a positive feedback loop that
-    entrenches whatever the tool chose regardless of what the user actually
-    prefers. last_picked and source still update in all cases so the row's
-    metadata stays fresh.
+    Called from /order/submit for each row that actually made it into the
+    cart, and from receipt reconciliation for each matched line. Not called
+    from the pick paths themselves (manual or auto-default) — a pick that is
+    never submitted shouldn't count as a preference signal, and counting the
+    tool's auto-default at write time creates a positive feedback loop.
     """
     product_key = _make_product_key(product.upc, product.brand, product.description)
-    is_user_signal = source not in ("auto-default",)
-    increment = 1 if is_user_signal else 0
     conn.execute(
         text("""INSERT INTO product_preferences
                (user_id, search_term, upc, product_description, size, source, order_id, brand, product_key, times_picked)
-           VALUES (:user_id, :search_term, :upc, :product_description, :size, :source, :order_id, :brand, :product_key, :initial_count)
+           VALUES (:user_id, :search_term, :upc, :product_description, :size, :source, :order_id, :brand, :product_key, 1)
            ON CONFLICT(user_id, search_term, product_key) DO UPDATE SET
                product_description = excluded.product_description,
                size = excluded.size,
-               times_picked = product_preferences.times_picked + :increment,
+               times_picked = product_preferences.times_picked + 1,
                last_picked = CURRENT_TIMESTAMP,
                source = excluded.source,
                order_id = excluded.order_id,
@@ -443,9 +439,7 @@ def save_preference(conn: DictConnection, user_id: str, search_term: str, produc
         {"user_id": user_id, "search_term": search_term.lower(), "upc": product.upc,
          "product_description": product.description, "size": product.size,
          "source": source, "order_id": order_id,
-         "brand": product.brand, "product_key": product_key,
-         "initial_count": 1 if is_user_signal else 0,
-         "increment": increment},
+         "brand": product.brand, "product_key": product_key},
     )
     conn.commit()
 

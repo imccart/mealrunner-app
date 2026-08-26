@@ -2738,7 +2738,6 @@ async def search_order_products(item_name: str, request: Request, fulfillment: s
 @router.post("/order/select")
 async def select_product(body: dict, request: Request):
     """Select a Kroger product for a grocery item."""
-    from mealrunner.kroger import save_preference, KrogerProduct
     from mealrunner.planner import load_rolling_week
 
     user_id = request.state.user_id
@@ -2837,14 +2836,6 @@ async def select_product(body: dict, request: Request):
     from mealrunner.stores import get_kroger_location_id
     sel_location = get_kroger_location_id(conn, user_id) or ""
     _log_prices(conn, [{"upc": product["upc"], "price": product.get("price"), "promo_price": None}], sel_location, "select", user_id)
-
-    # Save preference for future searches
-    kp = KrogerProduct(
-        product_id="", upc=product["upc"],
-        description=product["name"], brand=product.get("brand", ""),
-        size=product.get("size", ""),
-    )
-    save_preference(conn, user_id, item_name, kp, source="picked")
 
     # Background: look up this UPC at nearby stores for price comparison
     upc = product.get("upc", "")
@@ -3001,7 +2992,7 @@ async def select_defaults(request: Request):
     at the store — a UPC we picked 3 weeks ago that's since gone
     out-of-stock or discontinued won't show up and gets skipped.
     """
-    from mealrunner.kroger import search_products_fast, save_preference
+    from mealrunner.kroger import search_products_fast
     from mealrunner.stores import get_kroger_location_id
     from mealrunner.planner import load_rolling_week
     import anyio
@@ -3141,7 +3132,6 @@ async def select_defaults(request: Request):
              "quantity": qty,
              "uid": user_id, "item_name": c["item_name"].lower()},
         )
-        save_preference(conn, user_id, c["item_name"], match, source="auto-default")
         selected += 1
 
     if selected > 0:
@@ -3362,7 +3352,7 @@ async def submit_order(request: Request):
     If not provided, tries the current user first, then falls back to any
     household member with a linked account.
     """
-    from mealrunner.kroger import add_to_cart, get_user_token_from_db
+    from mealrunner.kroger import add_to_cart, get_user_token_from_db, save_preference, KrogerProduct
     from mealrunner.planner import load_rolling_week
 
     user_id = request.state.user_id
@@ -3377,7 +3367,8 @@ async def submit_order(request: Request):
     # get its product_upc re-stamped — without these guards, Kroger would
     # receive the same UPC twice and double the cart quantity.
     rows = conn.execute(
-        text("""SELECT product_upc, quantity FROM grocery_items
+        text("""SELECT name, product_upc, product_name, product_brand, product_size, quantity
+           FROM grocery_items
            WHERE user_id = :user_id AND product_upc != '' AND ordered = 1 AND submitted_at IS NULL
              AND checked = 0 AND have_it = 0 AND removed = 0
              AND COALESCE(receipt_status, '') = ''"""),
@@ -3472,6 +3463,20 @@ async def submit_order(request: Request):
         import anyio
         with release_db_during_io():
             await anyio.to_thread.run_sync(lambda: add_to_cart(items, token=token))
+        # Kroger accepted the cart — credit one preference increment per row.
+        # This is the only place that increments times_picked for a Kroger
+        # order: pick-time writes (manual /order/select, auto-default) don't
+        # touch product_preferences, so an auto-default the user swaps out
+        # never counts, and one the user keeps counts exactly once.
+        conn = _conn()
+        for r in rows:
+            kp = KrogerProduct(
+                product_id="", upc=r["product_upc"],
+                description=r.get("product_name", "") or "",
+                brand=r.get("product_brand", "") or "",
+                size=r.get("product_size", "") or "",
+            )
+            save_preference(conn, user_id, r["name"], kp, source="submitted")
         return {"ok": True, "count": len(items)}
     except Exception as e:
         # Roll back submitted_at so user can retry. Mirror the SELECT filter
