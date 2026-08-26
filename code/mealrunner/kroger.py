@@ -415,16 +415,27 @@ def get_preferred_product(conn: DictConnection, user_id: str, search_term: str) 
 
 def save_preference(conn: DictConnection, user_id: str, search_term: str, product: KrogerProduct,
                     source: str = "picked", order_id: str = "") -> None:
-    """Save or update a product preference for a search term."""
+    """Save or update a product preference for a search term.
+
+    times_picked only increments for genuine user signal: an explicit pick on
+    the Order page ('picked') or a receipt reconciliation ('receipt'). It does
+    NOT increment for 'auto-default' — that's the tool's own action, and
+    counting it as a user preference creates a positive feedback loop that
+    entrenches whatever the tool chose regardless of what the user actually
+    prefers. last_picked and source still update in all cases so the row's
+    metadata stays fresh.
+    """
     product_key = _make_product_key(product.upc, product.brand, product.description)
+    is_user_signal = source not in ("auto-default",)
+    increment = 1 if is_user_signal else 0
     conn.execute(
         text("""INSERT INTO product_preferences
-               (user_id, search_term, upc, product_description, size, source, order_id, brand, product_key)
-           VALUES (:user_id, :search_term, :upc, :product_description, :size, :source, :order_id, :brand, :product_key)
+               (user_id, search_term, upc, product_description, size, source, order_id, brand, product_key, times_picked)
+           VALUES (:user_id, :search_term, :upc, :product_description, :size, :source, :order_id, :brand, :product_key, :initial_count)
            ON CONFLICT(user_id, search_term, product_key) DO UPDATE SET
                product_description = excluded.product_description,
                size = excluded.size,
-               times_picked = product_preferences.times_picked + 1,
+               times_picked = product_preferences.times_picked + :increment,
                last_picked = CURRENT_TIMESTAMP,
                source = excluded.source,
                order_id = excluded.order_id,
@@ -432,7 +443,9 @@ def save_preference(conn: DictConnection, user_id: str, search_term: str, produc
         {"user_id": user_id, "search_term": search_term.lower(), "upc": product.upc,
          "product_description": product.description, "size": product.size,
          "source": source, "order_id": order_id,
-         "brand": product.brand, "product_key": product_key},
+         "brand": product.brand, "product_key": product_key,
+         "initial_count": 1 if is_user_signal else 0,
+         "increment": increment},
     )
     conn.commit()
 
