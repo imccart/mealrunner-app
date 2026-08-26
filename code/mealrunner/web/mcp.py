@@ -663,29 +663,26 @@ def _tool_select_defaults(user_id: str, arguments: dict) -> dict:
         unavailable = 0
         for r in pending:
             item_name = r["name"]
-            # Recency-first: 3+ picks in the last 60 days beats stale but frequent.
+            # Rank by submitted-order frequency in the last 30 days; 2+ needed
+            # for confident default. Matches /order/select-defaults semantics.
             top = conn.execute(
-                text("""SELECT search_term, upc FROM product_preferences
-                        WHERE user_id = :uid AND LOWER(search_term) = LOWER(:name)
-                          AND times_picked >= 3 AND upc != ''
-                          AND last_picked > NOW() - INTERVAL '60 days'
-                        ORDER BY times_picked DESC, last_picked DESC LIMIT 1"""),
+                text("""SELECT product_upc AS upc, COUNT(*) AS picks
+                        FROM grocery_items
+                        WHERE user_id = :uid AND LOWER(name) = LOWER(:name)
+                          AND product_upc != '' AND submitted_at IS NOT NULL
+                          AND submitted_at > NOW() - INTERVAL '30 days'
+                        GROUP BY product_upc
+                        HAVING COUNT(*) >= 2
+                        ORDER BY picks DESC, MAX(submitted_at) DESC
+                        LIMIT 1"""),
                 {"uid": user_id, "name": item_name},
             ).fetchone()
-            if not top:
-                top = conn.execute(
-                    text("""SELECT search_term, upc FROM product_preferences
-                            WHERE user_id = :uid AND LOWER(search_term) = LOWER(:name)
-                              AND times_picked >= 3 AND upc != ''
-                            ORDER BY times_picked DESC, last_picked DESC LIMIT 1"""),
-                    {"uid": user_id, "name": item_name},
-                ).fetchone()
             if not top:
                 no_history += 1
                 continue
             try:
                 products = search_products_fast(
-                    term=top["search_term"], limit=50,
+                    term=item_name, limit=50,
                     fulfillment="curbside", location_id=location_id,
                 )
             except Exception:

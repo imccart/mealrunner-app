@@ -3021,53 +3021,37 @@ async def select_defaults(request: Request):
         return {"ok": True, "selected": 0, "no_history": 0, "unavailable": 0,
                 "total_pending": 0}
 
-    # For each pending name, look up the top pick. Recent-first pass wins
-    # when the user has current signal (3+ picks in the last 60 days), so a
-    # freshly-switched preference beats a stale-but-frequent old one. If the
-    # recent pass finds nothing, fall back to all-time so users with sparser
-    # or older history still get an auto-fill.
-    #
-    # times_picked in the preferences table is a running counter (bumped on
-    # every save_preference call), not a per-window count, so the "recent"
-    # pass has to derive its count from the picks table by user + item name.
-    # We approximate that by requiring last_picked to be within 60 days AND
-    # times_picked >= 3 — a good-enough proxy given a picked-once, picked-
-    # again product's last_picked slides forward each time.
+    # For each pending name, rank submitted orders in the last 30 days by
+    # frequency. This counts real submit history, not the product_preferences
+    # running counter — a brand the user switched away from stops winning
+    # once it drops out of the 30-day window, and a brand they just started
+    # buying rises on the second or third order. Threshold of 2 submits in
+    # 30 days = confident-enough preference for a default.
     candidates = []
     no_history = 0
     for r in pending:
         item_name = r["name"]
         top = conn.execute(
-            text("""SELECT search_term, upc
-                    FROM product_preferences
+            text("""SELECT product_upc AS upc, COUNT(*) AS picks,
+                           MAX(submitted_at) AS last_picked
+                    FROM grocery_items
                     WHERE user_id = :uid
-                      AND LOWER(search_term) = LOWER(:name)
-                      AND times_picked >= 3
-                      AND upc != ''
-                      AND last_picked > NOW() - INTERVAL '60 days'
-                    ORDER BY times_picked DESC, last_picked DESC
+                      AND LOWER(name) = LOWER(:name)
+                      AND product_upc != ''
+                      AND submitted_at IS NOT NULL
+                      AND submitted_at > NOW() - INTERVAL '30 days'
+                    GROUP BY product_upc
+                    HAVING COUNT(*) >= 2
+                    ORDER BY picks DESC, last_picked DESC
                     LIMIT 1"""),
             {"uid": user_id, "name": item_name},
         ).fetchone()
-        if not top:
-            # Full-history fallback
-            top = conn.execute(
-                text("""SELECT search_term, upc
-                        FROM product_preferences
-                        WHERE user_id = :uid
-                          AND LOWER(search_term) = LOWER(:name)
-                          AND times_picked >= 3
-                          AND upc != ''
-                        ORDER BY times_picked DESC, last_picked DESC
-                        LIMIT 1"""),
-                {"uid": user_id, "name": item_name},
-            ).fetchone()
         if not top:
             no_history += 1
             continue
         candidates.append({
             "item_name": item_name,
-            "search_term": top["search_term"],
+            "search_term": item_name,
             "upc": top["upc"],
         })
 
