@@ -663,8 +663,8 @@ def _tool_select_defaults(user_id: str, arguments: dict) -> dict:
         unavailable = 0
         for r in pending:
             item_name = r["name"]
-            # Rank by submitted-order frequency in the last 30 days; 2+ needed
-            # for confident default. Matches /order/select-defaults semantics.
+            # Rank by submitted-order frequency in the last 30 days; recency
+            # as tiebreaker. Matches /order/select-defaults semantics.
             top = conn.execute(
                 text("""SELECT product_upc AS upc, COUNT(*) AS picks
                         FROM grocery_items
@@ -672,7 +672,6 @@ def _tool_select_defaults(user_id: str, arguments: dict) -> dict:
                           AND product_upc != '' AND submitted_at IS NOT NULL
                           AND submitted_at > NOW() - INTERVAL '30 days'
                         GROUP BY product_upc
-                        HAVING COUNT(*) >= 2
                         ORDER BY picks DESC, MAX(submitted_at) DESC
                         LIMIT 1"""),
                 {"uid": user_id, "name": item_name},

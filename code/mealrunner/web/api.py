@@ -3022,11 +3022,11 @@ async def select_defaults(request: Request):
                 "total_pending": 0}
 
     # For each pending name, rank submitted orders in the last 30 days by
-    # frequency. This counts real submit history, not the product_preferences
-    # running counter — a brand the user switched away from stops winning
-    # once it drops out of the 30-day window, and a brand they just started
-    # buying rises on the second or third order. Threshold of 2 submits in
-    # 30 days = confident-enough preference for a default.
+    # frequency (recency as tiebreaker). Reads real submit history rather
+    # than the product_preferences running counter, so a brand you switched
+    # away from stops winning once it drops out of the 30-day window. Any
+    # product with 1+ submits in the window is eligible — zero submits =
+    # no default surfaces.
     candidates = []
     no_history = 0
     for r in pending:
@@ -3041,7 +3041,6 @@ async def select_defaults(request: Request):
                       AND submitted_at IS NOT NULL
                       AND submitted_at > NOW() - INTERVAL '30 days'
                     GROUP BY product_upc
-                    HAVING COUNT(*) >= 2
                     ORDER BY picks DESC, last_picked DESC
                     LIMIT 1"""),
             {"uid": user_id, "name": item_name},
