@@ -663,16 +663,15 @@ def _tool_select_defaults(user_id: str, arguments: dict) -> dict:
         unavailable = 0
         for r in pending:
             item_name = r["name"]
-            # Rank by submitted-order frequency in the last 30 days; recency
-            # as tiebreaker. Matches /order/select-defaults semantics.
+            # Pick the product most recently submitted in the 30-day window.
+            # product_preferences.last_picked is the durable per-user pick
+            # log; grocery_items loses submit history after 3 days.
             top = conn.execute(
-                text("""SELECT product_upc AS upc, COUNT(*) AS picks
-                        FROM grocery_items
-                        WHERE user_id = :uid AND LOWER(name) = LOWER(:name)
-                          AND product_upc != '' AND submitted_at IS NOT NULL
-                          AND submitted_at > NOW() - INTERVAL '30 days'
-                        GROUP BY product_upc
-                        ORDER BY picks DESC, MAX(submitted_at) DESC
+                text("""SELECT search_term, upc FROM product_preferences
+                        WHERE user_id = :uid AND LOWER(search_term) = LOWER(:name)
+                          AND upc != ''
+                          AND last_picked > NOW() - INTERVAL '30 days'
+                        ORDER BY last_picked DESC
                         LIMIT 1"""),
                 {"uid": user_id, "name": item_name},
             ).fetchone()
@@ -681,7 +680,7 @@ def _tool_select_defaults(user_id: str, arguments: dict) -> dict:
                 continue
             try:
                 products = search_products_fast(
-                    term=item_name, limit=50,
+                    term=top["search_term"], limit=50,
                     fulfillment="curbside", location_id=location_id,
                 )
             except Exception:

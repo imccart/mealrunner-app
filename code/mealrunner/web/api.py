@@ -3021,27 +3021,26 @@ async def select_defaults(request: Request):
         return {"ok": True, "selected": 0, "no_history": 0, "unavailable": 0,
                 "total_pending": 0}
 
-    # For each pending name, rank submitted orders in the last 30 days by
-    # frequency (recency as tiebreaker). Reads real submit history rather
-    # than the product_preferences running counter, so a brand you switched
-    # away from stops winning once it drops out of the 30-day window. Any
-    # product with 1+ submits in the window is eligible — zero submits =
-    # no default surfaces.
+    # For each pending name, pick the product most recently submitted in the
+    # last 30 days. grocery_items loses its submit history after 3 days (the
+    # auto-cleanup at load_or_start_trip NULLs submitted_at on meal rows and
+    # deletes non-meal rows outright), so product_preferences is the only
+    # place with a durable per-user, per-item pick log. last_picked there is
+    # bumped at submit-time by save_preference, so ordering by it DESC gives
+    # the product you're most currently buying — a weekly repurchase always
+    # has the freshest last_picked, and a brand you switched away from falls
+    # out of the 30-day window on its own.
     candidates = []
     no_history = 0
     for r in pending:
         item_name = r["name"]
         top = conn.execute(
-            text("""SELECT product_upc AS upc, COUNT(*) AS picks,
-                           MAX(submitted_at) AS last_picked
-                    FROM grocery_items
+            text("""SELECT search_term, upc FROM product_preferences
                     WHERE user_id = :uid
-                      AND LOWER(name) = LOWER(:name)
-                      AND product_upc != ''
-                      AND submitted_at IS NOT NULL
-                      AND submitted_at > NOW() - INTERVAL '30 days'
-                    GROUP BY product_upc
-                    ORDER BY picks DESC, last_picked DESC
+                      AND LOWER(search_term) = LOWER(:name)
+                      AND upc != ''
+                      AND last_picked > NOW() - INTERVAL '30 days'
+                    ORDER BY last_picked DESC
                     LIMIT 1"""),
             {"uid": user_id, "name": item_name},
         ).fetchone()
@@ -3050,7 +3049,7 @@ async def select_defaults(request: Request):
             continue
         candidates.append({
             "item_name": item_name,
-            "search_term": item_name,
+            "search_term": top["search_term"],
             "upc": top["upc"],
         })
 
