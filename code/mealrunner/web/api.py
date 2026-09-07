@@ -3021,15 +3021,11 @@ async def select_defaults(request: Request):
         return {"ok": True, "selected": 0, "no_history": 0, "unavailable": 0,
                 "total_pending": 0}
 
-    # For each pending name, pick the product most recently submitted in the
-    # last 30 days. grocery_items loses its submit history after 3 days (the
-    # auto-cleanup at load_or_start_trip NULLs submitted_at on meal rows and
-    # deletes non-meal rows outright), so product_preferences is the only
-    # place with a durable per-user, per-item pick log. last_picked there is
-    # bumped at submit-time by save_preference, so ordering by it DESC gives
-    # the product you're most currently buying — a weekly repurchase always
-    # has the freshest last_picked, and a brand you switched away from falls
-    # out of the 30-day window on its own.
+    # For each pending name, pick the product with the freshest last_picked.
+    # No time window — a staple bought every couple of months should still
+    # get an auto-fill. Stale/discontinued UPCs are filtered by the Kroger
+    # availability check below (curbside fulfillment only returns currently
+    # pickupable products), so the window would only ever hurt real cases.
     candidates = []
     no_history = 0
     for r in pending:
@@ -3039,7 +3035,6 @@ async def select_defaults(request: Request):
                     WHERE user_id = :uid
                       AND LOWER(search_term) = LOWER(:name)
                       AND upc != ''
-                      AND last_picked > NOW() - INTERVAL '30 days'
                     ORDER BY last_picked DESC
                     LIMIT 1"""),
             {"uid": user_id, "name": item_name},

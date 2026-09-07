@@ -663,14 +663,12 @@ def _tool_select_defaults(user_id: str, arguments: dict) -> dict:
         unavailable = 0
         for r in pending:
             item_name = r["name"]
-            # Pick the product most recently submitted in the 30-day window.
-            # product_preferences.last_picked is the durable per-user pick
-            # log; grocery_items loses submit history after 3 days.
+            # Freshest pick wins, no time window. Kroger availability check
+            # below filters stale/discontinued UPCs.
             top = conn.execute(
                 text("""SELECT search_term, upc FROM product_preferences
                         WHERE user_id = :uid AND LOWER(search_term) = LOWER(:name)
                           AND upc != ''
-                          AND last_picked > NOW() - INTERVAL '30 days'
                         ORDER BY last_picked DESC
                         LIMIT 1"""),
                 {"uid": user_id, "name": item_name},

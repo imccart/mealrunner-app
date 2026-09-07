@@ -1299,7 +1299,7 @@ export default function OrderPage() {
             ? defaultsToast.error
             : defaultsToast.selected > 0
               ? `Filled ${defaultsToast.selected} of ${defaultsToast.total_pending} from your history`
-              : 'Nothing to fill — no items with any picks in the last 30 days'}
+              : 'Nothing to fill — nothing on your list has a prior pick to draw from'}
         </div>
       )}
 
