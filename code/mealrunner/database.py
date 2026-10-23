@@ -36,9 +36,13 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL environment variable is required")
 
-# Railway uses postgres:// but SQLAlchemy requires postgresql://
+# Railway uses postgres:// but SQLAlchemy requires postgresql://.
+# Pin the driver to psycopg2 explicitly — SQLAlchemy 2.1 defaults to psycopg v3
+# for a bare postgresql:// URL, which we don't install.
 if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 engine = create_engine(
     DATABASE_URL, echo=False, pool_pre_ping=True,
